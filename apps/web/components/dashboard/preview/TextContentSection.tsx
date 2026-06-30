@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { BookmarkMarkdownComponent } from "@/components/dashboard/bookmarks/BookmarkMarkdownComponent";
+import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 import type { ZBookmarkTypeText } from "@karakeep/shared/types/bookmarks";
@@ -13,9 +14,18 @@ export function TextContentSection({ bookmark }: { bookmark: ZBookmark }) {
   const banner = bookmark.assets.find(
     (asset) => asset.assetType == "bannerImage",
   );
+  const video = bookmark.assets.find((asset) => asset.assetType == "video");
 
   return (
     <ScrollArea className="h-full">
+      {video && (
+        <div className="flex w-full justify-center bg-black">
+          <BookmarkVideo
+            assetId={video.id}
+            className="max-h-[75vh] w-full object-contain"
+          />
+        </div>
+      )}
       {banner && (
         <div className="relative h-52 min-w-full">
           <Image

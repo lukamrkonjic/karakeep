@@ -11,6 +11,7 @@ import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 import { getSourceUrl } from "@karakeep/shared/utils/bookmarkUtils";
 
 import { BookmarkLayoutAdaptingCard } from "./BookmarkLayoutAdaptingCard";
+import { BookmarkVideo } from "./BookmarkVideo";
 import FooterLinkURL from "./FooterLinkURL";
 
 export default function TextCard({
@@ -23,6 +24,7 @@ export default function TextCard({
   bookmarkIndex?: number;
 }) {
   const banner = bookmark.assets.find((a) => a.assetType == "bannerImage");
+  const video = bookmark.assets.find((a) => a.assetType == "video");
   return (
     <>
       <BookmarkLayoutAdaptingCard
@@ -42,35 +44,46 @@ export default function TextCard({
         className={className}
         bookmarkIndex={bookmarkIndex}
         fitHeight={true}
-        image={(layout, className) =>
-          bookmarkLayoutSwitch(layout, {
-            grid: null,
-            masonry: null,
+        image={(layout, className) => {
+          // A video attachment takes priority and renders as an inline,
+          // first-frame-thumbnail player in every layout that shows media.
+          const videoNode = video ? (
+            <BookmarkVideo
+              assetId={video.id}
+              thumbnail
+              className={cn("size-full", className)}
+            />
+          ) : null;
+          return bookmarkLayoutSwitch(layout, {
+            grid: videoNode,
+            masonry: videoNode,
             compact: null,
-            list: banner ? (
-              <div className="relative size-full flex-1">
-                <Link href={`/dashboard/preview/${bookmark.id}`}>
-                  <Image
-                    alt="card banner"
-                    fill={true}
-                    unoptimized
-                    className={cn("flex-1", className)}
-                    src={getAssetUrl(banner.id)}
-                  />
-                </Link>
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "flex size-full items-center justify-center bg-accent text-center",
-                  className,
-                )}
-              >
-                Note
-              </div>
-            ),
-          })
-        }
+            list:
+              videoNode ??
+              (banner ? (
+                <div className="relative size-full flex-1">
+                  <Link href={`/dashboard/preview/${bookmark.id}`}>
+                    <Image
+                      alt="card banner"
+                      fill={true}
+                      unoptimized
+                      className={cn("flex-1", className)}
+                      src={getAssetUrl(banner.id)}
+                    />
+                  </Link>
+                </div>
+              ) : (
+                <div
+                  className={cn(
+                    "flex size-full items-center justify-center bg-accent text-center",
+                    className,
+                  )}
+                >
+                  Note
+                </div>
+              )),
+          });
+        }}
       />
     </>
   );
