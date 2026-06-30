@@ -67,7 +67,9 @@ export function BookmarkVideo({
       <div
         ref={containerRef}
         className={cn(
-          "flex items-center justify-center bg-black text-white/70",
+          // aspect-video gives the placeholder a size before load; it's inert
+          // when the caller already constrains height (e.g. the h-56 feed grid).
+          "flex aspect-video items-center justify-center bg-black text-white/70",
           className,
         )}
       >

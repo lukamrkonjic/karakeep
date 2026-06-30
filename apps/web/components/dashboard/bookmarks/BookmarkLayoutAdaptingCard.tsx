@@ -116,7 +116,7 @@ function OwnerIndicator({ bookmark }: { bookmark: ZBookmark }) {
   );
 }
 
-function MultiBookmarkSelector({ bookmark }: { bookmark: ZBookmark }) {
+export function MultiBookmarkSelector({ bookmark }: { bookmark: ZBookmark }) {
   const isSelected = useBulkActionsStore((s) =>
     s.isBookmarkSelected(bookmark.id),
   );

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useBookmarkLayout } from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 import { FileText } from "lucide-react";
 
@@ -11,6 +12,7 @@ import { getSourceUrl } from "@karakeep/shared/utils/bookmarkUtils";
 
 import { BookmarkLayoutAdaptingCard } from "./BookmarkLayoutAdaptingCard";
 import FooterLinkURL from "./FooterLinkURL";
+import { MasonryMediaCard } from "./MasonryMediaCard";
 
 function AssetImage({
   bookmark,
@@ -76,6 +78,20 @@ export default function AssetCard({
   className?: string;
   bookmarkIndex?: number;
 }) {
+  const layout = useBookmarkLayout();
+
+  // In masonry, image assets render as a clean media-only tile (eagle style).
+  if (layout === "masonry" && bookmarkedAsset.content.assetType === "image") {
+    return (
+      <MasonryMediaCard
+        bookmark={bookmarkedAsset}
+        media={{ type: "image", assetId: bookmarkedAsset.content.assetId }}
+        className={className}
+        bookmarkIndex={bookmarkIndex}
+      />
+    );
+  }
+
   return (
     <BookmarkLayoutAdaptingCard
       title={bookmarkedAsset.title ?? bookmarkedAsset.content.fileName}

@@ -3,7 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { BookmarkMarkdownComponent } from "@/components/dashboard/bookmarks/BookmarkMarkdownComponent";
-import { bookmarkLayoutSwitch } from "@/lib/userLocalSettings/bookmarksLayout";
+import {
+  bookmarkLayoutSwitch,
+  useBookmarkLayout,
+} from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 
 import type { ZBookmarkTypeText } from "@karakeep/shared/types/bookmarks";
@@ -13,6 +16,7 @@ import { getSourceUrl } from "@karakeep/shared/utils/bookmarkUtils";
 import { BookmarkLayoutAdaptingCard } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
 import FooterLinkURL from "./FooterLinkURL";
+import { MasonryMediaCard } from "./MasonryMediaCard";
 
 export default function TextCard({
   bookmark,
@@ -23,8 +27,22 @@ export default function TextCard({
   className?: string;
   bookmarkIndex?: number;
 }) {
+  const layout = useBookmarkLayout();
   const banner = bookmark.assets.find((a) => a.assetType == "bannerImage");
   const video = bookmark.assets.find((a) => a.assetType == "video");
+
+  // In masonry, a video note renders as a clean media-only tile (eagle style).
+  if (layout === "masonry" && video) {
+    return (
+      <MasonryMediaCard
+        bookmark={bookmark}
+        media={{ type: "video", assetId: video.id }}
+        className={className}
+        bookmarkIndex={bookmarkIndex}
+      />
+    );
+  }
+
   return (
     <>
       <BookmarkLayoutAdaptingCard
