@@ -47,11 +47,14 @@ export default function TextCard({
         image={(layout, className) => {
           // A video attachment takes priority and renders as an inline,
           // first-frame-thumbnail player in every layout that shows media.
+          // Force object-contain (appended last so it wins over the card's
+          // object-cover setting) so the whole video frame is visible rather
+          // than cropped to fill the card.
           const videoNode = video ? (
             <BookmarkVideo
               assetId={video.id}
               thumbnail
-              className={cn("size-full", className)}
+              className={cn("size-full", className, "object-contain")}
             />
           ) : null;
           return bookmarkLayoutSwitch(layout, {
