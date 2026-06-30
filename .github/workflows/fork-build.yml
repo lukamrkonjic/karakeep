@@ -30,6 +30,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Short commit SHA, used as an immutable image tag so each update is a
+      # brand-new tag Docker can never serve stale (no cache busting needed).
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push all-in-one image
         uses: docker/build-push-action@v6
         with:
@@ -38,7 +44,9 @@ jobs:
           target: aio
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/karakeep:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/karakeep:latest
+            ghcr.io/${{ github.repository_owner }}/karakeep:${{ steps.sha.outputs.short }}
           build-args: SERVER_VERSION=fork
           cache-from: type=gha
           cache-to: type=gha,mode=max
