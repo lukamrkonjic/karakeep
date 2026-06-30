@@ -31,7 +31,9 @@ export function BookmarkVideo({
    */
   thumbnail?: boolean;
 }) {
-  const src = thumbnail ? `${getAssetUrl(assetId)}#t=0.1` : getAssetUrl(assetId);
+  const src = thumbnail
+    ? `${getAssetUrl(assetId)}#t=0.1`
+    : getAssetUrl(assetId);
   return (
     // eslint-disable-next-line jsx-a11y/media-has-caption -- captions not available for user-uploaded videos
     <video
