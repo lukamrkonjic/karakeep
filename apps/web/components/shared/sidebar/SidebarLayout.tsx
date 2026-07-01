@@ -23,10 +23,10 @@ export default function SidebarLayout({
   return (
     <div className="sm:fixed sm:inset-0 sm:overflow-hidden">
       <Header />
-      <div className="flex min-h-[calc(100vh-64px)] w-full flex-col sm:h-[calc(100dvh-64px)] sm:flex-row sm:overflow-hidden">
+      <div className="flex min-h-[calc(100vh-80px)] w-full flex-col sm:h-[calc(100dvh-80px)] sm:flex-row sm:overflow-hidden">
         <ValidAccountCheck />
         <div className="hidden flex-none sm:flex">{sidebar}</div>
-        <main className="flex-1 bg-muted sm:min-h-0 sm:overflow-y-auto">
+        <main className="flex-1 bg-background sm:min-h-0 sm:overflow-y-auto">
           {serverConfig.demoMode && <DemoModeBanner />}
           <div className="block w-full sm:hidden">
             {mobileSidebar}

@@ -115,9 +115,7 @@ function DroppableListSidebarItem({
       collapseButton={
         node.children.length > 0 ? (
           <CollapsibleTriggerChevron className="size-4" open={open} />
-        ) : (
-          <span className="size-4" />
-        )
+        ) : undefined
       }
       logo={
         isEmojiIcon(node.item.icon) ? (
@@ -231,8 +229,7 @@ export default function AllLists({
         </EditListModal>
       </li>
       <SidebarItem
-        collapseButton={<span className="size-4" />}
-        logo={<span className="text-lg">📋</span>}
+        logo={null}
         name={t("lists.all_lists")}
         path={`/dashboard/lists`}
         className="my-0.5"
@@ -240,8 +237,7 @@ export default function AllLists({
         right={<InvitationNotificationBadge />}
       />
       <SidebarItem
-        collapseButton={<span className="size-4" />}
-        logo={<span className="text-lg">⭐️</span>}
+        logo={null}
         name={t("lists.favourites")}
         path={`/dashboard/favourites`}
         className="my-0.5"
