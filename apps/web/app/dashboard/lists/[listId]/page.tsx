@@ -60,7 +60,6 @@ export default async function ListPage(props: {
           listId: list.id,
           archived: !includeArchived ? false : undefined,
         }}
-        showDivider={true}
         showEditorCard={list.type === "manual" && canEdit}
         header={<ListHeader initialData={list} />}
       />

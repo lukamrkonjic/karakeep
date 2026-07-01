@@ -19,7 +19,6 @@ export default async function FavouritesBookmarkPage() {
         </div>
       }
       query={{ favourited: true }}
-      showDivider={true}
       showEditorCard={true}
     />
   );

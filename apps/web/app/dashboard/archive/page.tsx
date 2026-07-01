@@ -27,7 +27,6 @@ export default async function ArchivedBookmarkPage() {
     <Bookmarks
       header={header()}
       query={{ archived: true }}
-      showDivider={true}
       showEditorCard={true}
     />
   );

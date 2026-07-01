@@ -3,7 +3,6 @@ import AllLists from "@/components/dashboard/sidebar/AllLists";
 import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
 import SidebarLayout from "@/components/shared/sidebar/SidebarLayout";
-import { Separator } from "@/components/ui/separator";
 import { ReaderSettingsProvider } from "@/lib/readerSettings";
 import { UserSettingsContextProvider } from "@/lib/userSettings";
 import { api } from "@/server/api/client";
@@ -104,12 +103,7 @@ export default async function Dashboard({
           sidebar={
             <Sidebar
               items={items}
-              extraSections={
-                <>
-                  <Separator />
-                  <AllLists initialData={lists.data} />
-                </>
-              }
+              extraSections={<AllLists initialData={lists.data} />}
             />
           }
           mobileSidebar={<MobileSidebar items={mobileSidebar} />}

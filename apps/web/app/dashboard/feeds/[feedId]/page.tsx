@@ -22,7 +22,6 @@ export default async function FeedPage(props: {
   return (
     <Bookmarks
       query={{ rssFeedId: feed.id }}
-      showDivider={true}
       showEditorCard={false}
       header={<div className="text-2xl">{feed.name}</div>}
     />
