@@ -41,7 +41,7 @@ import { useTranslation } from "@/lib/i18n/client";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X } from "lucide-react";
+import { Smile, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -228,19 +228,38 @@ export function EditListModal({
                   return (
                     <FormItem>
                       <FormControl>
-                        <Popover>
-                          <PopoverTrigger className="h-full rounded border border-input px-2 text-2xl">
-                            {field.value}
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto">
-                            <Picker
-                              data={data}
-                              onEmojiSelect={(e: { native: string }) =>
-                                field.onChange(e.native)
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <div className="flex h-full items-stretch gap-1">
+                          <Popover>
+                            <PopoverTrigger
+                              className="flex h-full items-center justify-center rounded border border-input px-2 text-2xl"
+                              title="Pick an icon"
+                            >
+                              {field.value || (
+                                <Smile className="size-5 text-muted-foreground" />
+                              )}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto">
+                              <Picker
+                                data={data}
+                                onEmojiSelect={(e: { native: string }) =>
+                                  field.onChange(e.native)
+                                }
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="none"
+                              className="rounded px-1"
+                              title="Remove icon"
+                              onClick={() => field.onChange("")}
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          )}
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
