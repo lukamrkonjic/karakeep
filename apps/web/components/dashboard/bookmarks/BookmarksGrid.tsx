@@ -176,7 +176,15 @@ export default function BookmarksGrid({
     () => getBreakpointConfig(gridColumns),
     [gridColumns],
   );
-  const { ref: loadMoreRef, inView: loadMoreButtonInView } = useInView();
+  // Fire well before the sentinel actually reaches the viewport: masonry
+  // columns have uneven heights, and on a slow connection/server the
+  // "load more" request can end up queued behind a burst of in-flight
+  // thumbnail/video requests from tiles scrolling into view. Triggering
+  // early gives it a head start instead of only firing once the user has
+  // already scrolled all the way to the bottom.
+  const { ref: loadMoreRef, inView: loadMoreButtonInView } = useInView({
+    rootMargin: "1200px 0px",
+  });
 
   // For list/compact layouts, navigation is single-column
   const isListLayout = layout === "list" || layout === "compact";

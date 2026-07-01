@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { acquireVideoLoadSlot } from "@/lib/videoLoadGate";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
 
@@ -22,6 +23,11 @@ import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
  *   requests, so native seeking/scrubbing works out of the box.
  * - Plays mp4 and webm in all browsers; mkv (video/x-matroska) depends on the
  *   browser's codec support and may not preview.
+ * - Actually mounting the <video> (once near the viewport) is further gated by
+ *   a shared concurrency limit (videoLoadGate) — otherwise a fast scroll
+ *   through a wall of many videos fires a burst of simultaneous metadata
+ *   requests that can saturate the browser's per-origin connection limit and
+ *   starve unrelated requests (pagination, mutations).
  */
 export function BookmarkVideo({
   assetId,
@@ -43,16 +49,18 @@ export function BookmarkVideo({
   // Detail view (thumbnail === false) mounts immediately; feed cards wait until
   // they scroll close to the viewport.
   const containerRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(!thumbnail);
+  const [nearViewport, setNearViewport] = useState(!thumbnail);
+  const [granted, setGranted] = useState(!thumbnail);
+  const releaseSlotRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (visible) return;
+    if (nearViewport) return;
     const el = containerRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setVisible(true);
+          setNearViewport(true);
           observer.disconnect();
         }
       },
@@ -60,9 +68,33 @@ export function BookmarkVideo({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [visible]);
+  }, [nearViewport]);
 
-  if (!visible) {
+  useEffect(() => {
+    if (!nearViewport || granted) return;
+    const release = acquireVideoLoadSlot(() => setGranted(true));
+    releaseSlotRef.current = release;
+    return () => {
+      release();
+      releaseSlotRef.current = null;
+    };
+  }, [nearViewport, granted]);
+
+  const releaseLoadSlot = () => {
+    releaseSlotRef.current?.();
+    releaseSlotRef.current = null;
+  };
+
+  // Safety net: if a request genuinely hangs (never fires loadedmetadata or
+  // error), don't hold the slot forever and starve the rest of the queue.
+  useEffect(() => {
+    if (!granted) return;
+    const timer = window.setTimeout(releaseLoadSlot, 8000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [granted]);
+
+  if (!granted) {
     return (
       <div
         ref={containerRef}
@@ -86,6 +118,11 @@ export function BookmarkVideo({
       controls
       preload="metadata"
       playsInline
+      // Free the load slot as soon as we know the outcome (metadata fetched or
+      // failed) instead of holding it until the tile scrolls away, so queued
+      // tiles get a turn sooner.
+      onLoadedMetadata={releaseLoadSlot}
+      onError={releaseLoadSlot}
       // Don't let a click on the player bubble up to the card's navigation.
       onClick={(e) => e.stopPropagation()}
     >
