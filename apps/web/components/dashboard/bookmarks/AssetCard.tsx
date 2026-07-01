@@ -11,6 +11,7 @@ import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 import { getSourceUrl } from "@karakeep/shared/utils/bookmarkUtils";
 
 import { BookmarkLayoutAdaptingCard } from "./BookmarkLayoutAdaptingCard";
+import { BookmarkVideo } from "./BookmarkVideo";
 import FooterLinkURL from "./FooterLinkURL";
 import { MasonryMediaCard } from "./MasonryMediaCard";
 
@@ -62,6 +63,15 @@ function AssetImage({
         </Link>
       );
     }
+    case "video": {
+      return (
+        <BookmarkVideo
+          assetId={bookmarkedAsset.assetId}
+          thumbnail
+          className={cn("size-full", className, "object-contain")}
+        />
+      );
+    }
     default: {
       const _exhaustiveCheck: never = bookmarkedAsset.assetType;
       return <span />;
@@ -79,13 +89,21 @@ export default function AssetCard({
   bookmarkIndex?: number;
 }) {
   const layout = useBookmarkLayout();
+  const contentAssetType = bookmarkedAsset.content.assetType;
 
-  // In masonry, image assets render as a clean media-only tile (eagle style).
-  if (layout === "masonry" && bookmarkedAsset.content.assetType === "image") {
+  // In masonry, image/video assets render as a clean media-only tile (eagle
+  // style) — same as link bookmarks with an attached video (see TextCard).
+  if (
+    layout === "masonry" &&
+    (contentAssetType === "image" || contentAssetType === "video")
+  ) {
     return (
       <MasonryMediaCard
         bookmark={bookmarkedAsset}
-        media={{ type: "image", assetId: bookmarkedAsset.content.assetId }}
+        media={{
+          type: contentAssetType,
+          assetId: bookmarkedAsset.content.assetId,
+        }}
         className={className}
         bookmarkIndex={bookmarkIndex}
       />

@@ -836,6 +836,11 @@ export class Bookmark extends BareBookmark {
               }
               return getPublicSignedAssetUrl(screenshotAssetId);
             }
+            case "video": {
+              // No poster-frame generation for directly-uploaded video
+              // assets (only LINK_VIDEO attachments get one) — no banner.
+              return null;
+            }
             default: {
               const _exhaustiveCheck: never = content.assetType;
               return null;

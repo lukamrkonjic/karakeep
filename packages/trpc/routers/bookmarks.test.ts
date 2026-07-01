@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  assets,
+  AssetTypes,
   bookmarkLinks,
   bookmarks,
   rssFeedImportsTable,
@@ -1536,6 +1538,65 @@ describe("Bookmark Routes", () => {
         url: "https://example.com/private",
       });
       expect(result.bookmarkId).toBeNull();
+    });
+  });
+
+  describe("create asset bookmark", () => {
+    test<CustomTestContext>("accepts a directly-uploaded video file", async ({
+      apiCallers,
+      db,
+    }) => {
+      const api = apiCallers[0];
+      const userId = await api.users.whoami().then((u) => u.id);
+
+      // Mirrors the real upload endpoint's pre-attach state (see
+      // packages/api/utils/upload.ts): the raw file is already saved with
+      // its real contentType, just not yet linked to a bookmark.
+      await db.insert(assets).values({
+        id: "video-asset-1",
+        assetType: AssetTypes.UNKNOWN,
+        contentType: "video/mp4",
+        size: 12345,
+        userId,
+      });
+
+      const createdBookmark = await api.bookmarks.createBookmark({
+        type: BookmarkTypes.ASSET,
+        assetType: "video",
+        assetId: "video-asset-1",
+        title: "Test video upload",
+      });
+
+      assert(createdBookmark.content.type === BookmarkTypes.ASSET);
+      expect(createdBookmark.content.assetType).toEqual("video");
+      expect(createdBookmark.content.assetId).toEqual("video-asset-1");
+    });
+
+    test<CustomTestContext>("rejects an asset type that isn't image/pdf/video", async ({
+      apiCallers,
+      db,
+    }) => {
+      const api = apiCallers[0];
+      const userId = await api.users.whoami().then((u) => u.id);
+
+      await db.insert(assets).values({
+        id: "zip-asset-1",
+        assetType: AssetTypes.UNKNOWN,
+        contentType: "application/zip",
+        size: 12345,
+        userId,
+      });
+
+      await expect(
+        api.bookmarks.createBookmark({
+          type: BookmarkTypes.ASSET,
+          // The server validates the underlying asset's real contentType,
+          // not this client-supplied label, so it's rejected either way.
+          assetType: "image",
+          assetId: "zip-asset-1",
+          title: "Test zip upload",
+        }),
+      ).rejects.toThrow(/Unsupported asset type/);
     });
   });
 });

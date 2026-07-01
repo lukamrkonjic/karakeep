@@ -361,7 +361,8 @@
                     "type": "string",
                     "enum": [
                       "image",
-                      "pdf"
+                      "pdf",
+                      "video"
                     ]
                   },
                   "assetId": {
@@ -1024,7 +1025,8 @@
                             "type": "string",
                             "enum": [
                               "image",
-                              "pdf"
+                              "pdf",
+                              "video"
                             ]
                           },
                           "assetId": {

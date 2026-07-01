@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
 import {
   Select,
   SelectContent,
@@ -105,6 +106,20 @@ function ImageContentSection({ bookmark }: { bookmark: ZBookmark }) {
   );
 }
 
+function VideoContentSection({ bookmark }: { bookmark: ZBookmark }) {
+  if (bookmark.content.type != BookmarkTypes.ASSET) {
+    throw new Error("Invalid content type");
+  }
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-black">
+      <BookmarkVideo
+        assetId={bookmark.content.assetId}
+        className="max-h-full w-full object-contain"
+      />
+    </div>
+  );
+}
+
 export function AssetContentSection({ bookmark }: { bookmark: ZBookmark }) {
   if (bookmark.content.type != BookmarkTypes.ASSET) {
     throw new Error("Invalid content type");
@@ -114,6 +129,8 @@ export function AssetContentSection({ bookmark }: { bookmark: ZBookmark }) {
       return <ImageContentSection bookmark={bookmark} />;
     case "pdf":
       return <PDFContentSection bookmark={bookmark} />;
+    case "video":
+      return <VideoContentSection bookmark={bookmark} />;
     default:
       return <div>Unsupported asset type</div>;
   }
