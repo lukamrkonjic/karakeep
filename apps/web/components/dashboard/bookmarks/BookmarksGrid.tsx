@@ -25,7 +25,6 @@ import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { useBookmarkListContext } from "@karakeep/shared-react/hooks/bookmark-list-context";
 
 import BookmarkCard from "./BookmarkCard";
-import EditorCard from "./EditorCard";
 import UnknownCard from "./UnknownCard";
 
 function StyledBookmarkCard({
@@ -230,16 +229,12 @@ export default function BookmarksGrid({
     );
   }
 
-  const children = [
-    showEditorCard && (
-      <StyledBookmarkCard key={"editor"}>
-        <EditorCard />
-      </StyledBookmarkCard>
-    ),
-    ...bookmarks.map((bookmark, index) => (
-      <BookmarkGridItem key={bookmark.id} bookmark={bookmark} index={index} />
-    )),
-  ];
+  // The inline editor card was replaced by a "+" dialog in the headers
+  // (NewBookmarkDialog); showEditorCard now only drives the upload dropzone and
+  // the empty-state banner.
+  const children = bookmarks.map((bookmark, index) => (
+    <BookmarkGridItem key={bookmark.id} bookmark={bookmark} index={index} />
+  ));
   return (
     <>
       {bookmarkLayoutSwitch(layout, {

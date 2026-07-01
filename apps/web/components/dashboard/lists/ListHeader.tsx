@@ -12,6 +12,7 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
+import NewBookmarkDialog from "../bookmarks/NewBookmarkDialog";
 import QueryExplainerTooltip from "../search/QueryExplainerTooltip";
 import { ListOptions } from "./ListOptions";
 import {
@@ -104,6 +105,7 @@ export default function ListHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center">
+        {list.type === "manual" && <NewBookmarkDialog />}
         <ListOptions list={list}>
           <Button variant="ghost">
             <MoreHorizontal />

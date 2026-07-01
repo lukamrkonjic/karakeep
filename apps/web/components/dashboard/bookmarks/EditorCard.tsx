@@ -30,7 +30,17 @@ interface MultiUrlImportState {
   text: string;
 }
 
-export default function EditorCard({ className }: { className?: string }) {
+export default function EditorCard({
+  className,
+  inDialog = false,
+  onCreated,
+}: {
+  className?: string;
+  // Renders without the card chrome/fixed height, for use inside a dialog.
+  inDialog?: boolean;
+  // Called after a bookmark is successfully created (e.g. to close a dialog).
+  onCreated?: () => void;
+}) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -67,6 +77,7 @@ export default function EditorCard({ className }: { className?: string }) {
       if (bookmarkLayout === "list" && inputRef?.current?.style) {
         inputRef.current.style.height = "auto";
       }
+      onCreated?.();
     },
     onError: (e) => {
       toast({ description: e.message, variant: "destructive" });
@@ -190,16 +201,20 @@ export default function EditorCard({ className }: { className?: string }) {
       <form
         className={cn(
           className,
-          "relative flex flex-col gap-2 rounded-xl bg-card p-4",
-          cardHeight,
+          "relative flex flex-col gap-2",
+          inDialog ? "min-h-44" : cn("rounded-xl bg-card p-4", cardHeight),
         )}
         onSubmit={form.handleSubmit(onSubmit, onError)}
       >
-        <div className="flex justify-between">
-          <p className="text-sm">{t("editor.new_item")}</p>
-          <Kbd>⌘ + E</Kbd>
-        </div>
-        <Separator />
+        {!inDialog && (
+          <>
+            <div className="flex justify-between">
+              <p className="text-sm">{t("editor.new_item")}</p>
+              <Kbd>⌘ + E</Kbd>
+            </div>
+            <Separator />
+          </>
+        )}
         <FormItem className="flex-1">
           <FormControl>
             <Textarea
