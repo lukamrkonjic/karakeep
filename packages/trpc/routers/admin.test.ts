@@ -1,20 +1,17 @@
 import { eq } from "drizzle-orm";
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bookmarkLinks, users } from "@karakeep/db/schema";
+import { assets, AssetTypes, bookmarkLinks, users } from "@karakeep/db/schema";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import type { CustomTestContext } from "../testUtils";
 import {
-  buildTestContext,
+  defaultBeforeEach,
   getApiCaller,
   getApiKeyCallerForPlainKey,
 } from "../testUtils";
 
-beforeEach<CustomTestContext>(async (context) => {
-  const testContext = await buildTestContext(true);
-  Object.assign(context, testContext);
-});
+beforeEach<CustomTestContext>(defaultBeforeEach(true));
 
 describe("Admin Routes", () => {
   test<CustomTestContext>("admin API key uses granular admin scopes", async ({
@@ -299,6 +296,106 @@ describe("Admin Routes", () => {
       expect(debugInfo.linkInfo.htmlContentPreview!.length).toBeLessThanOrEqual(
         1000,
       );
+    });
+  });
+
+  describe("generateVideoThumbnails", () => {
+    test<CustomTestContext>("only enqueues videos missing a thumbnail", async ({
+      apiCallers,
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-video-thumbs@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+      const userId = await apiCallers[0].users.whoami().then((u) => u.id);
+
+      const missingThumb = await apiCallers[0].bookmarks.createBookmark({
+        url: "https://example.com/video-without-thumb",
+        type: BookmarkTypes.LINK,
+      });
+      const hasThumb = await apiCallers[0].bookmarks.createBookmark({
+        url: "https://example.com/video-with-thumb",
+        type: BookmarkTypes.LINK,
+      });
+
+      await db.insert(assets).values([
+        {
+          id: "video-missing-thumb",
+          assetType: AssetTypes.LINK_VIDEO,
+          bookmarkId: missingThumb.id,
+          userId,
+        },
+        {
+          id: "video-has-thumb",
+          assetType: AssetTypes.LINK_VIDEO,
+          bookmarkId: hasThumb.id,
+          userId,
+        },
+        {
+          id: "thumb-for-has-thumb",
+          assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+          bookmarkId: hasThumb.id,
+          userId,
+        },
+      ]);
+
+      const result = await adminApi.admin.generateVideoThumbnails();
+      expect(result.enqueued).toEqual(1);
+    });
+
+    test<CustomTestContext>("is a no-op when every video already has a thumbnail", async ({
+      apiCallers,
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-video-thumbs-2@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+      const userId = await apiCallers[0].users.whoami().then((u) => u.id);
+
+      const bookmark = await apiCallers[0].bookmarks.createBookmark({
+        url: "https://example.com/video-with-thumb-2",
+        type: BookmarkTypes.LINK,
+      });
+
+      await db.insert(assets).values([
+        {
+          id: "video-has-thumb-2",
+          assetType: AssetTypes.LINK_VIDEO,
+          bookmarkId: bookmark.id,
+          userId,
+        },
+        {
+          id: "thumb-for-has-thumb-2",
+          assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+          bookmarkId: bookmark.id,
+          userId,
+        },
+      ]);
+
+      const result = await adminApi.admin.generateVideoThumbnails();
+      expect(result.enqueued).toEqual(0);
     });
   });
 });

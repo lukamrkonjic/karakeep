@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import {
   assets,
+  AssetTypes,
   bookmarkLinks,
   bookmarks,
   subscriptions,
@@ -389,6 +390,36 @@ export const adminAppRouter = router({
         ),
       ),
     );
+  }),
+  // Backfill for videos that predate the thumbnail feature, or that were
+  // auto-downloaded via videoWorker (which doesn't enqueue a thumbnail job
+  // itself, unlike the manual attachAsset path).
+  generateVideoThumbnails: adminBookmarksProcedure.mutation(async ({ ctx }) => {
+    const [videoAssets, thumbnailAssets] = await Promise.all([
+      ctx.db
+        .select({ id: assets.id, bookmarkId: assets.bookmarkId })
+        .from(assets)
+        .where(eq(assets.assetType, AssetTypes.LINK_VIDEO)),
+      ctx.db
+        .select({ bookmarkId: assets.bookmarkId })
+        .from(assets)
+        .where(eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL)),
+    ]);
+    const hasThumbnail = new Set(thumbnailAssets.map((a) => a.bookmarkId));
+    const missing = videoAssets.filter(
+      (a) => a.bookmarkId && !hasThumbnail.has(a.bookmarkId),
+    );
+
+    await Promise.all(
+      missing.map((a) =>
+        AssetPreprocessingQueue.enqueue(
+          { bookmarkId: a.bookmarkId!, assetId: a.id, fixMode: false },
+          { priority: QueuePriority.Low },
+        ),
+      ),
+    );
+
+    return { enqueued: missing.length };
   }),
   reRunInferenceOnAllBookmarks: adminBookmarksProcedure
     .input(

@@ -94,6 +94,11 @@ git fetch upstream
 | `apps/web/components/dashboard/preview/AttachmentBox.tsx` | Filters `videoThumbnail` assets out of the user-visible attachment list (system-generated, not user-manageable) |
 | `apps/web/components/dashboard/bookmarks/TextCard.tsx` (thumbnail lookup) | Looks up the video's `videoThumbnail` asset and passes it to both the masonry and standard render paths |
 | `apps/web/components/dashboard/bookmarks/MasonryMediaCard.tsx` (thumbnail prop) | `media.thumbnailAssetId` passed through to `BookmarkVideo` |
+| `packages/trpc/routers/admin.ts` | Added `generateVideoThumbnails` mutation: finds every `linkVideo` asset without a sibling `linkVideoThumbnail` and enqueues a job for it. Backfill for videos that predate this feature. |
+| `apps/web/components/admin/BackgroundJobs.tsx` | Added a "Generate missing video thumbnails" button to the existing Asset Preprocessing job card (Settings → Admin → Background Jobs), calling the mutation above |
+| `apps/workers/workers/videoWorker.ts` | After an auto-downloaded video (yt-dlp, e.g. embedded YouTube/X/Reddit videos) is saved, now also enqueues a thumbnail job — this path writes the asset straight to the DB and previously bypassed thumbnail generation entirely, unlike the manual-attach path |
+| `packages/trpc/testUtils.ts` | Added `AssetPreprocessingQueue` to the shared queue mock used by `defaultBeforeEach` — it was missing, so any trpc test that reached a real `.enqueue()` call for it would fail against the in-memory test DB (no `tasks` table); surfaced while adding a real test for `generateVideoThumbnails` |
+| `packages/trpc/routers/admin.test.ts` | Switched from a bespoke `buildTestContext` beforeEach to the shared `defaultBeforeEach` (picks up the queue mocks above); added tests for `generateVideoThumbnails` |
 
 ## 🔴 Substantially reworked files — highest conflict risk, check these first
 
@@ -132,4 +137,5 @@ workflow.**
 - [ ] Visually: masonry feed (image + video tiles, hover-dim, white icons), dark/light theme, header/sidebar alignment, the "+" new-bookmark dialog
 - [ ] Scroll through a large image- or video-heavy list — confirm no tiles get stuck blank
 - [ ] Attach a video and confirm a real poster-frame thumbnail appears in the feed (not a black box) once the worker finishes; check `ffmpeg` is present in the worker's container/environment
+- [ ] Settings → Admin → Background Jobs → Asset Preprocessing → "Generate missing video thumbnails" — confirm it enqueues only videos actually missing a thumbnail (not already-thumbnailed ones)
 - [ ] Deploy to the NAS and re-test against the real, large dataset before calling it done — several of these bugs only reproduced at real scale (thousands of bookmarks, 100+ lists), not against small local test data

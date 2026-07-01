@@ -108,6 +108,9 @@ export function defaultBeforeEach(seedDB = true) {
         LinkCrawlerQueue: {
           enqueue: vi.fn(),
         },
+        AssetPreprocessingQueue: {
+          enqueue: vi.fn(),
+        },
         OpenAIQueue: {
           enqueue: vi.fn(),
         },

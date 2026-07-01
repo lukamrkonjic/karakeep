@@ -14,6 +14,7 @@ import { db } from "@karakeep/db";
 import { AssetTypes } from "@karakeep/db/schema";
 import {
   addLogFields,
+  AssetPreprocessingQueue,
   QuotaService,
   StorageQuotaError,
   VideoWorkerQueue,
@@ -222,6 +223,13 @@ async function runWorker(job: DequeuedJob<ZVideoRequest>) {
       );
     });
     await silentDeleteAsset(userId, oldVideoAssetId);
+
+    // Unlike the manual attachAsset path, this asset is written straight to
+    // the DB (no attachAsset call), so it wouldn't otherwise get a thumbnail.
+    await AssetPreprocessingQueue.enqueue(
+      { bookmarkId, assetId: videoAssetId, fixMode: false },
+      { groupId: userId },
+    ).catch(() => undefined);
 
     logger.info(
       `[VideoCrawler][${jobId}] Finished downloading video from "${normalizedUrl}" and adding it to the database`,

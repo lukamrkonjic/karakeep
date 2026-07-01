@@ -332,6 +332,28 @@ function useJobActions() {
   );
 
   const {
+    mutateAsync: generateVideoThumbnails,
+    isPending: isGeneratingVideoThumbnailsPending,
+  } = useMutation(
+    api.admin.generateVideoThumbnails.mutationOptions({
+      onSuccess: (data) => {
+        toast({
+          description:
+            data.enqueued > 0
+              ? `Enqueued thumbnail generation for ${data.enqueued} video${data.enqueued === 1 ? "" : "s"}`
+              : "Every video already has a thumbnail",
+        });
+      },
+      onError: (e) => {
+        toast({
+          variant: "destructive",
+          description: e.message,
+        });
+      },
+    }),
+  );
+
+  const {
     mutateAsync: reRunInferenceOnAllBookmarks,
     isPending: isInferencePending,
   } = useMutation(
@@ -494,6 +516,13 @@ function useJobActions() {
         label: t("admin.background_jobs.actions.reprocess_assets_fix_mode"),
         onClick: () => reprocessAssetsFixMode(),
         loading: isReprocessingPending,
+      },
+      {
+        label: "Generate missing video thumbnails",
+        onClick: async () => {
+          await generateVideoThumbnails();
+        },
+        loading: isGeneratingVideoThumbnailsPending,
       },
     ],
     adminMaintenanceActions: [
