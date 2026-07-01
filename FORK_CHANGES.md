@@ -69,6 +69,9 @@ git fetch upstream
 | `apps/web/lib/list-drag.ts` | HTML5 drag-and-drop MIME constant for reordering sidebar lists (distinct from `bookmark-drag.ts`, which is for dragging bookmarks *onto* a list) |
 | `apps/web/components/dashboard/lists/ListSubfolders.tsx` | Eagle-style row of subfolder tiles shown at the top of a parent list's page, above its bookmarks |
 | `packages/db/drizzle/0086_add_list_position.sql` | Real migration: adds `bookmarkLists.position` (real, not-null, default 0) + an index, then backfills existing rows from `createdAt` so they keep their creation order instead of all tying at 0 |
+| `apps/web/lib/sidebarCollapse.ts` | Zustand store (with `persist` middleware) for whether the desktop sidebar is folded in — `{ collapsed, toggle }` |
+| `apps/web/components/shared/sidebar/SidebarCollapseWrapper.tsx` | Wraps the sidebar `<aside>`; collapses its width to 0 (overflow-hidden, animated) instead of unmounting it, so its scroll position/state survives a fold in/out |
+| `apps/web/components/shared/sidebar/KarakeepLogoToggle.tsx` | The header logo doubles as the sidebar fold in/out toggle — replaced the old `<Link>` back to the home page entirely |
 
 ## 🟡 Modified upstream files — small, targeted edits (low conflict risk)
 
@@ -80,9 +83,9 @@ git fetch upstream
 | `apps/web/components/dashboard/GlobalActions.tsx` | Added `<NewBookmarkDialog />` to the top header's action icons |
 | `apps/web/components/dashboard/bookmarks/BookmarkActionBar.tsx` | Added an optional `className` prop (lets the masonry hover overlay force icons white) |
 | `apps/web/components/dashboard/bookmarks/BookmarkLayoutAdaptingCard.tsx` | Exported `MultiBookmarkSelector` so `MasonryMediaCard` can reuse it |
-| `apps/web/components/dashboard/header/Header.tsx` | Removed bottom divider; 64px→80px tall; search bar/profile icon padding aligned to match the grid's own inset |
+| `apps/web/components/dashboard/header/Header.tsx` | Removed bottom divider; 64px→80px tall; search bar/profile icon padding aligned to match the grid's own inset; the logo's `<Link>` was replaced by `<KarakeepLogoToggle>` (see below) |
 | `apps/web/components/dashboard/lists/ListHeader.tsx` | Added `<NewBookmarkDialog />` next to the `⋯` menu; icon hidden unless it's a real emoji |
-| `apps/web/components/shared/sidebar/Sidebar.tsx`, `SidebarLayout.tsx` | Removed the sidebar/content divider; `64px`→`80px` height calc (must match Header's new height everywhere it appears); top padding `16px`→`20px` |
+| `apps/web/components/shared/sidebar/Sidebar.tsx`, `SidebarLayout.tsx` | Removed the sidebar/content divider; `64px`→`80px` height calc (must match Header's new height everywhere it appears); top padding `16px`→`20px`. `SidebarLayout.tsx` also swapped its plain `<div>{sidebar}</div>` for `<SidebarCollapseWrapper>{sidebar}</SidebarCollapseWrapper>` (see 🟢 above) |
 | `apps/web/components/ui/button-group.tsx`, `calendar.tsx`, `command.tsx`, `input-group.tsx`, `input.tsx`, `select.tsx`, `switch.tsx`, `tabs.tsx` | Flat-design pass: removed border/shadow, added `bg-muted` where needed for definition |
 | `apps/web/components/ui/card.tsx` | Removed border + shadow; background changed `bg-card`→`bg-muted` (bg-card is identical to the page background in light theme, so it was invisible) |
 | `packages/shared-react/components/ui/textarea.tsx` | Removed border; `bg-background`→`bg-muted` |
@@ -149,4 +152,5 @@ workflow.**
 - [ ] Settings → Admin → Background Jobs → Asset Preprocessing → "Generate missing video thumbnails" — confirm it enqueues only videos actually missing a thumbnail (not already-thumbnailed ones)
 - [ ] Drag a sidebar list to reorder it — confirm the insertion line tracks the cursor and the new order persists after a refresh
 - [ ] Open a list with subfolders — confirm its combined count (header + sidebar) equals the sum of its subfolders' counts, and the subfolder tiles at the top of the page link to the right lists
+- [ ] Click the header logo — confirm it folds/unfolds the sidebar (not a navigation) and the state survives a refresh
 - [ ] Deploy to the NAS and re-test against the real, large dataset before calling it done — several of these bugs only reproduced at real scale (thousands of bookmarks, 100+ lists), not against small local test data
