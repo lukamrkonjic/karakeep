@@ -10,11 +10,13 @@ import { FavouritedActionIcon } from "./icons";
 
 export default function BookmarkActionBar({
   bookmark,
+  className,
 }: {
   bookmark: ZBookmark;
+  className?: string;
 }) {
   return (
-    <div className="flex text-gray-500">
+    <div className={cn("flex text-gray-500", className)}>
       {bookmark.favourited && (
         <FavouritedActionIcon className="m-1 size-8 rounded p-1" favourited />
       )}

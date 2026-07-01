@@ -41,32 +41,38 @@ export function MasonryMediaCard({
     >
       <MultiBookmarkSelector bookmark={bookmark} />
 
-      {media.type === "image" ? (
-        <Link href={`/dashboard/preview/${bookmark.id}`} className="block">
-          <Image
-            alt={title ?? "bookmark"}
-            src={getAssetUrl(media.assetId)}
-            width={0}
-            height={0}
-            sizes="100vw"
-            unoptimized
-            className="block h-auto w-full"
-          />
-        </Link>
-      ) : (
-        <BookmarkVideo assetId={media.assetId} thumbnail className="w-full" />
-      )}
+      {/* Dim the whole image/video on hover (not just a top gradient) so the
+          title and action icons stay readable no matter the media's own
+          colors — same idea as Pinterest's hover state. */}
+      <div className="transition-[filter] duration-200 group-hover:brightness-[0.6]">
+        {media.type === "image" ? (
+          <Link href={`/dashboard/preview/${bookmark.id}`} className="block">
+            <Image
+              alt={title ?? "bookmark"}
+              src={getAssetUrl(media.assetId)}
+              width={0}
+              height={0}
+              sizes="100vw"
+              unoptimized
+              className="block h-auto w-full"
+            />
+          </Link>
+        ) : (
+          <BookmarkVideo assetId={media.assetId} thumbnail className="w-full" />
+        )}
+      </div>
 
       {/* Title + actions, revealed on hover at the top so they don't collide
-          with a video's native controls along the bottom. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 bg-gradient-to-b from-black/70 to-transparent p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          with a video's native controls along the bottom. Icons are forced
+          white since they always sit on the dimmed media above. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         {title && (
           <span className="pointer-events-auto line-clamp-2 text-sm font-medium text-white drop-shadow">
             {title}
           </span>
         )}
-        <div className="pointer-events-auto ml-auto shrink-0 text-white">
-          <BookmarkActionBar bookmark={bookmark} />
+        <div className="pointer-events-auto ml-auto shrink-0">
+          <BookmarkActionBar bookmark={bookmark} className="text-white" />
         </div>
       </div>
     </div>

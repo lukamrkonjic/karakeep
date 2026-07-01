@@ -35,10 +35,15 @@ function StyledBookmarkCard({
   children: React.ReactNode;
   className?: string;
 } & React.HTMLAttributes<HTMLElement>) {
+  // Masonry tiles are pure media (see MasonryMediaCard) — Pinterest-style,
+  // no card chrome around them. Other layouts still need a background to
+  // frame text notes and links, but no border (flat, app-wide).
+  const layout = useBookmarkLayout();
   return (
     <Slot
       className={cn(
-        "mb-5 border border-border bg-card hover:shadow-lg hover:transition-shadow",
+        "mb-5",
+        layout === "masonry" ? "bg-transparent" : "bg-card",
         className,
       )}
       {...props}

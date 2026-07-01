@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CollapsibleTriggerChevron } from "@/components/ui/collapsible";
+import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
-import { cn } from "@/lib/utils";
 import { MoreHorizontal } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
@@ -26,13 +26,11 @@ function ListItem({
   name,
   icon,
   path,
-  level = 0,
   style,
   list,
   open,
   collapsible,
   itemCount,
-  pinned,
   description,
 }: {
   name: string;
@@ -47,15 +45,6 @@ function ListItem({
   description?: string;
   style?: React.CSSProperties;
 }) {
-  const accentColors = [
-    "bg-sky-500",
-    "bg-slate-400",
-    "bg-violet-500",
-    "bg-rose-500",
-    "bg-emerald-500",
-    "bg-amber-500",
-  ];
-  const accentColor = accentColors[level % accentColors.length];
   const formattedItemCount =
     itemCount !== undefined ? itemCount.toLocaleString() : undefined;
 
@@ -65,33 +54,20 @@ function ListItem({
       style={style}
     >
       <div className="flex items-center gap-2">
-        <div className="flex h-full items-center justify-end gap-2">
-          {collapsible ? (
+        {/* Only rows with subfolders get a real chevron slot. Leaf/pinned
+            rows (no chevron) skip the reserved space entirely so their
+            icon/title sits as close to the left edge as the right-side
+            items sit to the right edge. */}
+        {collapsible && (
+          <div className="flex h-full items-center justify-end">
             <CollapsibleTriggerChevron
               className="size-4 shrink-0 rounded-sm text-muted-foreground transition-transform hover:text-foreground"
               open={open ?? false}
             />
-          ) : (
-            <span className="size-4 shrink-0" />
-          )}
-          <span
-            className={cn(
-              "h-9 w-1 shrink-0 rounded-full opacity-70",
-              pinned ? "bg-amber-500" : accentColor,
-            )}
-          />
-        </div>
-        <Link href={path} className="flex min-w-0 items-center gap-3">
-          <span
-            className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-xl border text-xl shadow-sm",
-              pinned
-                ? "border-amber-200 bg-amber-50 dark:border-amber-700 dark:bg-amber-900"
-                : "border-border bg-muted/55",
-            )}
-          >
-            {icon}
-          </span>
+          </div>
+        )}
+        <Link href={path} className="flex min-w-0 items-center gap-2">
+          {isEmojiIcon(icon) && <span className="text-xl">{icon}</span>}
           <div className="flex min-w-0 flex-col">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <p className="truncate text-lg text-foreground">{name}</p>
@@ -145,9 +121,7 @@ function Section({
       <h2 className="px-1 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         {title}
       </h2>
-      <div className="overflow-hidden rounded-xl border bg-background shadow-sm">
-        {children}
-      </div>
+      <div className="overflow-hidden rounded-xl bg-muted/40">{children}</div>
     </section>
   );
 }
