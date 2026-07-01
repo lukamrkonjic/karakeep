@@ -498,10 +498,18 @@ export const bookmarkLists = sqliteTable(
     // Whoever have access to this token can read the content of this list
     rssToken: text("rssToken"),
     public: integer("public", { mode: "boolean" }).notNull().default(false),
+    // Sort key among siblings (same userId + parentId). Higher sorts first.
+    // Fractional/gap-based: reordering only touches the moved row.
+    position: real("position").notNull().default(0),
   },
   (bl) => [
     index("bookmarkLists_userId_idx").on(bl.userId),
     unique("bookmarkLists_userId_id_idx").on(bl.userId, bl.id),
+    index("bookmarkLists_userId_parentId_position_idx").on(
+      bl.userId,
+      bl.parentId,
+      bl.position,
+    ),
   ],
 );
 

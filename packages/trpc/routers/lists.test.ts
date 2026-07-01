@@ -394,6 +394,106 @@ describe("Lists Routes", () => {
     const stats = await api.stats();
     expect(stats.stats.get(createdList.id)).toBeGreaterThan(0);
   });
+
+  test<CustomTestContext>("stats roll up a parent folder's count from its subfolders", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].lists;
+    const bookmarkA = await createTestBookmark(apiCallers[0]);
+    const bookmarkB = await createTestBookmark(apiCallers[0]);
+    const bookmarkC = await createTestBookmark(apiCallers[0]);
+
+    const parent = await api.create({
+      name: "Housing",
+      type: "manual",
+      icon: "🏠",
+    });
+    const childA = await api.create({
+      name: "Architecture",
+      type: "manual",
+      icon: "📐",
+      parentId: parent.id,
+    });
+    const childB = await api.create({
+      name: "Estate",
+      type: "manual",
+      icon: "🏰",
+      parentId: parent.id,
+    });
+    // A grandchild should roll up through its parent into the top-level
+    // parent too, not just one level.
+    const grandchild = await api.create({
+      name: "Interior Design",
+      type: "manual",
+      icon: "🛋️",
+      parentId: childA.id,
+    });
+
+    await api.addToList({ listId: childA.id, bookmarkId: bookmarkA });
+    await api.addToList({ listId: childB.id, bookmarkId: bookmarkB });
+    await api.addToList({ listId: grandchild.id, bookmarkId: bookmarkC });
+
+    const stats = await api.stats();
+    expect(stats.stats.get(grandchild.id)).toEqual(1);
+    // childA direct (1) + grandchild (1)
+    expect(stats.stats.get(childA.id)).toEqual(2);
+    expect(stats.stats.get(childB.id)).toEqual(1);
+    // parent has 0 direct bookmarks of its own — its count is purely the
+    // combined total of everything nested under it (2 + 1).
+    expect(stats.stats.get(parent.id)).toEqual(3);
+  });
+
+  test<CustomTestContext>("new lists get an incrementing position (newest sorts first)", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].lists;
+    const a = await api.create({ name: "A", type: "manual", icon: "📋" });
+    const b = await api.create({ name: "B", type: "manual", icon: "📋" });
+    const c = await api.create({ name: "C", type: "manual", icon: "📋" });
+
+    expect(b.position).toBeGreaterThan(a.position);
+    expect(c.position).toBeGreaterThan(b.position);
+  });
+
+  test<CustomTestContext>("reorder moves a list among its siblings", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].lists;
+    const a = await api.create({ name: "A", type: "manual", icon: "📋" });
+    const b = await api.create({ name: "B", type: "manual", icon: "📋" });
+    const c = await api.create({ name: "C", type: "manual", icon: "📋" });
+    // Displayed order (position descending) is: C, B, A.
+
+    // Move A (currently last) to the very top.
+    await api.reorder({ listId: a.id, index: 0 });
+    let lists = await api.list();
+    let byId = new Map(lists.lists.map((l) => [l.id, l]));
+    expect(byId.get(a.id)!.position).toBeGreaterThan(byId.get(c.id)!.position);
+    expect(byId.get(c.id)!.position).toBeGreaterThan(byId.get(b.id)!.position);
+
+    // Move C to sit between B and A (now the top two).
+    await api.reorder({ listId: c.id, index: 1 });
+    lists = await api.list();
+    byId = new Map(lists.lists.map((l) => [l.id, l]));
+    expect(byId.get(a.id)!.position).toBeGreaterThan(byId.get(c.id)!.position);
+    expect(byId.get(c.id)!.position).toBeGreaterThan(byId.get(b.id)!.position);
+  });
+
+  test<CustomTestContext>("reorder fails for a list you don't own", async ({
+    apiCallers,
+  }) => {
+    const owner = apiCallers[0].lists;
+    const other = apiCallers[1].lists;
+    const list = await owner.create({
+      name: "Owner's list",
+      type: "manual",
+      icon: "📋",
+    });
+
+    await expect(other.reorder({ listId: list.id, index: 0 })).rejects.toThrow(
+      /List not found/,
+    );
+  });
 });
 
 describe("recursive delete", () => {

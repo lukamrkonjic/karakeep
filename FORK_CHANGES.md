@@ -18,13 +18,14 @@ quick to resolve.
 - **~8 files were substantially reworked** and are the real conflict risk on
   a `git merge upstream/main`. They're called out explicitly below with
   guidance on how to reconcile them.
-- **No migration files.** One additive `AssetTypes` enum value was added for
-  video thumbnails (`packages/db/schema.ts`) — SQLite/Drizzle don't enforce
-  enums at the DB level, so `drizzle-kit generate` reports no schema change
-  and no migration file exists for it. Aside from that, this is overwhelmingly
-  a cosmetic/UI fork plus a few targeted backend robustness/performance/
-  feature additions. Nothing here should ever conflict with a karakeep data
-  migration.
+- **One real migration.** `0086_add_list_position.sql` adds a `position`
+  column to `bookmarkLists` (list drag-to-reorder) and backfills it from
+  `createdAt` for existing rows. A separate additive `AssetTypes` enum value
+  (video thumbnails, `packages/db/schema.ts`) needed no migration at all —
+  SQLite/Drizzle don't enforce enums at the DB level, so `drizzle-kit
+  generate` reported no schema change for that one. Aside from these two,
+  this is overwhelmingly a cosmetic/UI fork plus a few targeted backend
+  robustness/performance/feature additions.
 
 ## One-time setup (if not already done)
 
@@ -65,6 +66,9 @@ git fetch upstream
 | `apps/web/lib/bookmark-drag.ts` | HTML5 drag-and-drop MIME constants for moving a bookmark onto a sidebar list |
 | `apps/web/lib/hooks/useBookmarkDragStart.ts` | Shared drag-start handler; tags the drag with the source list ID only when dragged out of a manual list (enables true-move semantics) |
 | `apps/web/components/dashboard/preview/BookmarkListBadges.tsx` | Clickable badges in the preview modal showing which list(s) a bookmark belongs to |
+| `apps/web/lib/list-drag.ts` | HTML5 drag-and-drop MIME constant for reordering sidebar lists (distinct from `bookmark-drag.ts`, which is for dragging bookmarks *onto* a list) |
+| `apps/web/components/dashboard/lists/ListSubfolders.tsx` | Eagle-style row of subfolder tiles shown at the top of a parent list's page, above its bookmarks |
+| `packages/db/drizzle/0086_add_list_position.sql` | Real migration: adds `bookmarkLists.position` (real, not-null, default 0) + an index, then backfills existing rows from `createdAt` so they keep their creation order instead of all tying at 0 |
 
 ## 🟡 Modified upstream files — small, targeted edits (low conflict risk)
 
@@ -85,9 +89,12 @@ git fetch upstream
 | `apps/web/components/dashboard/preview/BookmarkPreview.tsx` | Added `<BookmarkListBadges bookmarkId={bookmark.id} />` to the title row |
 | `apps/web/components/dashboard/lists/EditListModal.tsx` | Added an X button to clear a list's emoji icon (shows a `Smile` placeholder when empty) |
 | `packages/trpc/routers/lists.ts` (icon-clear) | `updateList` accepts `icon: null` to clear a list's icon — separate from the `stats` rewrite noted below |
-| `packages/db/schema.ts` | Added `LINK_VIDEO_THUMBNAIL = "linkVideoThumbnail"` to the `AssetTypes` enum (TS-level only; no DB CHECK constraint, no migration generated) |
+| `packages/db/schema.ts` | Added `LINK_VIDEO_THUMBNAIL = "linkVideoThumbnail"` to the `AssetTypes` enum (TS-level only; no DB CHECK constraint, no migration generated). Also added `bookmarkLists.position` (real migration, see below) |
+| `packages/shared/types/lists.ts` | Added `position: z.number()` to `zBookmarkListSchema` |
+| `packages/shared-react/hooks/lists.ts` | Added `useReorderBookmarkList()`, mirroring the existing mutation-hook pattern (invalidates `lists.list` on success) |
+| `apps/web/app/dashboard/lists/[listId]/page.tsx` | Renders `<ListSubfolders listId={list.id} />` under `<ListHeader>` |
 | `packages/shared/types/bookmarks.ts` | Added `"videoThumbnail"` to `zAssetTypesSchema` |
-| `packages/open-api/karakeep-openapi-spec.json` | Regenerated (`pnpm --filter @karakeep/open-api generate`) after the `zAssetTypesSchema` change above — the pre-commit hook runs `check` and fails the commit if this file is stale, since it's derived from the Zod schemas, not hand-edited |
+| `packages/open-api/karakeep-openapi-spec.json` | Regenerated (`pnpm --filter @karakeep/open-api generate`) whenever an exposed Zod schema changes (so far: `zAssetTypesSchema`'s `videoThumbnail`, `zBookmarkListSchema`'s `position`) — the pre-commit hook runs `check` and fails the commit if this file is stale, since it's derived from the Zod schemas, not hand-edited |
 | `packages/trpc/lib/attachments.ts` | Added `videoThumbnail` to the 4 exhaustive asset-type maps; marked not user-attachable/detachable (system-generated only) |
 | `packages/shared-server/src/queues.ts` | Added optional `assetId` to `zAssetPreprocessingRequestSchema`, so a job can target a specific asset instead of only the bookmark's primary asset |
 | `apps/web/lib/attachments.tsx` | Added a `videoThumbnail` icon mapping (used only if it's ever shown in a generic asset list) |
@@ -110,8 +117,10 @@ git fetch upstream
 | `apps/web/components/dashboard/bookmarks/BookmarksGrid.tsx` | Removed the inline `EditorCard` from the grid entirely (replaced by the "+" dialog); masonry-layout cards get no border/`bg-card`; widened the `Masonry` gap 16px→20px; widened the infinite-scroll `rootMargin` so pagination fires ~1200px early. | Diff carefully — this file has four independent changes bundled in. Reapply each piece individually against upstream's version rather than doing a blind merge. |
 | `apps/web/components/dashboard/bookmarks/EditorCard.tsx` | Added `inDialog`/`onCreated` props so the same component can render inside `NewBookmarkDialog` without its own card chrome (title row, fixed height). | Should merge cleanly unless upstream changes the same prop surface; if so, keep our two new optional props. |
 | `apps/web/components/dashboard/lists/AllListsView.tsx` | Removed the colored accent bar and the emoji's card/border/shadow from list rows; chevron space is now only reserved for rows that actually have subfolders (was previously reserved for every row). | Re-verify the `collapsible` conditional still gates the chevron `<div>` correctly after merging. |
-| `apps/web/components/dashboard/sidebar/AllLists.tsx` | Same chevron-reservation fix, for the sidebar tree; removed the default 📋/⭐ emoji icons on "All Lists"/"Favourites"; added `useDropTarget` (drag-and-drop true-move: `addToList` then `removeFromList` from the source list, using existing tRPC mutations — no backend change). | Same as above; also re-verify `useDropTarget`'s drop handler after merging. |
-| `packages/trpc/routers/lists.ts` | **Backend logic change, not cosmetic.** Rewrote the `stats` procedure to batch all manual-list bookmark counts into a single grouped SQL query, instead of issuing one query per list. Since the underlying `better-sqlite3` driver is fully synchronous, N sequential queries were blocking the whole single-threaded server on every page load for accounts with many lists. | **This is the one file where a careless merge could silently reintroduce a real performance bug.** If upstream also touches `stats`, read both versions fully — don't take "theirs" by default. Smart lists still call `getSize()` individually; only manual-list counts are batched. |
+| `apps/web/components/dashboard/sidebar/AllLists.tsx` | Same chevron-reservation fix, for the sidebar tree; removed the default 📋/⭐ emoji icons on "All Lists"/"Favourites"; added `useDropTarget` (drag-and-drop true-move: `addToList` then `removeFromList` from the source list, using existing tRPC mutations — no backend change); passes `reorderable` to the owned-lists `CollapsibleBookmarkLists` (shared lists aren't reorderable — see below). | Same as above; also re-verify `useDropTarget`'s drop handler after merging. |
+| `apps/web/components/dashboard/lists/CollapsibleBookmarkLists.tsx` | Removed the two `.sort((a,b) => a.item.name.localeCompare(...))` alphabetical sorts, replaced with sorting by the new `position` field (descending — newest/most-recently-moved-up sorts first). Added `ReorderableSiblings`, a wrapper that adds HTML5 drag-and-drop reordering (with an insertion-line indicator) around a group of same-parent siblings, gated by a new `reorderable` prop (only the owned-lists tree passes `true` — reordering a shared list's row would silently reorder it for the owner too, since `position` lives on the same DB row regardless of who's viewing). | If upstream changes the sort or the recursion here, keep the `position`-based sort and re-wrap the sibling `.map()` calls (root-level and `ListItem`'s children) in `ReorderableSiblings`. |
+| `packages/trpc/models/lists.ts` | Added `List.getNextPosition()` (new lists get `max(siblings) + 1`, so newest sorts first) and `List.reorder()` (moves a list to a new index among its siblings; interpolates a new `position` between its new neighbors — or beyond the top/bottom edge — so only the moved row is touched, no renumbering). `create()` now calls `getNextPosition()`. | Additive — two new methods plus one line in `create()`. Should merge cleanly unless upstream restructures `create()`, in which case keep the `position` assignment. |
+| `packages/trpc/routers/lists.ts` | **Backend logic change, not cosmetic — two of them.** (1) Rewrote the `stats` procedure to batch all manual-list bookmark counts into a single grouped SQL query instead of issuing one query per list (the original perf fix). (2) `stats` now also rolls a parent (sub)folder's count up from everything nested under it (recursively, via each list's `parentId`), instead of showing only bookmarks added to the parent directly — most "parent" lists are pure organizational folders with 0 bookmarks of their own. (3) Added the `reorder` mutation (owner-only, see `List.reorder()` above). | **This is the one file where a careless merge could silently reintroduce a real performance bug or drop the rollup.** If upstream also touches `stats`, read both versions fully — don't take "theirs" by default. Smart lists still call `getSize()` individually; only manual-list counts are batched, and the rollup pass runs after. |
 | `packages/trpc/models/assets.ts` | `attachAsset()` now enqueues an `AssetPreprocessingQueue` job (with `assetId` set) whenever a `video` asset is attached, to generate a poster-frame thumbnail. `detachAsset()` now also deletes the orphaned `linkVideoThumbnail` companion asset when its `linkVideo` is detached. | If upstream changes `attachAsset`/`detachAsset`, keep both new blocks (the `if (input.asset.assetType === "video")` enqueue, and the thumbnail-cleanup block in `detachAsset`) and reapply around upstream's version. |
 | `apps/workers/workers/assetPreprocessingWorker.ts` | Added `extractAndSaveVideoThumbnail()` (ffmpeg `-frames:v 1 -update 1` frame grab, scaled to preserve aspect ratio, capped at 1280px wide), mirroring the existing PDF-screenshot pattern. `run()` branches early on `req.data.assetId` to target this specific-asset job type before falling through to the existing primary-asset logic (unchanged). | Additive — a new function plus one early branch at the top of `run()`. Should merge cleanly unless upstream restructures `run()`'s dispatch, in which case keep the `req.data.assetId` branch and the new function. |
 | `apps/web/components/dashboard/bookmarks/BookmarkVideo.tsx` | Added `thumbnailAssetId` prop: renders the real poster-frame image (via `GatedImage`) behind the play-icon overlay instead of a flat black box; falls back to black if no thumbnail exists yet (older attachments, or extraction failed). | Should merge cleanly — additive prop + conditional render. |
@@ -138,4 +147,6 @@ workflow.**
 - [ ] Scroll through a large image- or video-heavy list — confirm no tiles get stuck blank
 - [ ] Attach a video and confirm a real poster-frame thumbnail appears in the feed (not a black box) once the worker finishes; check `ffmpeg` is present in the worker's container/environment
 - [ ] Settings → Admin → Background Jobs → Asset Preprocessing → "Generate missing video thumbnails" — confirm it enqueues only videos actually missing a thumbnail (not already-thumbnailed ones)
+- [ ] Drag a sidebar list to reorder it — confirm the insertion line tracks the cursor and the new order persists after a refresh
+- [ ] Open a list with subfolders — confirm its combined count (header + sidebar) equals the sum of its subfolders' counts, and the subfolder tiles at the top of the page link to the right lists
 - [ ] Deploy to the NAS and re-test against the real, large dataset before calling it done — several of these bugs only reproduced at real scale (thousands of bookmarks, 100+ lists), not against small local test data

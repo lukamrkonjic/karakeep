@@ -56,6 +56,22 @@ export function useEditBookmarkList(
   );
 }
 
+export function useReorderBookmarkList(
+  opts?: Parameters<TRPCApi["lists"]["reorder"]["mutationOptions"]>[0],
+) {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
+  return useMutation(
+    api.lists.reorder.mutationOptions({
+      ...opts,
+      onSuccess: (res, req, meta, context) => {
+        queryClient.invalidateQueries(api.lists.list.pathFilter());
+        return opts?.onSuccess?.(res, req, meta, context);
+      },
+    }),
+  );
+}
+
 export function useMergeLists(
   opts?: Parameters<TRPCApi["lists"]["merge"]["mutationOptions"]>[0],
 ) {

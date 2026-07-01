@@ -526,6 +526,9 @@
               "viewer",
               "public"
             ]
+          },
+          "position": {
+            "type": "number"
           }
         },
         "required": [
@@ -535,7 +538,8 @@
           "parentId",
           "public",
           "hasCollaborators",
-          "userRole"
+          "userRole",
+          "position"
         ]
       },
       "Highlight": {

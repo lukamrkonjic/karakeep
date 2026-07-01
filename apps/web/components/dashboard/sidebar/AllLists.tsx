@@ -272,6 +272,7 @@ export default function AllLists({
         listsData={lists}
         filter={(node) => node.item.userRole === "owner"}
         isOpenFunc={isNodeOpen}
+        reorderable
         render={({ node, level, open, numBookmarks }) => (
           <DroppableListSidebarItem
             node={node}

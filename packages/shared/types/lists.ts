@@ -59,6 +59,8 @@ export const zBookmarkListSchema = z.object({
   public: z.boolean(),
   hasCollaborators: z.boolean(),
   userRole: z.enum(["owner", "editor", "viewer", "public"]),
+  // Sort key among siblings (same parent). Higher sorts first (topmost).
+  position: z.number(),
 });
 
 export type ZBookmarkList = z.infer<typeof zBookmarkListSchema>;

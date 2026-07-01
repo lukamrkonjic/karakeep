@@ -102,6 +102,18 @@ export const listsAppRouter = router({
       }
       return ctx.list.asZBookmarkList();
     }),
+  reorder: listsProcedure
+    .input(
+      z.object({
+        listId: z.string(),
+        index: z.number().int().min(0),
+      }),
+    )
+    .use(ensureListAtLeastViewer)
+    .use(ensureListAtLeastOwner)
+    .mutation(async ({ input, ctx }) => {
+      await List.reorder(ctx, input);
+    }),
   merge: listsProcedure
     .input(zMergeListSchema)
     .mutation(async ({ input, ctx }) => {
@@ -229,11 +241,51 @@ export const listsAppRouter = router({
       // Smart lists still need their own matcher evaluation.
       const smartSizes = await Promise.all(smartLists.map((l) => l.getSize()));
 
-      const stats = new Map<string, number>();
+      const ownCounts = new Map<string, number>();
       for (const l of manualLists) {
-        stats.set(l.id, manualCounts.get(l.id) ?? 0);
+        ownCounts.set(l.id, manualCounts.get(l.id) ?? 0);
       }
-      smartLists.forEach((l, i) => stats.set(l.id, smartSizes[i]));
+      smartLists.forEach((l, i) => ownCounts.set(l.id, smartSizes[i]));
+
+      // A parent (sub)folder's displayed count is the combined total of
+      // everything nested under it, not just bookmarks added to the parent
+      // directly — most "parent" lists are pure organizational folders with
+      // zero bookmarks of their own. asZBookmarkList().parentId is only
+      // populated for lists this user owns (privacy-masked to null for lists
+      // shared with them as a collaborator), so shared lists fall back to
+      // their own direct count with no rollup, which is fine since parentId
+      // hierarchies only exist within a single owner's tree in practice.
+      const childrenOf = new Map<string, string[]>();
+      for (const l of lists) {
+        const parentId = l.asZBookmarkList().parentId;
+        if (parentId) {
+          const siblings = childrenOf.get(parentId) ?? [];
+          siblings.push(l.id);
+          childrenOf.set(parentId, siblings);
+        }
+      }
+
+      const stats = new Map<string, number>();
+      const computeTotal = (id: string, inProgress: Set<string>): number => {
+        if (stats.has(id)) {
+          return stats.get(id)!;
+        }
+        // Guards against a corrupted parentId cycle recursing forever.
+        if (inProgress.has(id)) {
+          return ownCounts.get(id) ?? 0;
+        }
+        inProgress.add(id);
+        let total = ownCounts.get(id) ?? 0;
+        for (const childId of childrenOf.get(id) ?? []) {
+          total += computeTotal(childId, inProgress);
+        }
+        inProgress.delete(id);
+        stats.set(id, total);
+        return total;
+      };
+      for (const l of lists) {
+        computeTotal(l.id, new Set());
+      }
 
       return { stats };
     }),

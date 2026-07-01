@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, count, eq, inArray, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import invariant from "tiny-invariant";
 import { z } from "zod";
 
@@ -62,6 +62,7 @@ export abstract class List {
       query: this.list.query,
       userRole: this.list.userRole,
       hasCollaborators: this.list.hasCollaborators,
+      position: this.list.position,
 
       // Hide parentId as it is not relevant to the user
       parentId: null,
@@ -252,10 +253,36 @@ export abstract class List {
     };
   }
 
+  /**
+   * Next sort position among siblings (same owner + parent) so a new list
+   * lands on top — position sorts descending, and this is always higher
+   * than every existing sibling.
+   */
+  private static async getNextPosition(
+    ctx: AuthedContext,
+    parentId: string | null,
+  ): Promise<number> {
+    const [row] = await ctx.db
+      .select({
+        maxPosition: sql<number | null>`MAX(${bookmarkLists.position})`,
+      })
+      .from(bookmarkLists)
+      .where(
+        and(
+          eq(bookmarkLists.userId, ctx.user.id),
+          parentId
+            ? eq(bookmarkLists.parentId, parentId)
+            : isNull(bookmarkLists.parentId),
+        ),
+      );
+    return (row?.maxPosition ?? 0) + 1;
+  }
+
   static async create(
     ctx: AuthedContext,
     input: z.infer<typeof zNewBookmarkListSchema>,
   ): Promise<ManualList | SmartList> {
+    const position = await this.getNextPosition(ctx, input.parentId ?? null);
     const [result] = await ctx.db
       .insert(bookmarkLists)
       .values({
@@ -266,6 +293,7 @@ export abstract class List {
         parentId: input.parentId,
         type: input.type,
         query: input.query,
+        position,
       })
       .returning();
     return this.fromData(
@@ -277,6 +305,70 @@ export abstract class List {
       },
       null,
     );
+  }
+
+  /**
+   * Move a list to a new visual index among its siblings (same owner +
+   * parent). Only the moved row's position is touched — the new value is
+   * interpolated between its new neighbors (or placed beyond the top/bottom
+   * edge), so this never needs to renumber the rest of the siblings.
+   */
+  static async reorder(
+    ctx: AuthedContext,
+    input: { listId: string; index: number },
+  ): Promise<void> {
+    const list = await ctx.db.query.bookmarkLists.findFirst({
+      where: and(
+        eq(bookmarkLists.id, input.listId),
+        eq(bookmarkLists.userId, ctx.user.id),
+      ),
+      columns: { id: true, parentId: true },
+    });
+    if (!list) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+
+    const siblings = await ctx.db
+      .select({ id: bookmarkLists.id, position: bookmarkLists.position })
+      .from(bookmarkLists)
+      .where(
+        and(
+          eq(bookmarkLists.userId, ctx.user.id),
+          list.parentId
+            ? eq(bookmarkLists.parentId, list.parentId)
+            : isNull(bookmarkLists.parentId),
+        ),
+      )
+      .orderBy(desc(bookmarkLists.position));
+
+    const withoutDragged = siblings.filter((s) => s.id !== input.listId);
+    const clampedIndex = Math.max(
+      0,
+      Math.min(input.index, withoutDragged.length),
+    );
+    const prev = withoutDragged[clampedIndex - 1];
+    const next = withoutDragged[clampedIndex];
+
+    let newPosition: number;
+    if (!prev && !next) {
+      newPosition = 0;
+    } else if (!prev) {
+      newPosition = next.position + 1;
+    } else if (!next) {
+      newPosition = prev.position - 1;
+    } else {
+      newPosition = (prev.position + next.position) / 2;
+    }
+
+    await ctx.db
+      .update(bookmarkLists)
+      .set({ position: newPosition })
+      .where(
+        and(
+          eq(bookmarkLists.id, input.listId),
+          eq(bookmarkLists.userId, ctx.user.id),
+        ),
+      );
   }
 
   static async getAll(ctx: AuthedContext) {

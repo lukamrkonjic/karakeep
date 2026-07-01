@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Bookmarks from "@/components/dashboard/bookmarks/Bookmarks";
 import ListHeader from "@/components/dashboard/lists/ListHeader";
+import ListSubfolders from "@/components/dashboard/lists/ListSubfolders";
 import { api } from "@/server/api/client";
 import { TRPCError } from "@trpc/server";
 
@@ -61,7 +62,12 @@ export default async function ListPage(props: {
           archived: !includeArchived ? false : undefined,
         }}
         showEditorCard={list.type === "manual" && canEdit}
-        header={<ListHeader initialData={list} />}
+        header={
+          <>
+            <ListHeader initialData={list} />
+            <ListSubfolders listId={list.id} />
+          </>
+        }
       />
     </BookmarkListContextProvider>
   );
