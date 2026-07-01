@@ -33,7 +33,7 @@ export default function SidebarLayout({
             <Separator />
           </div>
           {modal}
-          <div className="min-h-30 container p-4">
+          <div className="min-h-30 w-full p-5">
             <ErrorBoundary fallback={<ErrorFallback />}>
               <Suspense fallback={<LoadingSpinner />}>{children}</Suspense>
             </ErrorBoundary>

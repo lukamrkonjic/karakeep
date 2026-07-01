@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "@/components/ui/sonner";
 import { BOOKMARK_DRAG_MIME } from "@/lib/bookmark-drag";
+import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { MoreHorizontal, Plus } from "lucide-react";
@@ -119,9 +120,11 @@ function DroppableListSidebarItem({
         )
       }
       logo={
-        <span className="flex">
-          <span className="text-lg"> {node.item.icon}</span>
-        </span>
+        isEmojiIcon(node.item.icon) ? (
+          <span className="flex">
+            <span className="text-lg">{node.item.icon}</span>
+          </span>
+        ) : null
       }
       name={node.item.name}
       path={`/dashboard/lists/${node.item.id}`}

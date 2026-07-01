@@ -1,10 +1,7 @@
 import { useTranslation } from "@/lib/i18n/server";
 import { TFunction } from "i18next";
 
-import serverConfig from "@karakeep/shared/config";
-
 import SidebarItem from "./SidebarItem";
-import SidebarVersion from "./SidebarVersion";
 import { TSidebarItem } from "./TSidebarItem";
 
 export default async function Sidebar({
@@ -32,10 +29,6 @@ export default async function Sidebar({
         </ul>
       </div>
       {extraSections}
-      <SidebarVersion
-        serverVersion={serverConfig.serverVersion}
-        changeLogVersion={serverConfig.changelogVersion}
-      />
     </aside>
   );
 }
