@@ -39,6 +39,7 @@ import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
 import ActionBar from "./ActionBar";
 import { AssetContentSection } from "./AssetContentSection";
 import AttachmentBox from "./AttachmentBox";
+import { BookmarkListBadges } from "./BookmarkListBadges";
 import HighlightsBox from "./HighlightsBox";
 import LinkContentSection from "./LinkContentSection";
 import { NoteEditor } from "./NoteEditor";
@@ -192,9 +193,12 @@ export default function BookmarkPreview({
   const detailsSection = (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <p className="line-clamp-2 text-ellipsis break-words text-lg font-medium">
-          {!title ? "Untitled" : title}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="line-clamp-2 flex-1 text-ellipsis break-words text-lg font-medium">
+            {!title ? "Untitled" : title}
+          </p>
+          <BookmarkListBadges bookmarkId={bookmark.id} />
+        </div>
         {sourceUrl && (
           <Link
             href={sourceUrl}
