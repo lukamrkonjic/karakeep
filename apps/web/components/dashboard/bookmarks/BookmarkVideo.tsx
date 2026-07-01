@@ -6,6 +6,8 @@ import { Play } from "lucide-react";
 
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
+import { GatedImage } from "./GatedImage";
+
 /**
  * Inline HTML5 player for video attachments (assetType === "video").
  *
@@ -19,6 +21,11 @@ import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
  *   every tile scrolling into view is what made the feed feel slow. Instead
  *   we show a static placeholder and only mount the real <video> (which then
  *   autoplays) once the user explicitly clicks it.
+ * - `thumbnailAssetId` (see assetPreprocessingWorker's extracted poster
+ *   frame) is shown as the placeholder when available, at the video's own
+ *   aspect ratio — same as any other image tile — instead of a flat black
+ *   box; falls back to the black box for videos without one yet (older
+ *   attachments, or extraction failed).
  * - The asset endpoint (packages/api/utils/assets.ts) already serves HTTP range
  *   requests, so native seeking/scrubbing works out of the box once playing.
  * - Plays mp4 and webm in all browsers; mkv (video/x-matroska) depends on the
@@ -26,10 +33,13 @@ import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
  */
 export function BookmarkVideo({
   assetId,
+  thumbnailAssetId,
   className,
   thumbnail = false,
 }: {
   assetId: string;
+  /** Generated poster-frame image, at the video's own aspect ratio. */
+  thumbnailAssetId?: string;
   className?: string;
   /** Feed mode: click-to-load placeholder instead of mounting immediately. */
   thumbnail?: boolean;
@@ -45,14 +55,18 @@ export function BookmarkVideo({
           e.stopPropagation();
           setClicked(true);
         }}
-        className={cn(
-          // aspect-video gives the placeholder a size before load; it's inert
-          // when the caller already constrains height (e.g. the h-56 feed grid).
-          "flex aspect-video w-full items-center justify-center bg-black text-white/70 transition-colors hover:text-white",
-          className,
-        )}
+        className={cn("relative block w-full", className)}
       >
-        <Play className="size-10" />
+        {thumbnailAssetId ? (
+          <GatedImage assetId={thumbnailAssetId} alt="Video preview" />
+        ) : (
+          // aspect-video gives the placeholder a size before load; it's
+          // inert when the caller already constrains height.
+          <div className="aspect-video w-full bg-black" />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white/90 transition-colors hover:bg-black/30 hover:text-white">
+          <Play className="size-10" />
+        </div>
       </button>
     );
   }

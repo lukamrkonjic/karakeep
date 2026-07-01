@@ -30,13 +30,20 @@ export default function TextCard({
   const layout = useBookmarkLayout();
   const banner = bookmark.assets.find((a) => a.assetType == "bannerImage");
   const video = bookmark.assets.find((a) => a.assetType == "video");
+  const videoThumbnail = bookmark.assets.find(
+    (a) => a.assetType == "videoThumbnail",
+  );
 
   // In masonry, a video note renders as a clean media-only tile (eagle style).
   if (layout === "masonry" && video) {
     return (
       <MasonryMediaCard
         bookmark={bookmark}
-        media={{ type: "video", assetId: video.id }}
+        media={{
+          type: "video",
+          assetId: video.id,
+          thumbnailAssetId: videoThumbnail?.id,
+        }}
         className={className}
         bookmarkIndex={bookmarkIndex}
       />
@@ -71,6 +78,7 @@ export default function TextCard({
           const videoNode = video ? (
             <BookmarkVideo
               assetId={video.id}
+              thumbnailAssetId={videoThumbnail?.id}
               thumbnail
               className={cn("size-full", className, "object-contain")}
             />

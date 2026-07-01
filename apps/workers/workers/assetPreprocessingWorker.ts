@@ -1,4 +1,8 @@
+import { execFile } from "child_process";
+import fs from "fs/promises";
 import os from "os";
+import path from "path";
+import { promisify } from "util";
 import { and, eq } from "drizzle-orm";
 import { workerStatsCounter } from "metrics";
 import PDFParser from "pdf2json";
@@ -275,6 +279,144 @@ export async function extractAndSavePDFScreenshot(
   }
 }
 
+const execFileAsync = promisify(execFile);
+
+/**
+ * Extracts the first frame of a video attachment via ffmpeg and saves it as
+ * a companion LINK_VIDEO_THUMBNAIL asset, at the video's own aspect ratio
+ * (no resizing beyond capping the width) so the feed can show a real
+ * preview instead of a generic placeholder before the user clicks to play.
+ *
+ * Best-effort: a missing ffmpeg binary or a video ffmpeg can't decode logs
+ * a warning and returns false rather than failing the job — the feed simply
+ * falls back to the placeholder for that video.
+ */
+export async function extractAndSaveVideoThumbnail(
+  jobId: string,
+  bookmarkId: string,
+  videoAssetId: string,
+): Promise<boolean> {
+  const videoAsset = await db.query.assets.findFirst({
+    where: and(eq(assets.id, videoAssetId), eq(assets.bookmarkId, bookmarkId)),
+  });
+  if (!videoAsset || videoAsset.assetType !== AssetTypes.LINK_VIDEO) {
+    logger.error(
+      `[assetPreprocessing][${jobId}] Asset ${videoAssetId} is not a video attachment on bookmark ${bookmarkId}`,
+    );
+    return false;
+  }
+
+  const alreadyHasThumbnail = await db.query.assets.findFirst({
+    where: and(
+      eq(assets.bookmarkId, bookmarkId),
+      eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL),
+    ),
+  });
+  if (alreadyHasThumbnail) {
+    logger.info(
+      `[assetPreprocessing][${jobId}] Skipping video thumbnail generation as it's already been generated.`,
+    );
+    return false;
+  }
+
+  logger.info(
+    `[assetPreprocessing][${jobId}] Attempting to generate a video thumbnail for bookmarkId: ${bookmarkId}`,
+  );
+
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "karakeep-video-thumb-"),
+  );
+  try {
+    const { asset: videoBuffer } = await readAsset({
+      userId: videoAsset.userId,
+      assetId: videoAssetId,
+    });
+
+    const inputPath = path.join(tmpDir, "input.video");
+    const outputPath = path.join(tmpDir, "thumbnail.jpg");
+    await fs.writeFile(inputPath, videoBuffer);
+
+    try {
+      // Grab the first decodable frame (no -ss seek) so this works even for
+      // very short clips; cap the width so oversized source videos don't
+      // produce an oversized thumbnail, preserving the aspect ratio.
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-i",
+        inputPath,
+        "-frames:v",
+        "1",
+        // Required by the image2 muxer for single-image (non-sequence)
+        // output — without it ffmpeg warns and some versions may refuse.
+        "-update",
+        "1",
+        "-vf",
+        "scale='min(1280,iw)':-2",
+        "-q:v",
+        "4",
+        outputPath,
+      ]);
+    } catch (error) {
+      logger.warn(
+        `[assetPreprocessing][${jobId}] ffmpeg failed to extract a video thumbnail (is ffmpeg installed?): ${error}`,
+      );
+      return false;
+    }
+
+    const thumbnailBuffer = await fs.readFile(outputPath);
+
+    const quotaApproved = await QuotaService.checkStorageQuota(
+      db,
+      videoAsset.userId,
+      thumbnailBuffer.byteLength,
+    );
+
+    const thumbnailAssetId = newAssetId();
+    const fileName = "video-thumbnail.jpg";
+    const contentType = "image/jpeg";
+    await saveAsset({
+      userId: videoAsset.userId,
+      assetId: thumbnailAssetId,
+      asset: thumbnailBuffer,
+      metadata: {
+        contentType,
+        fileName,
+      },
+      quotaApproved,
+    });
+
+    await db.insert(assets).values({
+      id: thumbnailAssetId,
+      bookmarkId,
+      userId: videoAsset.userId,
+      assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+      contentType,
+      size: thumbnailBuffer.byteLength,
+      fileName,
+    });
+
+    logger.info(
+      `[assetPreprocessing][${jobId}] Successfully saved video thumbnail to database`,
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof StorageQuotaError) {
+      logger.warn(
+        `[assetPreprocessing][${jobId}] Skipping video thumbnail due to quota exceeded: ${error.message}`,
+      );
+      return true;
+    }
+    logger.error(
+      `[assetPreprocessing][${jobId}] Failed to process video thumbnail: ${error}`,
+    );
+    return false;
+  } finally {
+    await fs
+      .rm(tmpDir, { recursive: true, force: true })
+      .catch(() => undefined);
+  }
+}
+
 async function extractAndSaveImageText(
   jobId: string,
   asset: Buffer,
@@ -386,6 +528,14 @@ async function run(req: DequeuedJob<AssetPreprocessingRequest>) {
   const jobId = req.id;
   const bookmarkId = req.data.bookmarkId;
   addLogFields<"assetPreprocessingWorker.run">({ "bookmark.id": bookmarkId });
+
+  // A specific attachment to process (currently only video -> thumbnail),
+  // as opposed to the bookmark's own primary asset (image/pdf uploads)
+  // handled below.
+  if (req.data.assetId) {
+    await extractAndSaveVideoThumbnail(jobId, bookmarkId, req.data.assetId);
+    return;
+  }
 
   const bookmark = await db.query.bookmarks.findFirst({
     where: eq(bookmarks.id, bookmarkId),

@@ -23,6 +23,7 @@ export const zAssetTypesSchema = z.enum([
   "bannerImage",
   "fullPageArchive",
   "video",
+  "videoThumbnail",
   "bookmarkAsset",
   "precrawledArchive",
   "userUploaded",

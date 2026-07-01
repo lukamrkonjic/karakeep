@@ -15,6 +15,7 @@ export function mapDBAssetTypeToUserType(assetType: AssetTypes): ZAssetType {
     [AssetTypes.LINK_PRECRAWLED_ARCHIVE]: "precrawledArchive",
     [AssetTypes.LINK_BANNER_IMAGE]: "bannerImage",
     [AssetTypes.LINK_VIDEO]: "video",
+    [AssetTypes.LINK_VIDEO_THUMBNAIL]: "videoThumbnail",
     [AssetTypes.LINK_HTML_CONTENT]: "linkHtmlContent",
     [AssetTypes.BOOKMARK_ASSET]: "bookmarkAsset",
     [AssetTypes.USER_UPLOADED]: "userUploaded",
@@ -36,6 +37,7 @@ export function mapSchemaAssetTypeToDB(
     precrawledArchive: AssetTypes.LINK_PRECRAWLED_ARCHIVE,
     bannerImage: AssetTypes.LINK_BANNER_IMAGE,
     video: AssetTypes.LINK_VIDEO,
+    videoThumbnail: AssetTypes.LINK_VIDEO_THUMBNAIL,
     bookmarkAsset: AssetTypes.BOOKMARK_ASSET,
     linkHtmlContent: AssetTypes.LINK_HTML_CONTENT,
     userUploaded: AssetTypes.USER_UPLOADED,
@@ -54,6 +56,7 @@ export function humanFriendlyNameForAssertType(type: ZAssetType) {
     precrawledArchive: "Precrawled Archive",
     bannerImage: "Banner Image",
     video: "Video",
+    videoThumbnail: "Video Thumbnail",
     bookmarkAsset: "Bookmark Asset",
     linkHtmlContent: "HTML Content",
     userUploaded: "User Uploaded File",
@@ -72,6 +75,9 @@ export function isAllowedToAttachAsset(type: ZAssetType) {
     precrawledArchive: true,
     bannerImage: true,
     video: true,
+    // System-generated only (see assetPreprocessingWorker) — not something
+    // a user attaches manually.
+    videoThumbnail: false,
     bookmarkAsset: false,
     linkHtmlContent: false,
     userUploaded: true,
@@ -90,6 +96,8 @@ export function isAllowedToDetachAsset(type: ZAssetType) {
     precrawledArchive: true,
     bannerImage: true,
     video: true,
+    // System-generated only — detached automatically when its video is.
+    videoThumbnail: false,
     bookmarkAsset: false,
     linkHtmlContent: false,
     userUploaded: true,

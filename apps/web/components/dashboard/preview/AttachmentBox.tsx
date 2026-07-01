@@ -96,9 +96,13 @@ export default function AttachmentBox({
     },
   });
 
-  bookmark.assets.sort((a, b) => a.assetType.localeCompare(b.assetType));
+  // Video thumbnails are generated internally (see assetPreprocessingWorker)
+  // and aren't something the user attaches/manages directly.
+  const visibleAssets = bookmark.assets
+    .filter((a) => a.assetType !== "videoThumbnail")
+    .sort((a, b) => a.assetType.localeCompare(b.assetType));
 
-  const hasAssets = bookmark.assets.length > 0;
+  const hasAssets = visibleAssets.length > 0;
 
   return (
     <Collapsible defaultOpen={true}>
@@ -169,7 +173,7 @@ export default function AttachmentBox({
         </div>
       </div>
       <CollapsibleContent className="flex flex-col gap-1 py-3 text-sm">
-        {bookmark.assets.map((asset) => (
+        {visibleAssets.map((asset) => (
           <div key={asset.id} className="flex items-center justify-between">
             <Link
               target="_blank"

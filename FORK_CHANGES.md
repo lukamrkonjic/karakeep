@@ -18,10 +18,13 @@ quick to resolve.
 - **~8 files were substantially reworked** and are the real conflict risk on
   a `git merge upstream/main`. They're called out explicitly below with
   guidance on how to reconcile them.
-- **No database schema, save format, or migration changes.** This is
-  overwhelmingly a cosmetic/UI fork plus two targeted backend
-  robustness/performance fixes. Nothing here should ever conflict with a
-  karakeep data migration.
+- **No migration files.** One additive `AssetTypes` enum value was added for
+  video thumbnails (`packages/db/schema.ts`) — SQLite/Drizzle don't enforce
+  enums at the DB level, so `drizzle-kit generate` reports no schema change
+  and no migration file exists for it. Aside from that, this is overwhelmingly
+  a cosmetic/UI fork plus a few targeted backend robustness/performance/
+  feature additions. Nothing here should ever conflict with a karakeep data
+  migration.
 
 ## One-time setup (if not already done)
 
@@ -58,6 +61,10 @@ git fetch upstream
 | `apps/web/lib/hooks/useNearViewportLoadSlot.ts` | Hook combining an IntersectionObserver with the load gate above |
 | `apps/web/lib/emoji.ts` | `isEmojiIcon()` — used to hide the `??` placeholder glyph when a list has no real emoji icon |
 | `tools/seed-snapshot/src/seed-media.ts` | Dev-only helper: seeds placeholder image/video bookmarks into a local instance for visual testing (not used in production) |
+| `apps/web/components/dashboard/bookmarks/GatedImage.tsx` | Shared `<Image>` wrapper that only mounts once granted a concurrency slot (extracted out of `MasonryMediaCard`; reused by `BookmarkVideo`'s thumbnail placeholder) |
+| `apps/web/lib/bookmark-drag.ts` | HTML5 drag-and-drop MIME constants for moving a bookmark onto a sidebar list |
+| `apps/web/lib/hooks/useBookmarkDragStart.ts` | Shared drag-start handler; tags the drag with the source list ID only when dragged out of a manual list (enables true-move semantics) |
+| `apps/web/components/dashboard/preview/BookmarkListBadges.tsx` | Clickable badges in the preview modal showing which list(s) a bookmark belongs to |
 
 ## 🟡 Modified upstream files — small, targeted edits (low conflict risk)
 
@@ -75,6 +82,18 @@ git fetch upstream
 | `apps/web/components/ui/button-group.tsx`, `calendar.tsx`, `command.tsx`, `input-group.tsx`, `input.tsx`, `select.tsx`, `switch.tsx`, `tabs.tsx` | Flat-design pass: removed border/shadow, added `bg-muted` where needed for definition |
 | `apps/web/components/ui/card.tsx` | Removed border + shadow; background changed `bg-card`→`bg-muted` (bg-card is identical to the page background in light theme, so it was invisible) |
 | `packages/shared-react/components/ui/textarea.tsx` | Removed border; `bg-background`→`bg-muted` |
+| `apps/web/components/dashboard/preview/BookmarkPreview.tsx` | Added `<BookmarkListBadges bookmarkId={bookmark.id} />` to the title row |
+| `apps/web/components/dashboard/lists/EditListModal.tsx` | Added an X button to clear a list's emoji icon (shows a `Smile` placeholder when empty) |
+| `packages/trpc/routers/lists.ts` (icon-clear) | `updateList` accepts `icon: null` to clear a list's icon — separate from the `stats` rewrite noted below |
+| `packages/db/schema.ts` | Added `LINK_VIDEO_THUMBNAIL = "linkVideoThumbnail"` to the `AssetTypes` enum (TS-level only; no DB CHECK constraint, no migration generated) |
+| `packages/shared/types/bookmarks.ts` | Added `"videoThumbnail"` to `zAssetTypesSchema` |
+| `packages/open-api/karakeep-openapi-spec.json` | Regenerated (`pnpm --filter @karakeep/open-api generate`) after the `zAssetTypesSchema` change above — the pre-commit hook runs `check` and fails the commit if this file is stale, since it's derived from the Zod schemas, not hand-edited |
+| `packages/trpc/lib/attachments.ts` | Added `videoThumbnail` to the 4 exhaustive asset-type maps; marked not user-attachable/detachable (system-generated only) |
+| `packages/shared-server/src/queues.ts` | Added optional `assetId` to `zAssetPreprocessingRequestSchema`, so a job can target a specific asset instead of only the bookmark's primary asset |
+| `apps/web/lib/attachments.tsx` | Added a `videoThumbnail` icon mapping (used only if it's ever shown in a generic asset list) |
+| `apps/web/components/dashboard/preview/AttachmentBox.tsx` | Filters `videoThumbnail` assets out of the user-visible attachment list (system-generated, not user-manageable) |
+| `apps/web/components/dashboard/bookmarks/TextCard.tsx` (thumbnail lookup) | Looks up the video's `videoThumbnail` asset and passes it to both the masonry and standard render paths |
+| `apps/web/components/dashboard/bookmarks/MasonryMediaCard.tsx` (thumbnail prop) | `media.thumbnailAssetId` passed through to `BookmarkVideo` |
 
 ## 🔴 Substantially reworked files — highest conflict risk, check these first
 
@@ -86,8 +105,11 @@ git fetch upstream
 | `apps/web/components/dashboard/bookmarks/BookmarksGrid.tsx` | Removed the inline `EditorCard` from the grid entirely (replaced by the "+" dialog); masonry-layout cards get no border/`bg-card`; widened the `Masonry` gap 16px→20px; widened the infinite-scroll `rootMargin` so pagination fires ~1200px early. | Diff carefully — this file has four independent changes bundled in. Reapply each piece individually against upstream's version rather than doing a blind merge. |
 | `apps/web/components/dashboard/bookmarks/EditorCard.tsx` | Added `inDialog`/`onCreated` props so the same component can render inside `NewBookmarkDialog` without its own card chrome (title row, fixed height). | Should merge cleanly unless upstream changes the same prop surface; if so, keep our two new optional props. |
 | `apps/web/components/dashboard/lists/AllListsView.tsx` | Removed the colored accent bar and the emoji's card/border/shadow from list rows; chevron space is now only reserved for rows that actually have subfolders (was previously reserved for every row). | Re-verify the `collapsible` conditional still gates the chevron `<div>` correctly after merging. |
-| `apps/web/components/dashboard/sidebar/AllLists.tsx` | Same chevron-reservation fix, for the sidebar tree; removed the default 📋/⭐ emoji icons on "All Lists"/"Favourites". | Same as above. |
+| `apps/web/components/dashboard/sidebar/AllLists.tsx` | Same chevron-reservation fix, for the sidebar tree; removed the default 📋/⭐ emoji icons on "All Lists"/"Favourites"; added `useDropTarget` (drag-and-drop true-move: `addToList` then `removeFromList` from the source list, using existing tRPC mutations — no backend change). | Same as above; also re-verify `useDropTarget`'s drop handler after merging. |
 | `packages/trpc/routers/lists.ts` | **Backend logic change, not cosmetic.** Rewrote the `stats` procedure to batch all manual-list bookmark counts into a single grouped SQL query, instead of issuing one query per list. Since the underlying `better-sqlite3` driver is fully synchronous, N sequential queries were blocking the whole single-threaded server on every page load for accounts with many lists. | **This is the one file where a careless merge could silently reintroduce a real performance bug.** If upstream also touches `stats`, read both versions fully — don't take "theirs" by default. Smart lists still call `getSize()` individually; only manual-list counts are batched. |
+| `packages/trpc/models/assets.ts` | `attachAsset()` now enqueues an `AssetPreprocessingQueue` job (with `assetId` set) whenever a `video` asset is attached, to generate a poster-frame thumbnail. `detachAsset()` now also deletes the orphaned `linkVideoThumbnail` companion asset when its `linkVideo` is detached. | If upstream changes `attachAsset`/`detachAsset`, keep both new blocks (the `if (input.asset.assetType === "video")` enqueue, and the thumbnail-cleanup block in `detachAsset`) and reapply around upstream's version. |
+| `apps/workers/workers/assetPreprocessingWorker.ts` | Added `extractAndSaveVideoThumbnail()` (ffmpeg `-frames:v 1 -update 1` frame grab, scaled to preserve aspect ratio, capped at 1280px wide), mirroring the existing PDF-screenshot pattern. `run()` branches early on `req.data.assetId` to target this specific-asset job type before falling through to the existing primary-asset logic (unchanged). | Additive — a new function plus one early branch at the top of `run()`. Should merge cleanly unless upstream restructures `run()`'s dispatch, in which case keep the `req.data.assetId` branch and the new function. |
+| `apps/web/components/dashboard/bookmarks/BookmarkVideo.tsx` | Added `thumbnailAssetId` prop: renders the real poster-frame image (via `GatedImage`) behind the play-icon overlay instead of a flat black box; falls back to black if no thumbnail exists yet (older attachments, or extraction failed). | Should merge cleanly — additive prop + conditional render. |
 
 ## Non-git-visible change — redo this manually if you ever start a fresh fork
 
@@ -109,4 +131,5 @@ workflow.**
 - [ ] `pnpm --filter @karakeep/trpc test` — especially `lists.test.ts` (covers the `stats` rewrite)
 - [ ] Visually: masonry feed (image + video tiles, hover-dim, white icons), dark/light theme, header/sidebar alignment, the "+" new-bookmark dialog
 - [ ] Scroll through a large image- or video-heavy list — confirm no tiles get stuck blank
+- [ ] Attach a video and confirm a real poster-frame thumbnail appears in the feed (not a black box) once the worker finishes; check `ffmpeg` is present in the worker's container/environment
 - [ ] Deploy to the NAS and re-test against the real, large dataset before calling it done — several of these bugs only reproduced at real scale (thousands of bookmarks, 100+ lists), not against small local test data

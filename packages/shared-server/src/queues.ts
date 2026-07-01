@@ -278,6 +278,10 @@ export const FeedQueue = createDeferredQueue<ZFeedRequestSchema>("feed_queue", {
 export const zAssetPreprocessingRequestSchema = z.object({
   bookmarkId: z.string(),
   fixMode: z.boolean().optional().default(false),
+  // When set, this specific asset attachment is processed (currently only
+  // used for video -> thumbnail generation) instead of the bookmark's
+  // primary asset (image/pdf uploads).
+  assetId: z.string().optional(),
 });
 export type AssetPreprocessingRequest = z.infer<
   typeof zAssetPreprocessingRequestSchema

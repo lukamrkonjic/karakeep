@@ -1,77 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { imageLoadGate } from "@/lib/assetLoadGate";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkDragStart } from "@/lib/hooks/useBookmarkDragStart";
-import { useNearViewportLoadSlot } from "@/lib/hooks/useNearViewportLoadSlot";
 import { cn } from "@/lib/utils";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
-import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
 import BookmarkActionBar from "./BookmarkActionBar";
 import { MultiBookmarkSelector } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
-
-/**
- * Renders the actual <Image> only once granted a load slot (see
- * assetLoadGate.ts) — karakeep doesn't store image dimensions, so every tile
- * starts at width=0/height=0 and only gets its real size once bytes start
- * arriving; letting dozens of tiles all request at once on mount/fast-scroll
- * can overwhelm a modest self-hosted server's connection pool and leave some
- * stuck indefinitely. A placeholder box holds the tile's place in the
- * masonry column until its turn comes.
- */
-function GatedImage({
-  assetId,
-  alt,
-  className,
-}: {
-  assetId: string;
-  alt: string;
-  className?: string;
-}) {
-  const { containerRef, granted, release } = useNearViewportLoadSlot(
-    imageLoadGate,
-    { rootMargin: "600px" },
-  );
-
-  // Safety net: don't hold the slot forever if load/error never fires.
-  useEffect(() => {
-    if (!granted) return;
-    const timer = window.setTimeout(release, 15000);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [granted]);
-
-  if (!granted) {
-    return (
-      <div
-        ref={containerRef}
-        className={cn("aspect-[3/4] w-full animate-pulse bg-muted", className)}
-      />
-    );
-  }
-
-  return (
-    <Image
-      alt={alt}
-      src={getAssetUrl(assetId)}
-      width={0}
-      height={0}
-      sizes="100vw"
-      unoptimized
-      draggable={false}
-      className={cn("block h-auto w-full", className)}
-      onLoad={release}
-      onError={release}
-    />
-  );
-}
+import { GatedImage } from "./GatedImage";
 
 /**
  * Eagle.cool-style masonry tile: shows ONLY the media (image/video) at its
@@ -89,7 +29,12 @@ export function MasonryMediaCard({
   bookmarkIndex,
 }: {
   bookmark: ZBookmark;
-  media: { type: "image" | "video"; assetId: string };
+  media: {
+    type: "image" | "video";
+    assetId: string;
+    /** Generated poster-frame image for video media, if one exists yet. */
+    thumbnailAssetId?: string;
+  };
   className?: string;
   bookmarkIndex?: number;
 }) {
@@ -126,7 +71,12 @@ export function MasonryMediaCard({
             <GatedImage assetId={media.assetId} alt={title ?? "bookmark"} />
           </Link>
         ) : (
-          <BookmarkVideo assetId={media.assetId} thumbnail className="w-full" />
+          <BookmarkVideo
+            assetId={media.assetId}
+            thumbnailAssetId={media.thumbnailAssetId}
+            thumbnail
+            className="w-full"
+          />
         )}
       </div>
 

@@ -2,7 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { assets } from "@karakeep/db/schema";
+import { AssetTypes, assets } from "@karakeep/db/schema";
+import { AssetPreprocessingQueue } from "@karakeep/shared-server";
 import { deleteAsset } from "@karakeep/shared/assetdb";
 import serverConfig from "@karakeep/shared/config";
 import { createSignedToken } from "@karakeep/shared/signedTokens";
@@ -113,6 +114,19 @@ export class Asset {
       .where(and(eq(assets.id, input.asset.id), eq(assets.userId, ctx.user.id)))
       .returning();
 
+    if (input.asset.assetType === "video") {
+      // Generate a poster-frame thumbnail in the background so the feed can
+      // show a real preview instead of a generic placeholder.
+      await AssetPreprocessingQueue.enqueue(
+        {
+          bookmarkId: input.bookmarkId,
+          assetId: updatedAsset.id,
+          fixMode: false,
+        },
+        { groupId: ctx.user.id },
+      ).catch(() => ({}));
+    }
+
     return {
       id: updatedAsset.id,
       assetType: mapDBAssetTypeToUserType(updatedAsset.assetType),
@@ -199,6 +213,23 @@ export class Asset {
     await deleteAsset({ userId: ctx.user.id, assetId: input.assetId }).catch(
       () => ({}),
     );
+
+    // The generated thumbnail is only meaningful alongside its video —
+    // clean it up too instead of leaving it orphaned.
+    if (asset.asset.assetType === AssetTypes.LINK_VIDEO) {
+      const thumbnail = await ctx.db.query.assets.findFirst({
+        where: and(
+          eq(assets.bookmarkId, input.bookmarkId),
+          eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL),
+        ),
+      });
+      if (thumbnail) {
+        await ctx.db.delete(assets).where(eq(assets.id, thumbnail.id));
+        await deleteAsset({ userId: ctx.user.id, assetId: thumbnail.id }).catch(
+          () => ({}),
+        );
+      }
+    }
   }
 
   private static async ensureBookmarkOwnership(
