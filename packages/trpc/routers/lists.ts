@@ -1,6 +1,8 @@
 import { experimental_trpcMiddleware } from "@trpc/server";
+import { count, inArray } from "drizzle-orm";
 import { z } from "zod";
 
+import { bookmarksInLists } from "@karakeep/db/schema";
 import {
   zBookmarkListSchema,
   zEditBookmarkListSchemaWithValidation,
@@ -18,7 +20,7 @@ import {
   router,
 } from "../index";
 import { ListInvitation } from "../models/listInvitations";
-import { List } from "../models/lists";
+import { List, ManualList, SmartList } from "../models/lists";
 import { ensureBookmarkOwnership } from "./bookmarks";
 
 const listsProcedure = createScopedAuthedProcedure("lists");
@@ -196,8 +198,44 @@ export const listsAppRouter = router({
     )
     .query(async ({ ctx }) => {
       const lists = await List.getAll(ctx);
-      const sizes = await Promise.all(lists.map((l) => l.getSize()));
-      return { stats: new Map(lists.map((l, i) => [l.id, sizes[i]])) };
+      const manualLists = lists.filter(
+        (l): l is ManualList => l instanceof ManualList,
+      );
+      const smartLists = lists.filter(
+        (l): l is SmartList => l instanceof SmartList,
+      );
+
+      // Manual lists share a single grouped COUNT instead of one query per
+      // list — with many lists (and the underlying sqlite driver being fully
+      // synchronous), N sequential per-list queries measurably add up since
+      // they block the event loop one at a time regardless of Promise.all.
+      const manualCounts = new Map<string, number>();
+      if (manualLists.length > 0) {
+        const rows = await ctx.db
+          .select({ listId: bookmarksInLists.listId, count: count() })
+          .from(bookmarksInLists)
+          .where(
+            inArray(
+              bookmarksInLists.listId,
+              manualLists.map((l) => l.id),
+            ),
+          )
+          .groupBy(bookmarksInLists.listId);
+        for (const row of rows) {
+          manualCounts.set(row.listId, row.count);
+        }
+      }
+
+      // Smart lists still need their own matcher evaluation.
+      const smartSizes = await Promise.all(smartLists.map((l) => l.getSize()));
+
+      const stats = new Map<string, number>();
+      for (const l of manualLists) {
+        stats.set(l.id, manualCounts.get(l.id) ?? 0);
+      }
+      smartLists.forEach((l, i) => stats.set(l.id, smartSizes[i]));
+
+      return { stats };
     }),
 
   // Rss endpoints
