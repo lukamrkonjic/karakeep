@@ -2,13 +2,12 @@
 
 import type { BookmarksLayoutTypes } from "@/lib/userLocalSettings/types";
 import type { ReactNode } from "react";
-import { useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "@/lib/auth/client";
-import { BOOKMARK_DRAG_MIME } from "@/lib/bookmark-drag";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
+import { useBookmarkDragStart } from "@/lib/hooks/useBookmarkDragStart";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   bookmarkLayoutSwitch,
@@ -31,10 +30,7 @@ import { useBookmarkListContext } from "@karakeep/shared-react/hooks/bookmark-li
 import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
-import {
-  getBookmarkTitle,
-  isBookmarkStillTagging,
-} from "@karakeep/shared/utils/bookmarkUtils";
+import { isBookmarkStillTagging } from "@karakeep/shared/utils/bookmarkUtils";
 import { switchCase } from "@karakeep/shared/utils/switch";
 
 import BookmarkActionBar from "./BookmarkActionBar";
@@ -176,40 +172,7 @@ function DragHandle({
   className?: string;
 }) {
   const { isBulkEditEnabled } = useBulkActionsStore();
-  const handleDragStart = useCallback(
-    (e: React.DragEvent) => {
-      e.stopPropagation();
-      e.dataTransfer.setData(BOOKMARK_DRAG_MIME, bookmark.id);
-      e.dataTransfer.effectAllowed = "copy";
-
-      // Create a small pill element as the drag preview
-      const pill = document.createElement("div");
-      const title = getBookmarkTitle(bookmark) ?? "Untitled";
-      pill.textContent =
-        title.length > 40 ? title.substring(0, 40) + "\u2026" : title;
-      Object.assign(pill.style, {
-        position: "fixed",
-        left: "-9999px",
-        top: "-9999px",
-        padding: "6px 12px",
-        borderRadius: "8px",
-        backgroundColor: "hsl(var(--card))",
-        border: "1px solid hsl(var(--border))",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-        fontSize: "13px",
-        fontFamily: "inherit",
-        color: "hsl(var(--foreground))",
-        maxWidth: "240px",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      });
-      document.body.appendChild(pill);
-      e.dataTransfer.setDragImage(pill, 0, 0);
-      requestAnimationFrame(() => pill.remove());
-    },
-    [bookmark],
-  );
+  const handleDragStart = useBookmarkDragStart(bookmark);
 
   if (isBulkEditEnabled) return null;
 

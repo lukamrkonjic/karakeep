@@ -11,7 +11,10 @@ import {
   CollapsibleTriggerChevron,
 } from "@/components/ui/collapsible";
 import { toast } from "@/components/ui/sonner";
-import { BOOKMARK_DRAG_MIME } from "@/lib/bookmark-drag";
+import {
+  BOOKMARK_DRAG_MIME,
+  BOOKMARK_DRAG_SOURCE_LIST_MIME,
+} from "@/lib/bookmark-drag";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
@@ -22,6 +25,7 @@ import {
   augmentBookmarkListsWithInitialData,
   useAddBookmarkToList,
   useBookmarkLists,
+  useRemoveBookmarkFromList,
 } from "@karakeep/shared-react/hooks/lists";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
@@ -32,6 +36,7 @@ import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
 function useDropTarget(listId: string, listName: string) {
   const { mutateAsync: addToList } = useAddBookmarkToList();
+  const { mutateAsync: removeFromList } = useRemoveBookmarkFromList();
   const [dropHighlight, setDropHighlight] = useState(false);
   const dragCounterRef = useRef(0);
   const { t } = useTranslation();
@@ -39,7 +44,14 @@ function useDropTarget(listId: string, listName: string) {
   const onDragOver = useCallback((e: React.DragEvent) => {
     if (e.dataTransfer.types.includes(BOOKMARK_DRAG_MIME)) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
+      // Show a "move" cursor when the drag carries a source list (see
+      // useBookmarkDragStart) — dropping will remove it from there too —
+      // and a "copy" cursor otherwise (e.g. dragging from the home feed).
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes(
+        BOOKMARK_DRAG_SOURCE_LIST_MIME,
+      )
+        ? "move"
+        : "copy";
     }
   }, []);
 
@@ -66,13 +78,24 @@ function useDropTarget(listId: string, listName: string) {
       const bookmarkId = e.dataTransfer.getData(BOOKMARK_DRAG_MIME);
       if (!bookmarkId) return;
       e.preventDefault();
+      const sourceListId =
+        e.dataTransfer.getData(BOOKMARK_DRAG_SOURCE_LIST_MIME) || undefined;
+      if (sourceListId === listId) return; // dropped back onto its own list
       try {
         await addToList({ bookmarkId, listId });
+        if (sourceListId) {
+          await removeFromList({ bookmarkId, listId: sourceListId });
+        }
         toast({
-          description: t("lists.add_to_list_success", {
-            list: listName,
-            defaultValue: `Added to "${listName}"`,
-          }),
+          description: sourceListId
+            ? t("lists.move_to_list_success", {
+                list: listName,
+                defaultValue: `Moved to "${listName}"`,
+              })
+            : t("lists.add_to_list_success", {
+                list: listName,
+                defaultValue: `Added to "${listName}"`,
+              }),
         });
       } catch {
         toast({
@@ -83,7 +106,7 @@ function useDropTarget(listId: string, listName: string) {
         });
       }
     },
-    [addToList, listId, listName, t],
+    [addToList, removeFromList, listId, listName, t],
   );
 
   return { dropHighlight, onDragOver, onDragEnter, onDragLeave, onDrop };

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { imageLoadGate } from "@/lib/assetLoadGate";
+import useBulkActionsStore from "@/lib/bulkActions";
+import { useBookmarkDragStart } from "@/lib/hooks/useBookmarkDragStart";
 import { useNearViewportLoadSlot } from "@/lib/hooks/useNearViewportLoadSlot";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +65,7 @@ function GatedImage({
       height={0}
       sizes="100vw"
       unoptimized
+      draggable={false}
       className={cn("block h-auto w-full", className)}
       onLoad={release}
       onError={release}
@@ -91,11 +94,22 @@ export function MasonryMediaCard({
   bookmarkIndex?: number;
 }) {
   const title = getBookmarkTitle(bookmark);
+  const { isBulkEditEnabled } = useBulkActionsStore();
+  const handleDragStart = useBookmarkDragStart(bookmark);
 
   return (
     <div
-      className={cn("group relative overflow-hidden rounded-lg", className)}
+      className={cn(
+        "group relative overflow-hidden rounded-lg",
+        !isBulkEditEnabled && "cursor-grab active:cursor-grabbing",
+        className,
+      )}
       data-bookmark-index={bookmarkIndex}
+      // The whole tile is the drag handle — there's no room for a separate
+      // grip icon on a borderless media-only tile. Drag it onto a sidebar
+      // list to add it there (see AllLists.tsx's useDropTarget).
+      draggable={!isBulkEditEnabled}
+      onDragStart={isBulkEditEnabled ? undefined : handleDragStart}
     >
       <MultiBookmarkSelector bookmark={bookmark} />
 
@@ -104,7 +118,11 @@ export function MasonryMediaCard({
           colors — same idea as Pinterest's hover state. */}
       <div className="transition-[filter] duration-200 group-hover:brightness-[0.6]">
         {media.type === "image" ? (
-          <Link href={`/dashboard/preview/${bookmark.id}`} className="block">
+          <Link
+            href={`/dashboard/preview/${bookmark.id}`}
+            className="block"
+            draggable={false}
+          >
             <GatedImage assetId={media.assetId} alt={title ?? "bookmark"} />
           </Link>
         ) : (
