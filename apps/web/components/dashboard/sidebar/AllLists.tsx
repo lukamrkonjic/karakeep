@@ -128,7 +128,7 @@ function DroppableListSidebarItem({
       }
       name={node.item.name}
       path={`/dashboard/lists/${node.item.id}`}
-      className="group"
+      className="group my-0.5"
       right={
         <ListOptions
           onOpenChange={(isOpen) => {
@@ -160,7 +160,7 @@ function DroppableListSidebarItem({
           </Button>
         </ListOptions>
       }
-      linkClassName="py-0.5 px-1"
+      linkClassName="py-1.5 px-2"
       style={{ marginLeft: `${level * 1}rem` }}
       dropHighlight={canDrop && dropHighlight}
       onDragOver={canDrop ? onDragOver : undefined}
@@ -235,7 +235,8 @@ export default function AllLists({
         logo={<span className="text-lg">📋</span>}
         name={t("lists.all_lists")}
         path={`/dashboard/lists`}
-        linkClassName="py-0.5 px-1"
+        className="my-0.5"
+        linkClassName="py-1.5 px-2"
         right={<InvitationNotificationBadge />}
       />
       <SidebarItem
@@ -243,7 +244,8 @@ export default function AllLists({
         logo={<span className="text-lg">⭐️</span>}
         name={t("lists.favourites")}
         path={`/dashboard/favourites`}
-        linkClassName="py-0.5 px-1"
+        className="my-0.5"
+        linkClassName="py-1.5 px-2"
       />
 
       {/* Owned Lists */}
@@ -276,7 +278,8 @@ export default function AllLists({
             logo={<span className="text-lg">👥</span>}
             name={t("lists.shared_lists")}
             path="#"
-            linkClassName="py-0.5 px-1"
+            className="my-0.5"
+            linkClassName="py-1.5 px-2"
           />
           <CollapsibleContent>
             <CollapsibleBookmarkLists
