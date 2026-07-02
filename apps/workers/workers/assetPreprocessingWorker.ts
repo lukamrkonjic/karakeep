@@ -27,7 +27,12 @@ import {
   StorageQuotaError,
   triggerSearchReindex,
 } from "@karakeep/shared-server";
-import { newAssetId, readAsset, saveAsset } from "@karakeep/shared/assetdb";
+import {
+  newAssetId,
+  readAsset,
+  saveAsset,
+  VIDEO_ASSET_TYPES,
+} from "@karakeep/shared/assetdb";
 import serverConfig from "@karakeep/shared/config";
 import { InferenceClientFactory } from "@karakeep/shared/inference";
 import logger from "@karakeep/shared/logger";
@@ -299,7 +304,14 @@ export async function extractAndSaveVideoThumbnail(
   const videoAsset = await db.query.assets.findFirst({
     where: and(eq(assets.id, videoAssetId), eq(assets.bookmarkId, bookmarkId)),
   });
-  if (!videoAsset || videoAsset.assetType !== AssetTypes.LINK_VIDEO) {
+  // Covers both a video attached to a LINK bookmark (assetType linkVideo)
+  // and a video uploaded directly as its own ASSET bookmark (assetType
+  // bookmarkAsset) — the content type is the real signal, not the wrapper.
+  if (
+    !videoAsset ||
+    !videoAsset.contentType ||
+    !VIDEO_ASSET_TYPES.has(videoAsset.contentType)
+  ) {
     logger.error(
       `[assetPreprocessing][${jobId}] Asset ${videoAssetId} is not a video attachment on bookmark ${bookmarkId}`,
     );

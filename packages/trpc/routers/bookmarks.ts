@@ -429,11 +429,21 @@ export const bookmarksAppRouter = router({
           break;
         }
         case BookmarkTypes.ASSET: {
+          // Videos get the dedicated thumbnail-extraction job (same one
+          // used for a video attached to a LINK bookmark) — the default
+          // path below only knows how to preprocess image/pdf assets and
+          // would throw "Unsupported bookmark type" for a video.
           await AssetPreprocessingQueue.enqueue(
-            {
-              bookmarkId: bookmark.id,
-              fixMode: false,
-            },
+            bookmark.content.assetType === "video"
+              ? {
+                  bookmarkId: bookmark.id,
+                  assetId: bookmark.content.assetId,
+                  fixMode: false,
+                }
+              : {
+                  bookmarkId: bookmark.id,
+                  fixMode: false,
+                },
             enqueueOpts,
           );
           break;

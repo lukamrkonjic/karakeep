@@ -64,9 +64,13 @@ function AssetImage({
       );
     }
     case "video": {
+      const thumbnailAssetId = bookmark.assets.find(
+        (r) => r.assetType === "videoThumbnail",
+      )?.id;
       return (
         <BookmarkVideo
           assetId={bookmarkedAsset.assetId}
+          thumbnailAssetId={thumbnailAssetId}
           thumbnail
           className={cn("size-full", className, "object-contain")}
         />
@@ -97,12 +101,18 @@ export default function AssetCard({
     layout === "masonry" &&
     (contentAssetType === "image" || contentAssetType === "video")
   ) {
+    const thumbnailAssetId =
+      contentAssetType === "video"
+        ? bookmarkedAsset.assets.find((r) => r.assetType === "videoThumbnail")
+            ?.id
+        : undefined;
     return (
       <MasonryMediaCard
         bookmark={bookmarkedAsset}
         media={{
           type: contentAssetType,
           assetId: bookmarkedAsset.content.assetId,
+          thumbnailAssetId,
         }}
         className={className}
         bookmarkIndex={bookmarkIndex}

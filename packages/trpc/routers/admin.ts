@@ -27,6 +27,7 @@ import {
   WebhookQueue,
   zAdminMaintenanceTaskSchema,
 } from "@karakeep/shared-server";
+import { VIDEO_ASSET_TYPES } from "@karakeep/shared/assetdb";
 import serverConfig from "@karakeep/shared/config";
 import logger from "@karakeep/shared/logger";
 import { PluginManager, PluginType } from "@karakeep/shared/plugins";
@@ -396,10 +397,14 @@ export const adminAppRouter = router({
   // itself, unlike the manual attachAsset path).
   generateVideoThumbnails: adminBookmarksProcedure.mutation(async ({ ctx }) => {
     const [videoAssets, thumbnailAssets] = await Promise.all([
+      // contentType (not assetType) is the real signal — covers a video
+      // attached to a LINK bookmark (assetType linkVideo) and a video
+      // uploaded directly as its own ASSET bookmark (assetType
+      // bookmarkAsset) alike.
       ctx.db
         .select({ id: assets.id, bookmarkId: assets.bookmarkId })
         .from(assets)
-        .where(eq(assets.assetType, AssetTypes.LINK_VIDEO)),
+        .where(inArray(assets.contentType, [...VIDEO_ASSET_TYPES])),
       ctx.db
         .select({ bookmarkId: assets.bookmarkId })
         .from(assets)

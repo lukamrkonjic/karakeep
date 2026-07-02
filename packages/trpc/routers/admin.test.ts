@@ -333,18 +333,21 @@ describe("Admin Routes", () => {
         {
           id: "video-missing-thumb",
           assetType: AssetTypes.LINK_VIDEO,
+          contentType: "video/mp4",
           bookmarkId: missingThumb.id,
           userId,
         },
         {
           id: "video-has-thumb",
           assetType: AssetTypes.LINK_VIDEO,
+          contentType: "video/mp4",
           bookmarkId: hasThumb.id,
           userId,
         },
         {
           id: "thumb-for-has-thumb",
           assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+          contentType: "image/jpeg",
           bookmarkId: hasThumb.id,
           userId,
         },
@@ -352,6 +355,49 @@ describe("Admin Routes", () => {
 
       const result = await adminApi.admin.generateVideoThumbnails();
       expect(result.enqueued).toEqual(1);
+    });
+
+    test<CustomTestContext>("also picks up a video uploaded directly as its own ASSET bookmark", async ({
+      apiCallers,
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-video-thumbs-3@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+      const userId = await apiCallers[0].users.whoami().then((u) => u.id);
+
+      // Mirrors createBookmark's ASSET case: the underlying asset ends up
+      // with assetType bookmarkAsset (not linkVideo) once attached.
+      await db.insert(assets).values({
+        id: "asset-1",
+        assetType: AssetTypes.UNKNOWN,
+        contentType: "video/mp4",
+        userId,
+      });
+      const bookmark = await apiCallers[0].bookmarks.createBookmark({
+        type: BookmarkTypes.ASSET,
+        assetType: "video",
+        assetId: "asset-1",
+      });
+
+      const result = await adminApi.admin.generateVideoThumbnails();
+      expect(result.enqueued).toEqual(1);
+
+      const updatedAsset = await db.query.assets.findFirst({
+        where: (a, { eq }) => eq(a.id, "asset-1"),
+      });
+      expect(updatedAsset?.bookmarkId).toEqual(bookmark.id);
     });
 
     test<CustomTestContext>("is a no-op when every video already has a thumbnail", async ({
@@ -383,12 +429,14 @@ describe("Admin Routes", () => {
         {
           id: "video-has-thumb-2",
           assetType: AssetTypes.LINK_VIDEO,
+          contentType: "video/mp4",
           bookmarkId: bookmark.id,
           userId,
         },
         {
           id: "thumb-for-has-thumb-2",
           assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+          contentType: "image/jpeg",
           bookmarkId: bookmark.id,
           userId,
         },
