@@ -397,14 +397,24 @@ export const adminAppRouter = router({
   // itself, unlike the manual attachAsset path).
   generateVideoThumbnails: adminBookmarksProcedure.mutation(async ({ ctx }) => {
     const [videoAssets, thumbnailAssets] = await Promise.all([
-      // contentType (not assetType) is the real signal — covers a video
-      // attached to a LINK bookmark (assetType linkVideo) and a video
-      // uploaded directly as its own ASSET bookmark (assetType
-      // bookmarkAsset) alike.
+      // linkVideo is trusted on its own — it's an explicit label set by
+      // attachAsset() at attach time, independent of (and sometimes more
+      // reliable than) contentType, e.g. for assets bulk-imported straight
+      // into the DB without going through the sniffing upload endpoint.
+      // bookmarkAsset (a directly-uploaded video bookmark) isn't
+      // video-specific on its own, so it's disambiguated by contentType.
       ctx.db
         .select({ id: assets.id, bookmarkId: assets.bookmarkId })
         .from(assets)
-        .where(inArray(assets.contentType, [...VIDEO_ASSET_TYPES])),
+        .where(
+          or(
+            eq(assets.assetType, AssetTypes.LINK_VIDEO),
+            and(
+              eq(assets.assetType, AssetTypes.BOOKMARK_ASSET),
+              inArray(assets.contentType, [...VIDEO_ASSET_TYPES]),
+            ),
+          ),
+        ),
       ctx.db
         .select({ bookmarkId: assets.bookmarkId })
         .from(assets)

@@ -357,6 +357,44 @@ describe("Admin Routes", () => {
       expect(result.enqueued).toEqual(1);
     });
 
+    test<CustomTestContext>("picks up a linkVideo asset even when contentType is missing (e.g. bulk-imported directly into the DB, bypassing the sniffing upload endpoint)", async ({
+      apiCallers,
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-video-thumbs-4@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+      const userId = await apiCallers[0].users.whoami().then((u) => u.id);
+
+      const bookmark = await apiCallers[0].bookmarks.createBookmark({
+        type: BookmarkTypes.TEXT,
+        text: "Imported from Eagle export",
+      });
+
+      // No contentType set at all -- assetType is the only signal available,
+      // same as a bulk-import script that writes rows directly.
+      await db.insert(assets).values({
+        id: "bulk-imported-video",
+        assetType: AssetTypes.LINK_VIDEO,
+        bookmarkId: bookmark.id,
+        userId,
+      });
+
+      const result = await adminApi.admin.generateVideoThumbnails();
+      expect(result.enqueued).toEqual(1);
+    });
+
     test<CustomTestContext>("also picks up a video uploaded directly as its own ASSET bookmark", async ({
       apiCallers,
       db,

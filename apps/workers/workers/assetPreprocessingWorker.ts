@@ -304,14 +304,19 @@ export async function extractAndSaveVideoThumbnail(
   const videoAsset = await db.query.assets.findFirst({
     where: and(eq(assets.id, videoAssetId), eq(assets.bookmarkId, bookmarkId)),
   });
-  // Covers both a video attached to a LINK bookmark (assetType linkVideo)
-  // and a video uploaded directly as its own ASSET bookmark (assetType
-  // bookmarkAsset) — the content type is the real signal, not the wrapper.
-  if (
-    !videoAsset ||
-    !videoAsset.contentType ||
-    !VIDEO_ASSET_TYPES.has(videoAsset.contentType)
-  ) {
+  // linkVideo (a video attached to a LINK bookmark) is trusted on its own —
+  // it's an explicit label set by attachAsset() at attach time, independent
+  // of (and sometimes more reliable than) contentType, e.g. for assets
+  // bulk-imported straight into the DB without going through the sniffing
+  // upload endpoint. bookmarkAsset (a directly-uploaded video bookmark)
+  // isn't video-specific on its own, so it's disambiguated by contentType.
+  const isVideo =
+    videoAsset &&
+    (videoAsset.assetType === AssetTypes.LINK_VIDEO ||
+      (videoAsset.assetType === AssetTypes.BOOKMARK_ASSET &&
+        !!videoAsset.contentType &&
+        VIDEO_ASSET_TYPES.has(videoAsset.contentType)));
+  if (!isVideo) {
     logger.error(
       `[assetPreprocessing][${jobId}] Asset ${videoAssetId} is not a video attachment on bookmark ${bookmarkId}`,
     );
