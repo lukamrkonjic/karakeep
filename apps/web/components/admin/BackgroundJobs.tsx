@@ -353,6 +353,26 @@ function useJobActions() {
     }),
   );
 
+  const { mutateAsync: cancelQueuedJobs, isPending: isCancellingQueuedJobs } =
+    useMutation(
+      api.admin.cancelQueuedJobs.mutationOptions({
+        onSuccess: (data) => {
+          toast({
+            description:
+              data.cancelled > 0
+                ? `Cancelled ${data.cancelled} queued job${data.cancelled === 1 ? "" : "s"}`
+                : "No queued jobs to cancel",
+          });
+        },
+        onError: (e) => {
+          toast({
+            variant: "destructive",
+            description: e.message,
+          });
+        },
+      }),
+    );
+
   const {
     mutateAsync: reRunInferenceOnAllBookmarks,
     isPending: isInferencePending,
@@ -391,8 +411,20 @@ function useJobActions() {
     }),
   );
 
+  const cancelAction = (
+    queue: "crawler" | "inference" | "indexing" | "embeddings" | "video",
+  ) => ({
+    label: "Cancel queued jobs",
+    onClick: async () => {
+      await cancelQueuedJobs({ queue });
+    },
+    variant: "secondary" as const,
+    loading: isCancellingQueuedJobs,
+  });
+
   return {
     crawlActions: [
+      cancelAction("crawler"),
       {
         label: t("admin.background_jobs.actions.recrawl_pending_links_only"),
         onClick: () =>
@@ -420,6 +452,7 @@ function useJobActions() {
       },
     ],
     inferenceActions: [
+      cancelAction("inference"),
       {
         label: t(
           "admin.background_jobs.actions.regenerate_ai_tags_for_pending_bookmarks_only",
@@ -480,13 +513,16 @@ function useJobActions() {
       },
     ],
     indexingActions: [
+      cancelAction("indexing"),
       {
         label: t("admin.background_jobs.actions.reindex_all_bookmarks"),
         onClick: () => reindexBookmarks(),
         loading: isReindexPending,
       },
     ],
+    videoActions: [cancelAction("video")],
     embeddingsActions: [
+      cancelAction("embeddings"),
       {
         label: t(
           "admin.background_jobs.actions.regenerate_embeddings_for_pending_bookmarks_only",
@@ -513,14 +549,31 @@ function useJobActions() {
     ],
     assetPreprocessingActions: [
       {
+        label: "Cancel queued jobs",
+        onClick: async () => {
+          await cancelQueuedJobs({ queue: "assetPreprocessing" });
+        },
+        variant: "secondary" as const,
+        loading: isCancellingQueuedJobs,
+      },
+      {
         label: t("admin.background_jobs.actions.reprocess_assets_fix_mode"),
         onClick: () => reprocessAssetsFixMode(),
+        variant: "secondary" as const,
         loading: isReprocessingPending,
       },
       {
         label: "Generate missing video thumbnails",
         onClick: async () => {
-          await generateVideoThumbnails();
+          await generateVideoThumbnails({ regenerate: false });
+        },
+        variant: "secondary" as const,
+        loading: isGeneratingVideoThumbnailsPending,
+      },
+      {
+        label: "Regenerate all video thumbnails",
+        onClick: async () => {
+          await generateVideoThumbnails({ regenerate: true });
         },
         loading: isGeneratingVideoThumbnailsPending,
       },
@@ -632,7 +685,7 @@ export default function BackgroundJobs() {
       icon: Video,
       stats: { queued: serverStats.videoStats.queued },
       description: t("admin.background_jobs.jobs.video.description"),
-      actions: [],
+      actions: actions.videoActions,
     },
     {
       title: t("admin.background_jobs.jobs.webhook.title"),

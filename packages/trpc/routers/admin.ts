@@ -27,7 +27,7 @@ import {
   WebhookQueue,
   zAdminMaintenanceTaskSchema,
 } from "@karakeep/shared-server";
-import { VIDEO_ASSET_TYPES } from "@karakeep/shared/assetdb";
+import { deleteAsset, VIDEO_ASSET_TYPES } from "@karakeep/shared/assetdb";
 import serverConfig from "@karakeep/shared/config";
 import logger from "@karakeep/shared/logger";
 import { PluginManager, PluginType } from "@karakeep/shared/plugins";
@@ -38,6 +38,7 @@ import {
   zAdminCreateUserSchema,
 } from "@karakeep/shared/types/admin";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
+import { switchCase } from "@karakeep/shared/utils/switch";
 import { setUrlHostnameFromResolvedAddress } from "@karakeep/shared/utils/url";
 import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 
@@ -394,16 +395,21 @@ export const adminAppRouter = router({
   }),
   // Backfill for videos that predate the thumbnail feature, or that were
   // auto-downloaded via videoWorker (which doesn't enqueue a thumbnail job
-  // itself, unlike the manual attachAsset path).
-  generateVideoThumbnails: adminBookmarksProcedure.mutation(async ({ ctx }) => {
-    const [videoAssets, thumbnailAssets] = await Promise.all([
+  // itself, unlike the manual attachAsset path). With regenerate=true it
+  // also wipes and re-extracts existing thumbnails — used to repair the
+  // all-black thumbnails produced by the old first-frame extraction.
+  generateVideoThumbnails: adminBookmarksProcedure
+    .input(z.object({ regenerate: z.boolean().default(false) }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const regenerate = input?.regenerate ?? false;
+
       // linkVideo is trusted on its own — it's an explicit label set by
       // attachAsset() at attach time, independent of (and sometimes more
       // reliable than) contentType, e.g. for assets bulk-imported straight
       // into the DB without going through the sniffing upload endpoint.
       // bookmarkAsset (a directly-uploaded video bookmark) isn't
       // video-specific on its own, so it's disambiguated by contentType.
-      ctx.db
+      const videoAssets = await ctx.db
         .select({ id: assets.id, bookmarkId: assets.bookmarkId })
         .from(assets)
         .where(
@@ -414,28 +420,82 @@ export const adminAppRouter = router({
               inArray(assets.contentType, [...VIDEO_ASSET_TYPES]),
             ),
           ),
-        ),
-      ctx.db
-        .select({ bookmarkId: assets.bookmarkId })
-        .from(assets)
-        .where(eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL)),
-    ]);
-    const hasThumbnail = new Set(thumbnailAssets.map((a) => a.bookmarkId));
-    const missing = videoAssets.filter(
-      (a) => a.bookmarkId && !hasThumbnail.has(a.bookmarkId),
-    );
+        );
 
-    await Promise.all(
-      missing.map((a) =>
-        AssetPreprocessingQueue.enqueue(
-          { bookmarkId: a.bookmarkId!, assetId: a.id, fixMode: false },
-          { priority: QueuePriority.Low },
-        ),
-      ),
-    );
+      if (regenerate) {
+        // Wipe every existing thumbnail (row + file) so the worker's
+        // "already generated" guard doesn't short-circuit, and each video is
+        // re-extracted with the improved (seeked) frame selection.
+        const existingThumbnails = await ctx.db
+          .select({ id: assets.id, userId: assets.userId })
+          .from(assets)
+          .where(eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL));
+        await ctx.db
+          .delete(assets)
+          .where(eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL));
+        await Promise.all(
+          existingThumbnails.map((t) =>
+            deleteAsset({ userId: t.userId, assetId: t.id }).catch(
+              () => undefined,
+            ),
+          ),
+        );
+      }
 
-    return { enqueued: missing.length };
-  }),
+      const thumbnailBookmarkIds = regenerate
+        ? new Set<string | null>()
+        : new Set(
+            (
+              await ctx.db
+                .select({ bookmarkId: assets.bookmarkId })
+                .from(assets)
+                .where(eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL))
+            ).map((a) => a.bookmarkId),
+          );
+      const toProcess = videoAssets.filter(
+        (a) => a.bookmarkId && !thumbnailBookmarkIds.has(a.bookmarkId),
+      );
+
+      await Promise.all(
+        toProcess.map((a) =>
+          AssetPreprocessingQueue.enqueue(
+            { bookmarkId: a.bookmarkId!, assetId: a.id, fixMode: false },
+            { priority: QueuePriority.Low },
+          ),
+        ),
+      );
+
+      return { enqueued: toProcess.length };
+    }),
+  cancelQueuedJobs: adminBookmarksProcedure
+    .input(
+      z.object({
+        queue: z.enum([
+          "crawler",
+          "inference",
+          "indexing",
+          "embeddings",
+          "assetPreprocessing",
+          "video",
+        ]),
+      }),
+    )
+    .output(z.object({ cancelled: z.number() }))
+    .mutation(async ({ input }) => {
+      // Cancels every non-running (pending / pending_retry / failed) job in
+      // the given queue — e.g. to abort an accidental bulk "reprocess assets"
+      // that queued thousands of slow OCR jobs. In-flight jobs finish.
+      const queue = switchCase(input.queue, {
+        crawler: LinkCrawlerQueue,
+        inference: OpenAIQueue,
+        indexing: SearchIndexingQueue,
+        embeddings: EmbeddingsQueue,
+        assetPreprocessing: AssetPreprocessingQueue,
+        video: VideoWorkerQueue,
+      });
+      const cancelled = (await queue.cancelAllNonRunning?.()) ?? 0;
+      return { cancelled };
+    }),
   reRunInferenceOnAllBookmarks: adminBookmarksProcedure
     .input(
       z.object({

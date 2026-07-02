@@ -483,5 +483,93 @@ describe("Admin Routes", () => {
       const result = await adminApi.admin.generateVideoThumbnails();
       expect(result.enqueued).toEqual(0);
     });
+
+    test<CustomTestContext>("regenerate=true re-enqueues videos that already have a thumbnail and wipes the old one", async ({
+      apiCallers,
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-video-thumbs-regen@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+      const userId = await apiCallers[0].users.whoami().then((u) => u.id);
+
+      const bookmark = await apiCallers[0].bookmarks.createBookmark({
+        url: "https://example.com/video-regen",
+        type: BookmarkTypes.LINK,
+      });
+
+      await db.insert(assets).values([
+        {
+          id: "video-regen",
+          assetType: AssetTypes.LINK_VIDEO,
+          contentType: "video/mp4",
+          bookmarkId: bookmark.id,
+          userId,
+        },
+        {
+          // The stale (e.g. all-black) thumbnail we want to replace.
+          id: "old-black-thumb",
+          assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+          contentType: "image/jpeg",
+          bookmarkId: bookmark.id,
+          userId,
+        },
+      ]);
+
+      // Without regenerate it's a no-op (already has a thumbnail).
+      expect(
+        (await adminApi.admin.generateVideoThumbnails({ regenerate: false }))
+          .enqueued,
+      ).toEqual(0);
+
+      // With regenerate it re-enqueues and removes the stale thumbnail row so
+      // the worker doesn't short-circuit on the "already generated" guard.
+      const result = await adminApi.admin.generateVideoThumbnails({
+        regenerate: true,
+      });
+      expect(result.enqueued).toEqual(1);
+
+      const oldThumb = await db.query.assets.findFirst({
+        where: (a, { eq }) => eq(a.id, "old-black-thumb"),
+      });
+      expect(oldThumb).toBeUndefined();
+    });
+  });
+
+  describe("cancelQueuedJobs", () => {
+    test<CustomTestContext>("returns a cancelled count without throwing", async ({
+      db,
+    }) => {
+      const adminUser = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "admin-cancel-jobs@test.com",
+          role: "admin",
+        })
+        .returning();
+      const adminApi = getApiCaller(
+        db,
+        adminUser[0].id,
+        adminUser[0].email,
+        "admin",
+      );
+
+      const result = await adminApi.admin.cancelQueuedJobs({
+        queue: "assetPreprocessing",
+      });
+      expect(typeof result.cancelled).toBe("number");
+    });
   });
 });
