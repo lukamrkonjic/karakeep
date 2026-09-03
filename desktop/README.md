@@ -153,14 +153,24 @@ handling `srcset` and CSS `background-image` — and fills in the standard
 flavours the site left empty. It never overwrites data a site set
 deliberately, so well-behaved sites are untouched.
 
-Install it with a userscript manager (Violentmonkey or Tampermonkey). Firefox
-requires extensions to be signed, so a bare unsigned extension would only load
-temporarily via `about:debugging` and vanish on restart; a userscript manager
-avoids that entirely.
+Two ways to run it, neither of which is a browser extension in the usual
+sense:
+
+- **Bookmarklet, nothing installed.** `npm run build` regenerates
+  `tools/install-bookmarklet.html`; open it, drag the button to the bookmarks
+  toolbar, and click it once on a page where dragging is broken. Pinterest is
+  a single-page app, so one click generally covers a whole browsing session.
+- **Userscript manager** (Violentmonkey / Tampermonkey) for the same thing
+  permanently, with no per-visit click.
+
+A plain unsigned extension is the one option that doesn't work well here:
+Firefox requires signing, so it would load only temporarily via
+`about:debugging` and vanish on restart.
 
 `test/dragfix.test.cjs` pins the behaviour against a fixture reproducing the
 overlay pattern — including a baseline assertion that the fixture really is
-empty without the script.
+empty without the script, so the test can't pass vacuously. It also runs the
+generated bookmarklet payload itself, so minification can't silently break it.
 
 ## Known limits
 

@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-only",
   "main": "dist/main/main.js",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node tools/make-bookmarklet.mjs",
     "dev": "node build.mjs --watch",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",

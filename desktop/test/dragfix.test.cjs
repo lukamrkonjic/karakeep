@@ -125,6 +125,34 @@ app.whenReady().then(async () => {
     "https://cdn.example.com/bg.webp",
   );
 
+  // The bookmarklet is the same source minified and URL-encoded. Run the
+  // generated payload itself, so a minifier change can't silently break it.
+  const win2 = new BrowserWindow({ show: false, webPreferences: { sandbox: false } });
+  await win2.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(FIXTURE));
+  await sleep(400);
+  const js2 = (code) => win2.webContents.executeJavaScript(code);
+
+  check(
+    "the fixture drags empty in the second window too (baseline)",
+    JSON.parse(await js2(`JSON.stringify(window.__fire('overlay'))`)).types,
+    [],
+  );
+
+  const href = readFileSync(join(__dirname, "../tools/bookmarklet.txt"), "utf-8");
+  check("the bookmarklet is a javascript: URL", href.startsWith("javascript:"), true);
+  const payload = decodeURIComponent(href.slice("javascript:".length));
+  await js2(payload + "; true");
+
+  const viaBookmarklet = JSON.parse(
+    await js2(`JSON.stringify(window.__fire('overlay'))`),
+  );
+  check(
+    "the minified bookmarklet attaches the same url as the userscript",
+    viaBookmarklet.uriList,
+    "https://cdn.example.com/big.jpg",
+  );
+  win2.destroy();
+
   for (const f of failures) {
     console.error(f);
   }
