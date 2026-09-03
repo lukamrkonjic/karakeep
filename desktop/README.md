@@ -125,21 +125,42 @@ record of why — the data cannot be read back after the event.
 
 ## Sites that send nothing with a drag
 
-Some sites attach nothing to a drag. Pinterest is the one that prompted this:
-the drop arrives with **zero types and zero files**, from the very first
-`dragenter` — confirmed in the drop log:
+Some sites attach nothing to a drag. Pinterest is the clearest case: the drop
+arrives with **zero types and zero files**, from the very first `dragenter`.
+Two independent receivers agree:
 
 ```
-Pinterest:     dragenter types=[] items=0 files=0  ->  drop types=[]
-Google Images: dragenter types=[text/plain, text/uri-list, text/html, Files]
+Pinterest, into this app:      dragenter types=[] items=0 files=0
+Pinterest, into a browser page: dragenter types=[] items=0 files=0
+Google Images, into this app:   types=[text/plain, text/uri-list, text/html, Files]
 ```
 
-There is no payload to parse, so nothing on the receiving side can fix it.
-`tools/drag-probe.html` exists to tell the two cases apart: open it in the
-browser, drag an image onto it, and it prints every flavour the page attached
-along with its contents. If the probe shows an empty drag, no application
-could have received anything and the site is stripping it; if it shows data
-that this app then fails on, the bug is here.
+Nothing crosses the process boundary, so **no** drop target can recover it —
+not this app, not Explorer, not any other tool. Every fix attempted on the
+receiving side is doomed for the same reason.
+
+`tools/drag-probe.html` is what establishes this: open it in the browser, drag
+an image onto it, and it prints every flavour the page attached along with its
+contents. An empty report means the site is the cause; a report with data that
+this app then fails on means the bug is here.
+
+### The fix: tools/karakeep-drag-fix.user.js
+
+The only place with enough information is the page itself, at `dragstart`,
+where the `<img>` is still reachable. That script finds the image under the
+cursor — looking through transparent overlays via `elementsFromPoint`, and
+handling `srcset` and CSS `background-image` — and fills in the standard
+flavours the site left empty. It never overwrites data a site set
+deliberately, so well-behaved sites are untouched.
+
+Install it with a userscript manager (Violentmonkey or Tampermonkey). Firefox
+requires extensions to be signed, so a bare unsigned extension would only load
+temporarily via `about:debugging` and vanish on restart; a userscript manager
+avoids that entirely.
+
+`test/dragfix.test.cjs` pins the behaviour against a fixture reproducing the
+overlay pattern — including a baseline assertion that the fixture really is
+empty without the script.
 
 ## Known limits
 
