@@ -191,6 +191,21 @@ app.whenReady().then(async () => {
     1,
   );
 
+  // Opened deliberately from the tray, so it dismisses like a menu.
+  await js(`window.__test.enterCopyMode('image'); true`);
+  check(
+    "Escape leaves copy mode",
+    await js(`
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.getElementById('panel').classList.contains('copy-mode')`),
+    false,
+  );
+  check(
+    "and a click afterwards no longer saves",
+    await js(`window.__t.rowFor('To sort').click(); window.__test.saved().length`),
+    1,
+  );
+
   for (const f of failures) {
     console.error(f);
   }

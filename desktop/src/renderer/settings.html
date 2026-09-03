@@ -42,19 +42,20 @@
       <option value="shift">Shift</option>
     </select>
 
-    <label for="copyMode">Saving something you copied</label>
-    <select id="copyMode">
-      <option value="hotkey">When I press the shortcut</option>
-      <option value="auto">Automatically, for media copied in a browser</option>
-      <option value="off">Never</option>
-    </select>
-    <p class="hint">
-      The way in for sites whose drags carry no data at all (Pinterest) and for
-      media that can't be dragged (a YouTube video): right-click &rarr;
+    <p class="hint" style="margin-top: 4px">
+      For sites whose drags carry no data at all (Pinterest) and for media that
+      can't be dragged (a YouTube video): right-click &rarr;
       <strong>Copy image link</strong> / <strong>Copy video URL</strong>, then
-      the shortcut. Automatic mode saves a keystroke but puts the picker on
-      screen without being asked.
+      <strong>left-click the tray icon</strong> &mdash; the picker opens right
+      by your cursor. Nothing appears unless you ask for it.
     </p>
+
+    <label for="copyMode">Also save a copied link&hellip;</label>
+    <select id="copyMode">
+      <option value="hotkey">&hellip;on a keyboard shortcut</option>
+      <option value="auto">&hellip;automatically, for media copied in a browser</option>
+      <option value="off">&hellip;never (tray click only)</option>
+    </select>
 
     <label for="copyHotkey">Shortcut</label>
     <input id="copyHotkey" type="text" placeholder="Control+Alt+S" />

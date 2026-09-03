@@ -100,6 +100,13 @@ function createOverlay(): BrowserWindow {
   // "screen-saver" is the level that clears full-screen browser windows.
   win.setAlwaysOnTop(true, "screen-saver");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Only ever focused in copy mode; clicking away then dismisses it.
+  win.on("blur", () => {
+    if (win.isVisible() && win.isFocusable()) {
+      void acknowledgeClipboard();
+      hideOverlay();
+    }
+  });
   void win.loadFile(join(__dirname, "../renderer/overlay.html"));
   return win;
 }
@@ -150,13 +157,19 @@ async function showOverlayForCopy(copied: Copied): Promise<void> {
   }
   await showOverlay();
   overlay?.webContents.send("overlay:copy-mode", copied.kind);
+
+  // A drag can't be interrupted by taking focus, but this isn't a drag — the
+  // user clicked the tray. Focus lets the panel close the way any menu does:
+  // click elsewhere, or press Escape.
+  overlay?.setFocusable(true);
+  overlay?.focus();
+
   clearCopyModeTimer();
-  // Unlike a drag, nothing else will dismiss this, so it times out on its own
-  // rather than sitting over the user's screen indefinitely.
+  // Failsafe only; blur normally gets there first.
   copyModeTimer = setTimeout(() => {
-    acknowledgeClipboard();
+    void acknowledgeClipboard();
     hideOverlay();
-  }, 9000);
+  }, 30000);
 }
 
 async function showOverlay(): Promise<void> {
@@ -180,6 +193,8 @@ async function showOverlay(): Promise<void> {
 
 function hideOverlay(): void {
   clearCopyModeTimer();
+  // Back to non-focusable, so the next drag can't have its focus stolen.
+  overlay?.setFocusable(false);
   if (overlay?.isVisible()) {
     overlay.webContents.send("overlay:hide");
     overlay.hide();
@@ -239,18 +254,9 @@ function buildTrayMenu(): Menu {
       },
     },
     {
-      label: "Save what I copied",
+      label: "Save what I copied  (or just left-click this icon)",
       enabled: isConfigured(),
-      click: () => {
-        void (async () => {
-          const copied = await readClipboard();
-          if (copied) {
-            await showOverlayForCopy(copied);
-          } else {
-            notify("Nothing to save", "Copy an image or a link first.");
-          }
-        })();
-      },
+      click: () => void saveWhatICopied(),
     },
     {
       label: "Saving a copied link",
@@ -326,6 +332,25 @@ function refreshTray(): void {
   tray?.setToolTip(
     isConfigured() ? "Karakeep Drop" : "Karakeep Drop — not configured",
   );
+}
+
+/**
+ * The primary way in for content that can't be dragged: copy it, then click
+ * the tray icon. The picker opens by the cursor — which is down at the tray,
+ * so overlayPositionFor flips it up and left of the pointer.
+ */
+async function saveWhatICopied(): Promise<void> {
+  if (!isConfigured()) {
+    openSettings();
+    return;
+  }
+  const copied = await readClipboard();
+  if (!copied) {
+    // Nothing to act on, so give them the menu rather than doing nothing.
+    tray?.popUpContextMenu();
+    return;
+  }
+  await showOverlayForCopy(copied);
 }
 
 /**
@@ -488,7 +513,7 @@ app.whenReady().then(() => {
   const icon = nativeImage.createFromPath(iconPath());
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
   refreshTray();
-  tray.on("click", () => tray?.popUpContextMenu());
+  tray.on("click", () => void saveWhatICopied());
 
   // The renderers follow the Windows theme on their own via
   // prefers-color-scheme; only the tray bitmap has to be swapped by hand.

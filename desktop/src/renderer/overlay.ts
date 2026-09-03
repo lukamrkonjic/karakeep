@@ -328,6 +328,14 @@ async function refreshLists(): Promise<void> {
   }
 }
 
+document.addEventListener("keydown", (e) => {
+  if (copyMode && e.key === "Escape") {
+    copyMode = false;
+    panelEl.classList.remove("copy-mode");
+    api.dismissClipboard();
+  }
+});
+
 api.onCopyMode((kind) => {
   copyMode = true;
   panelEl.classList.add("copy-mode");

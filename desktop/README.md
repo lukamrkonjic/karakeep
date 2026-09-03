@@ -144,27 +144,31 @@ an image onto it, and it prints every flavour the page attached along with its
 contents. An empty report means the site is the cause; a report with data that
 this app then fails on means the bug is here.
 
-### Copy-to-save (in the app, nothing to install)
+### Copy, then click the tray icon
 
 Both of those sites *do* offer the right thing in their context menu — "Copy
 image link" on Pinterest, "Copy video URL" on YouTube — and that hands over
-the full-resolution URL. So the app watches for that copy and opens the same
-picker; click a list and it's saved.
+the full-resolution URL. So: copy it, then **left-click the tray icon**. The
+picker opens right by the cursor (which is down at the tray, so it flips up
+and to the left), and a click files it.
 
-Two gates keep it out of the way of ordinary work, because a picker appearing
-on every copy would be intolerable:
+The important property is that **nothing ever appears unbidden**. An earlier
+version watched the clipboard and opened the picker by itself; even gated to
+browsers and to media-looking URLs, a window arriving at the cursor
+uninvited is the wrong interaction — gating only changes how often it's
+wrong. Because the tray click is an explicit request, it also accepts *any*
+link or image, so it works on every site rather than a curated host list.
 
-1. **The copy has to have happened in a browser.** The foreground executable
-   is checked against a list of known browsers, and only once the content
-   already looks worth saving — so the check runs a handful of times a day,
-   not every poll.
-2. **The content has to look like media.** A direct media-file URL, a page
-   that *is* one piece of media (YouTube watch/shorts, a Pinterest pin, Vimeo
-   …), or a copied bitmap. Prose, code, file paths, an ordinary link, a bare
-   domain: all ignored. `test/clipboard.test.cjs` pins both halves, negatives
-   included.
+Since it's opened deliberately rather than mid-drag, this is the one case
+where the panel takes focus — so it dismisses like a menu, on click-away or
+Escape.
 
-Turn it off in the tray or in Settings.
+Two optional extras in the tray/Settings: the same action on a global
+shortcut (`Control+Alt+S` by default), and a fully automatic mode. Automatic
+mode keeps the strict gate — browser foreground plus media-looking content,
+with `test/clipboard.test.cjs` pinning the negatives as carefully as the
+positives — because there a false positive costs you a window over your
+work.
 
 ### The other route: tools/karakeep-drag-fix.user.js
 
