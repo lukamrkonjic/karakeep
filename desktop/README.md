@@ -96,6 +96,33 @@ Windows and so is swapped between a dark and a light mark on
 The overlay is shown with `showInactive()` and created with `focusable: false`
 — taking focus mid-drag can cancel the drag outright.
 
+## The drag ghost is the browser's, not ours
+
+The big translucent copy of the image that follows the cursor is drawn by
+Firefox (via the drag-source half of the OS drag protocol). A drop target
+receives the drag; it cannot replace, resize or remove the source's ghost.
+So "make the preview a small thumbnail" isn't something this app can do.
+
+Two things that do help:
+
+- In Firefox, `about:config` → `nglayout.enable_drag_images` → **false**.
+  That drops the translucent image entirely and leaves a small cursor, so
+  the picker is never obscured. It applies to all dragging in Firefox.
+- Rows here are deliberately tall and the active one is a solid filled bar,
+  so the target stays readable through a translucent ghost.
+
+Rendering our own thumbnail during the drag isn't possible either: the HTML
+drag-and-drop spec puts the drag data store in *protected mode* until the
+drop actually happens, so a drop target can see the list of MIME types on
+dragover but not read any of the values.
+
+## Troubleshooting a drop that didn't work
+
+Tray → **Open drop log…**. Every drop appends what it actually carried: the
+advertised MIME types, any files, the URLs the parser found, and the raw
+flavour bodies. When a site's markup defeats the parser that log is the only
+record of why — the data cannot be read back after the event.
+
 ## Known limits
 
 - **Cookie-gated media may fail.** When a drag hands over a URL instead of
@@ -107,6 +134,10 @@ The overlay is shown with `showInactive()` and created with `focusable: false`
   when it isn't.
 - **The picker appears on any drag,** including text selection. Raise the
   threshold, or switch to *Only while holding a key* in settings.
+- **Sites vary wildly in what they put on a drag.** The parser handles
+  `<img>` (including `srcset`), `<video>`/`<source>`, CSS `background-image`,
+  and falls back to scanning the raw markup for a media URL. Something will
+  still defeat it eventually; the drop log is how you find out what.
 - **Windows-first.** The hook and the overlay are cross-platform in principle,
   but nothing here has been tested on macOS or Linux.
 - **The API key is stored in plain text** in the app's user-data folder

@@ -184,6 +184,76 @@ check(
 );
 
 
+
+/* ---------- markup shapes that used to defeat the parser ---------- */
+
+check(
+  "css background-image on a plain div is found (no <img> to look at)",
+  fromHtml(
+    `<div style="background-image:url(&quot;https://cdn.ex.com/bg.jpg&quot;); width:10px"></div>`,
+  ).urls,
+  ["https://cdn.ex.com/bg.jpg"],
+);
+
+check(
+  "background shorthand with unquoted url is found",
+  fromHtml(`<div style="background: #fff url(https://cdn.ex.com/b.png) no-repeat"></div>`)
+    .urls,
+  ["https://cdn.ex.com/b.png"],
+);
+
+check(
+  "<picture><source srcset> is found, widest first",
+  fromHtml(
+    `<picture><source srcset="https://ex.com/s.webp 400w, https://ex.com/l.webp 1600w"><img src="https://ex.com/fallback.jpg"></picture>`,
+  ).urls,
+  ["https://ex.com/fallback.jpg", "https://ex.com/l.webp", "https://ex.com/s.webp"],
+);
+
+check(
+  "unmodelled markup falls back to scanning for a media url",
+  fromHtml(
+    `<div data-test-id="pin"><div class="x" data-src="https://i.pinimg.com/1200x/a1/7c/f7/a17cf7e9807d2596909ee9796dc4bb5a.jpg"></div></div>`,
+  ).urls,
+  ["https://i.pinimg.com/1200x/a1/7c/f7/a17cf7e9807d2596909ee9796dc4bb5a.jpg"],
+);
+
+check(
+  "the fallback unescapes &amp; so query strings survive",
+  fromHtml(`<div data-x="https://ex.com/i.jpg?w=800&amp;h=600"></div>`).urls,
+  ["https://ex.com/i.jpg?w=800&h=600"],
+);
+
+check(
+  "the fallback does not fire when a real <img> was found",
+  fromHtml(
+    `<img src="https://ex.com/real.jpg"><div data-junk="https://ex.com/other.png"></div>`,
+  ).urls,
+  ["https://ex.com/real.jpg"],
+);
+
+check(
+  "a media url buried in text/plain is still recovered",
+  mergeStrings({
+    html: "",
+    uriList: "",
+    mozUrl: "",
+    plain: "look at this https://ex.com/photo.jpg it is great",
+  }).urls,
+  ["https://ex.com/photo.jpg"],
+);
+
+check(
+  "a drop with no media anywhere still yields no urls",
+  mergeStrings({
+    html: "<p>hello</p>",
+    uriList: "",
+    mozUrl: "",
+    plain: "hello",
+  }).urls,
+  [],
+);
+
 /* ---------- list tree ordering ---------- */
 
 function list(

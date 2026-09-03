@@ -30,12 +30,22 @@ async function extractPayload(dt: DataTransfer): Promise<DropPayload> {
   const types = Array.from(dt.types);
   const fileHandles = Array.from(dt.files);
 
-  const merged = mergeStrings({
+  const strings = {
     html: dt.getData("text/html"),
     uriList: dt.getData("text/uri-list"),
     mozUrl: dt.getData("text/x-moz-url"),
     plain: dt.getData("text/plain"),
-  });
+  };
+  const merged = mergeStrings(strings);
+
+  // Keep the bodies for the drop log — truncated, since a text/html flavour
+  // can carry a whole rendered subtree.
+  const raw: Record<string, string> = {};
+  for (const [k, v] of Object.entries(strings)) {
+    if (v) {
+      raw[k] = v.slice(0, 4000);
+    }
+  }
 
   const files = await Promise.all(
     fileHandles.map(async (f) => ({
@@ -45,7 +55,7 @@ async function extractPayload(dt: DataTransfer): Promise<DropPayload> {
     })),
   );
 
-  return { files, types, ...merged };
+  return { files, types, raw, ...merged };
 }
 
 /* ------------------------------------------------------------------ *

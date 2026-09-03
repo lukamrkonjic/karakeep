@@ -14,13 +14,14 @@ import {
 
 import { getSettings, isConfigured, saveSettings } from "./config";
 import { dragWatcher } from "./dragWatch";
+import { dropLogPath, logDrop } from "./dropLog";
 import { ingest } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
 import { buildTree } from "../shared/listTree";
 import { IngestRequest, ListNode, Settings } from "../shared/types";
 
-const OVERLAY_W = 260;
-const OVERLAY_H = 340;
+const OVERLAY_W = 272;
+const OVERLAY_H = 380;
 /**
  * How far the panel sits from the cursor. Small on purpose: the point is to
  * flick the drag a centimetre and be on a list, not to cross the screen.
@@ -204,6 +205,10 @@ function buildTrayMenu(): Menu {
       click: () => void shell.openExternal(getSettings().serverUrl),
     },
     { label: "Settings…", click: openSettings },
+    {
+      label: "Open drop log…",
+      click: () => void shell.openPath(dropLogPath()),
+    },
     { type: "separator" },
     { label: "Quit", click: () => app.quit() },
   ]);
@@ -250,6 +255,7 @@ function registerIpc(): void {
     dropHandled = true;
     hideOverlay();
     const result = await ingest(req);
+    logDrop(req.payload, result.ok ? "saved" : `FAILED: ${result.error}`);
     if (result.ok && req.listId) {
       rememberListUse(req.listId);
     }

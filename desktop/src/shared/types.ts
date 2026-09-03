@@ -69,6 +69,12 @@ export interface DropPayload {
   title: string | null;
   /** Every MIME type the drop advertised — kept for the payload inspector. */
   types: string[];
+  /**
+   * The raw flavour bodies, truncated. Only ever written to the local drop
+   * log: when a site's markup defeats the parser this is the single thing
+   * that says why, and it can't be reconstructed after the event.
+   */
+  raw: Record<string, string>;
 }
 
 export interface IngestRequest {

@@ -223,9 +223,12 @@ export async function ingest(req: IngestRequest): Promise<IngestResult> {
       // the usual outcome for cookie-gated media.
       const link = payload.urls[0] ?? payload.sourcePageUrl;
       if (!link) {
+        const seen = payload.types.join(", ") || "nothing";
         return {
           ok: false,
-          error: downloadError ?? "Nothing usable in that drop",
+          error:
+            downloadError ??
+            `No image or video URL in that drop (it offered: ${seen}). See the drop log in the tray menu.`,
         };
       }
       bookmark = await createLinkBookmark(link, payload.title);

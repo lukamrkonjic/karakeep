@@ -113,7 +113,7 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 9px 6px 6px;
+  padding: 9px 9px 9px 6px;
   border-radius: 7px;
   white-space: nowrap;
   line-height: 1.25;
