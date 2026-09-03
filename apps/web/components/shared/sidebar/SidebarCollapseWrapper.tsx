@@ -20,7 +20,7 @@ export default function SidebarCollapseWrapper({
     <div
       className={cn(
         "hidden flex-none overflow-hidden transition-[width] duration-200 ease-in-out sm:flex",
-        collapsed ? "w-0" : "w-60",
+        collapsed ? "w-0" : "w-60 xl:w-72",
       )}
     >
       {children}

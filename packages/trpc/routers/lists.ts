@@ -1,8 +1,6 @@
 import { experimental_trpcMiddleware } from "@trpc/server";
-import { count, inArray } from "drizzle-orm";
 import { z } from "zod";
 
-import { bookmarksInLists } from "@karakeep/db/schema";
 import {
   zBookmarkListSchema,
   zEditBookmarkListSchemaWithValidation,
@@ -20,7 +18,7 @@ import {
   router,
 } from "../index";
 import { ListInvitation } from "../models/listInvitations";
-import { List, ManualList, SmartList } from "../models/lists";
+import { List } from "../models/lists";
 import { ensureBookmarkOwnership } from "./bookmarks";
 
 const listsProcedure = createScopedAuthedProcedure("lists");
@@ -210,42 +208,10 @@ export const listsAppRouter = router({
     )
     .query(async ({ ctx }) => {
       const lists = await List.getAll(ctx);
-      const manualLists = lists.filter(
-        (l): l is ManualList => l instanceof ManualList,
-      );
-      const smartLists = lists.filter(
-        (l): l is SmartList => l instanceof SmartList,
-      );
-
-      // Manual lists share a single grouped COUNT instead of one query per
-      // list — with many lists (and the underlying sqlite driver being fully
-      // synchronous), N sequential per-list queries measurably add up since
-      // they block the event loop one at a time regardless of Promise.all.
-      const manualCounts = new Map<string, number>();
-      if (manualLists.length > 0) {
-        const rows = await ctx.db
-          .select({ listId: bookmarksInLists.listId, count: count() })
-          .from(bookmarksInLists)
-          .where(
-            inArray(
-              bookmarksInLists.listId,
-              manualLists.map((l) => l.id),
-            ),
-          )
-          .groupBy(bookmarksInLists.listId);
-        for (const row of rows) {
-          manualCounts.set(row.listId, row.count);
-        }
-      }
-
-      // Smart lists still need their own matcher evaluation.
-      const smartSizes = await Promise.all(smartLists.map((l) => l.getSize()));
-
-      const ownCounts = new Map<string, number>();
-      for (const l of manualLists) {
-        ownCounts.set(l.id, manualCounts.get(l.id) ?? 0);
-      }
-      smartLists.forEach((l, i) => ownCounts.set(l.id, smartSizes[i]));
+      // Upstream's List.getSizes() does the same single grouped COUNT for
+      // manual lists that this fork used to hand-roll here, so we now defer
+      // to it and only keep the parent-rollup pass on top.
+      const ownCounts = await List.getSizes(ctx, lists);
 
       // A parent (sub)folder's displayed count is the combined total of
       // everything nested under it, not just bookmarks added to the parent

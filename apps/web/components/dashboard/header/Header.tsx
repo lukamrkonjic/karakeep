@@ -13,7 +13,7 @@ export default async function Header() {
 
   return (
     <header className="sticky left-0 right-0 top-0 z-50 flex h-20 items-center justify-between overflow-x-auto overflow-y-hidden bg-background pl-4 pr-5">
-      <div className="hidden w-56 items-center sm:flex">
+      <div className="hidden w-56 items-center sm:flex xl:w-[17rem]">
         <KarakeepLogoToggle />
       </div>
       {/* pl-5 matches the page content's own left inset (SidebarLayout's

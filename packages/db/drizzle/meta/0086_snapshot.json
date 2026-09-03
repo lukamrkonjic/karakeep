@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "71119cff-f5f4-4d60-bb70-eb8f548caf3d",
+  "id": "3e2d6b09-5a4e-4ddb-b44b-70ded16e2ae0",
   "prevId": "240f4be9-65f7-4176-9376-fd2daa9b443c",
   "tables": {
     "account": {
@@ -609,6 +609,13 @@
           "notNull": false,
           "autoincrement": false,
           "default": 200
+        },
+        "probeMetadataAt": {
+          "name": "probeMetadataAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -719,14 +726,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
-        },
-        "position": {
-          "name": "position",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
         }
       },
       "indexes": {
@@ -734,15 +733,6 @@
           "name": "bookmarkLists_userId_idx",
           "columns": [
             "userId"
-          ],
-          "isUnique": false
-        },
-        "bookmarkLists_userId_parentId_position_idx": {
-          "name": "bookmarkLists_userId_parentId_position_idx",
-          "columns": [
-            "userId",
-            "parentId",
-            "position"
           ],
           "isUnique": false
         },

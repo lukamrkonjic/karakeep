@@ -9,7 +9,7 @@ import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
 import BookmarkActionBar from "./BookmarkActionBar";
-import { MultiBookmarkSelector } from "./BookmarkLayoutAdaptingCard";
+import { BulkEditSelectionOverlay } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
 import { GatedImage } from "./GatedImage";
 
@@ -56,7 +56,7 @@ export function MasonryMediaCard({
       draggable={!isBulkEditEnabled}
       onDragStart={isBulkEditEnabled ? undefined : handleDragStart}
     >
-      <MultiBookmarkSelector bookmark={bookmark} />
+      <BulkEditSelectionOverlay bookmark={bookmark} />
 
       {/* Dim the whole image/video on hover (not just a top gradient) so the
           title and action icons stay readable no matter the media's own

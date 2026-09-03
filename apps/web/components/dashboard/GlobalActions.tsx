@@ -4,20 +4,11 @@ import BulkBookmarksAction from "@/components/dashboard/BulkBookmarksAction";
 import NewBookmarkDialog from "@/components/dashboard/bookmarks/NewBookmarkDialog";
 import SortOrderToggle from "@/components/dashboard/SortOrderToggle";
 import ViewOptions from "@/components/dashboard/ViewOptions";
-import { useTranslation } from "@/lib/i18n/client";
 import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
-import { useKeyboardNavigationStore } from "@/lib/store/useKeyboardNavigationStore";
-import { Keyboard } from "lucide-react";
-
-import { ButtonWithTooltip } from "../ui/button";
 
 export default function GlobalActions() {
-  const { t } = useTranslation();
   const inBookmarkGrid = useInBookmarkGridStore(
     (state) => state.inBookmarkGrid,
-  );
-  const setShortcutsDialogOpen = useKeyboardNavigationStore(
-    (state) => state.setShortcutsDialogOpen,
   );
   return (
     <div className="flex min-w-max flex-wrap overflow-hidden">
@@ -25,17 +16,6 @@ export default function GlobalActions() {
       {inBookmarkGrid && <ViewOptions />}
       {inBookmarkGrid && <BulkBookmarksAction />}
       {inBookmarkGrid && <SortOrderToggle />}
-      {inBookmarkGrid && (
-        <ButtonWithTooltip
-          variant="ghost"
-          onClick={() => setShortcutsDialogOpen(true)}
-          tooltip={t("keyboard_shortcuts.title")}
-          delayDuration={100}
-          aria-label={t("keyboard_shortcuts.title")}
-        >
-          <Keyboard size={18} />
-        </ButtonWithTooltip>
-      )}
     </div>
   );
 }

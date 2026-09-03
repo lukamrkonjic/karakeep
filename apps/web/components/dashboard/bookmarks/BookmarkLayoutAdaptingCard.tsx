@@ -17,7 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Check,
+  Circle,
+  CircleCheck,
   GripVertical,
   Image as ImageIcon,
   NotebookPen,
@@ -112,7 +113,11 @@ function OwnerIndicator({ bookmark }: { bookmark: ZBookmark }) {
   );
 }
 
-export function MultiBookmarkSelector({ bookmark }: { bookmark: ZBookmark }) {
+export function BulkEditSelectionOverlay({
+  bookmark,
+}: {
+  bookmark: ZBookmark;
+}) {
   const isSelected = useBulkActionsStore((s) =>
     s.isBookmarkSelected(bookmark.id),
   );
@@ -125,20 +130,6 @@ export function MultiBookmarkSelector({ bookmark }: { bookmark: ZBookmark }) {
   const isOwner = session?.user?.id === bookmark.userId;
   if (!isBulkEditEnabled || !isOwner) return null;
 
-  const getIconColor = () => {
-    if (theme === "dark") {
-      return isSelected ? "black" : "white";
-    }
-    return isSelected ? "white" : "black";
-  };
-
-  const getIconBackgroundColor = () => {
-    if (theme === "dark") {
-      return isSelected ? "bg-white" : "bg-white bg-opacity-10";
-    }
-    return isSelected ? "bg-black" : "bg-white bg-opacity-40";
-  };
-
   return (
     <button
       className={cn(
@@ -149,18 +140,7 @@ export function MultiBookmarkSelector({ bookmark }: { bookmark: ZBookmark }) {
         theme === "dark" ? "bg-white" : "bg-black",
       )}
       onClick={() => toggleBookmark(bookmark.id)}
-    >
-      <div className="absolute right-2 top-2 z-50 opacity-100">
-        <div
-          className={cn(
-            "flex h-4 w-4 items-center justify-center rounded-full border border-gray-600",
-            getIconBackgroundColor(),
-          )}
-        >
-          <Check size={12} color={getIconColor()} />
-        </div>
-      </div>
-    </button>
+    ></button>
   );
 }
 
@@ -190,9 +170,24 @@ function DragHandle({
   );
 }
 
-function HoverActionBar({ bookmark }: { bookmark: ZBookmark }) {
+function HoverActionBar({
+  bookmark,
+  inline = false,
+}: {
+  bookmark: ZBookmark;
+  inline?: boolean;
+}) {
   const { t } = useTranslation();
-  const { isBulkEditEnabled } = useBulkActionsStore();
+  const enableBulkEditForBookmark = useBulkActionsStore(
+    (state) => state.enableBulkEditForBookmark,
+  );
+  const isBulkEditEnabled = useBulkActionsStore(
+    (state) => state.isBulkEditEnabled,
+  );
+  const isSelected = useBulkActionsStore((state) =>
+    state.isBookmarkSelected(bookmark.id),
+  );
+  const toggleBookmark = useBulkActionsStore((state) => state.toggleBookmark);
   const { data: session } = useSession();
   const demoMode = !!useClientConfig().demoMode;
   const updateBookmarkMutator = useUpdateBookmark({
@@ -205,42 +200,76 @@ function HoverActionBar({ bookmark }: { bookmark: ZBookmark }) {
   });
 
   const isOwner = session?.user?.id === bookmark.userId;
-  if (!isOwner || isBulkEditEnabled || demoMode) return null;
+  if (!isOwner) return null;
 
   return (
-    <div className="pointer-events-none absolute right-2 top-2 z-30 hidden gap-1 rounded bg-white/50 p-1 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 dark:bg-black/50 [@media(pointer:fine)]:pointer-events-auto [@media(pointer:fine)]:flex">
+    <div
+      className={cn(
+        "z-[60] gap-1 rounded bg-white/50 p-1 backdrop-blur-sm transition-opacity duration-200 dark:bg-black/50",
+        inline ? "shrink-0" : "absolute right-2 top-2",
+        isBulkEditEnabled
+          ? "pointer-events-auto flex opacity-100"
+          : "pointer-events-none hidden opacity-0 group-hover:opacity-100 [@media(pointer:fine)]:pointer-events-auto [@media(pointer:fine)]:flex",
+      )}
+    >
       <button
-        title={
-          bookmark.favourited ? t("actions.unfavorite") : t("actions.favorite")
-        }
+        aria-label={t("actions.bulk_edit")}
+        title={t("actions.bulk_edit")}
         className="rounded p-0.5 hover:bg-background/50"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          updateBookmarkMutator.mutate({
-            bookmarkId: bookmark.id,
-            favourited: !bookmark.favourited,
-          });
+          if (isBulkEditEnabled) {
+            toggleBookmark(bookmark.id);
+          } else {
+            enableBulkEditForBookmark(bookmark.id);
+          }
         }}
       >
-        <FavouritedActionIcon favourited={bookmark.favourited} size={16} />
+        {isSelected ? (
+          <CircleCheck className="size-4" />
+        ) : (
+          <Circle className="size-4" />
+        )}
       </button>
-      <button
-        title={
-          bookmark.archived ? t("actions.unarchive") : t("actions.archive")
-        }
-        className="rounded p-0.5 hover:bg-background/50"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          updateBookmarkMutator.mutate({
-            bookmarkId: bookmark.id,
-            archived: !bookmark.archived,
-          });
-        }}
-      >
-        <ArchivedActionIcon archived={bookmark.archived} size={16} />
-      </button>
+      {!demoMode && (
+        <>
+          <button
+            title={
+              bookmark.favourited
+                ? t("actions.unfavorite")
+                : t("actions.favorite")
+            }
+            className="rounded p-0.5 hover:bg-background/50"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              updateBookmarkMutator.mutate({
+                bookmarkId: bookmark.id,
+                favourited: !bookmark.favourited,
+              });
+            }}
+          >
+            <FavouritedActionIcon favourited={bookmark.favourited} size={16} />
+          </button>
+          <button
+            title={
+              bookmark.archived ? t("actions.unarchive") : t("actions.archive")
+            }
+            className="rounded p-0.5 hover:bg-background/50"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              updateBookmarkMutator.mutate({
+                bookmarkId: bookmark.id,
+                archived: !bookmark.archived,
+              });
+            }}
+          >
+            <ArchivedActionIcon archived={bookmark.archived} size={16} />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -270,7 +299,7 @@ function ListView({
       )}
       data-bookmark-index={bookmarkIndex}
     >
-      <MultiBookmarkSelector bookmark={bookmark} />
+      <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
       <DragHandle
         bookmark={bookmark}
@@ -337,7 +366,7 @@ function GridView({
       )}
       data-bookmark-index={bookmarkIndex}
     >
-      <MultiBookmarkSelector bookmark={bookmark} />
+      <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
       <DragHandle bookmark={bookmark} className="left-2 top-2" />
       <HoverActionBar bookmark={bookmark} />
@@ -375,6 +404,9 @@ function CompactView({
   bookmarkIndex,
 }: Props) {
   const { showTitle } = useBookmarkDisplaySettings();
+  const isBulkEditEnabled = useBulkActionsStore(
+    (state) => state.isBulkEditEnabled,
+  );
   return (
     <div
       className={cn(
@@ -384,7 +416,7 @@ function CompactView({
       )}
       data-bookmark-index={bookmarkIndex}
     >
-      <MultiBookmarkSelector bookmark={bookmark} />
+      <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
       <div className="flex h-full justify-between gap-2 overflow-hidden p-2">
         <div className="flex items-center gap-2">
@@ -422,7 +454,16 @@ function CompactView({
             <BookmarkFormattedCreatedAt createdAt={bookmark.createdAt} />
           </Link>
         </div>
-        <BookmarkActionBar bookmark={bookmark} />
+        <div className="relative z-[60] flex shrink-0 items-center">
+          <HoverActionBar bookmark={bookmark} inline />
+          <BookmarkActionBar
+            bookmark={bookmark}
+            favouritedClassName={cn(
+              "group-hover:hidden",
+              isBulkEditEnabled && "hidden",
+            )}
+          />
+        </div>
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { useAddBookmarkToList } from "@karakeep/shared-react/hooks/lists";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import LoadingSpinner from "../ui/spinner";
-import BookmarkAlreadyExistsToast from "../utils/BookmarkAlreadyExistsToast";
+import BookmarkSavedToast from "../utils/BookmarkSavedToast";
 
 export function useUploadAsset() {
   // When an upload happens while viewing a list, drop the new bookmark into
@@ -48,7 +48,7 @@ export function useUploadAsset() {
     onSuccess: (resp) => {
       if (resp.alreadyExists) {
         toast({
-          description: <BookmarkAlreadyExistsToast bookmarkId={resp.id} />,
+          description: <BookmarkSavedToast bookmarkId={resp.id} />,
           variant: "default",
         });
       } else {

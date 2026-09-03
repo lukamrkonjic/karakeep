@@ -9,7 +9,8 @@ RUN apt-get update \
     && cargo install monolith --locked
 
 ################# Base Builder ##############
-FROM node:24-slim AS base
+# Replace with node:24-slim as soon as https://github.com/nodejs/node/pull/65042 is fixed and uploaded to Docker hub
+FROM node:24.18.1-slim AS base
 
 WORKDIR /app
 ENV PNPM_HOME="/pnpm"
@@ -75,7 +76,8 @@ RUN (cd apps/mcp && pnpm --config.verify-deps-before-run=false build)
 
 ################# The All-in-one builder ##############
 
-FROM node:24-slim AS aio_builder
+# Replace with node:24-slim as soon as https://github.com/nodejs/node/pull/65042 is fixed and uploaded to Docker hub
+FROM node:24.18.1-slim AS aio_builder
 LABEL org.opencontainers.image.source="https://github.com/karakeep-app/karakeep"
 WORKDIR /app
 
@@ -178,7 +180,7 @@ RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/init-db-migration \
     /etc/s6-overlay/s6-rc.d/user/contents.d/svc-web \
     /etc/s6-overlay/s6-rc.d/user/contents.d/svc-workers
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 ################# The web container ##############
 
@@ -188,7 +190,7 @@ RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/init-db-migration \
     /etc/s6-overlay/s6-rc.d/user/contents.d/svc-web
 ENV USING_LEGACY_SEPARATE_CONTAINERS=true
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 ################# The workers container ##############
 
@@ -202,7 +204,8 @@ ENV USING_LEGACY_SEPARATE_CONTAINERS=true
 
 ################# The cli ##############
 
-FROM node:24-slim AS cli
+# Replace with node:24-slim as soon as https://github.com/nodejs/node/pull/65042 is fixed and uploaded to Docker hub
+FROM node:24.18.1-slim AS cli
 LABEL org.opencontainers.image.source="https://github.com/karakeep-app/karakeep"
 WORKDIR /app
 
@@ -217,7 +220,8 @@ ENTRYPOINT ["node", "index.mjs"]
 
 ################# MCP server ##############
 
-FROM node:24-slim AS mcp
+# Replace with node:24-slim as soon as https://github.com/nodejs/node/pull/65042 is fixed and uploaded to Docker hub
+FROM node:24.18.1-slim AS mcp
 LABEL org.opencontainers.image.source="https://github.com/karakeep-app/karakeep"
 WORKDIR /app
 
