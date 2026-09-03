@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <title>Karakeep Drop — Settings</title>
+  </head>
+  <body class="settings-body">
+    <h1>Karakeep Drop</h1>
+    <p class="sub">
+      Drag an image or video anywhere on screen and a list picker appears under
+      the cursor. Drop it on a list to save it.
+    </p>
+
+    <label for="serverUrl">Server URL</label>
+    <input id="serverUrl" type="text" placeholder="https://karakeep.example.com" />
+
+    <label for="apiKey">API key</label>
+    <input id="apiKey" type="password" placeholder="ak1_…" />
+    <p class="hint">
+      Create one in Karakeep under <strong>Settings → API Keys</strong>. It is
+      stored in plain text in this app's user-data folder, so treat it like a
+      password.
+    </p>
+
+    <hr />
+
+    <label for="triggerMode">Show the picker</label>
+    <select id="triggerMode">
+      <option value="always">On any drag</option>
+      <option value="modifier">Only while holding a key</option>
+    </select>
+
+    <label for="modifierKey">Hold key</label>
+    <select id="modifierKey">
+      <option value="ctrl">Ctrl</option>
+      <option value="alt">Alt</option>
+      <option value="shift">Shift</option>
+    </select>
+
+    <label for="dragThreshold">Drag distance before it appears (px)</label>
+    <input id="dragThreshold" type="number" min="10" max="400" step="5" />
+    <p class="hint">
+      Lower feels more immediate; higher stops the picker appearing when you
+      only meant to select some text.
+    </p>
+
+    <div class="actions">
+      <button id="save" class="primary">Save</button>
+      <button id="test">Test connection</button>
+      <span id="result" class="result"></span>
+    </div>
+
+    <script src="settings.js"></script>
+  </body>
+</html>

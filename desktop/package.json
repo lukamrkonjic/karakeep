@@ -1,0 +1,26 @@
+{
+  "name": "karakeep-drop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Eagle-style drag-and-drop uploader for Karakeep",
+  "license": "AGPL-3.0-only",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && electron test/run-tests.cjs",
+    "dist": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

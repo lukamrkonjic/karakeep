@@ -21,6 +21,7 @@ packages/e2e_tests
 packages/benchmarks
 tools/seed-snapshot
 snapshots
+desktop
 
 # Aider
 .aider*

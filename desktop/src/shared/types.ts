@@ -1,0 +1,84 @@
+/** A list as returned by GET /api/v1/lists. */
+export interface KarakeepList {
+  id: string;
+  name: string;
+  icon: string;
+  parentId: string | null;
+  type: "manual" | "smart";
+  /** Sort key among siblings — higher sorts first, matching the web sidebar. */
+  position: number;
+  userRole: "owner" | "editor" | "viewer" | "public";
+}
+
+/** A list plus its children, as rendered in the overlay tree. */
+export interface ListNode extends KarakeepList {
+  children: ListNode[];
+}
+
+export interface Settings {
+  serverUrl: string;
+  apiKey: string;
+  /** Pixels the cursor must travel with the button held before we pop up. */
+  dragThreshold: number;
+  /** Master switch for the global drag watcher. */
+  overlayEnabled: boolean;
+  /** Start with Windows. Off unless the user turns it on. */
+  launchAtLogin: boolean;
+  /**
+   * "always" pops the overlay on any drag; "modifier" requires the trigger
+   * key to be held, which is the escape hatch if "always" feels noisy.
+   */
+  triggerMode: "always" | "modifier";
+  modifierKey: "ctrl" | "alt" | "shift";
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  serverUrl: "",
+  apiKey: "",
+  dragThreshold: 45,
+  overlayEnabled: true,
+  launchAtLogin: false,
+  triggerMode: "always",
+  modifierKey: "ctrl",
+};
+
+/**
+ * What the renderer scrapes out of a native drop. Exactly one of `files` or
+ * `urls` is usually populated, but a browser drag often yields both, in which
+ * case the raw bytes win — see resolveMedia().
+ */
+export interface DropPayload {
+  /** Real bytes, when the OS handed us an actual file. */
+  files: { name: string; type: string; bytes: ArrayBuffer }[];
+  /** Candidate media URLs, best first. */
+  urls: string[];
+  /** The page the drag originated from, used as a Referer when downloading. */
+  sourcePageUrl: string | null;
+  /** Suggested title (an <img alt>, a link text, or a Firefox x-moz-url title). */
+  title: string | null;
+  /** Every MIME type the drop advertised — kept for the payload inspector. */
+  types: string[];
+}
+
+export interface IngestRequest {
+  payload: DropPayload;
+  /** Target list, or null to save without filing it anywhere. */
+  listId: string | null;
+  /** Only for the confirmation toast — the server is addressed by id. */
+  listName: string | null;
+}
+
+export interface IngestResult {
+  ok: boolean;
+  bookmarkId?: string;
+  alreadyExists?: boolean;
+  listName?: string | null;
+  error?: string;
+}
+
+export interface ConnectionResult {
+  ok: boolean;
+  /** Server-reported version on success. */
+  version?: string;
+  error?: string;
+}
