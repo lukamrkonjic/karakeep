@@ -1,5 +1,6 @@
 // Stands in for the real preload so the UI can be rendered without a server.
 const { contextBridge } = require("electron");
+const emptyDrops = [];
 const lists = [
   { id: "1", name: "Design", icon: "🎨", parentId: null, type: "manual", position: 9, userRole: "owner",
     children: [
@@ -12,6 +13,7 @@ const lists = [
   { id: "3", name: "Film stills", icon: "🎬", parentId: null, type: "manual", position: 7, userRole: "owner", children: [] },
   { id: "4", name: "To sort", icon: "??", parentId: null, type: "manual", position: 6, userRole: "owner", children: [] },
 ];
+contextBridge.exposeInMainWorld("__test", { emptyDrops: () => emptyDrops });
 contextBridge.exposeInMainWorld("karakeep", {
   getSettings: async () => ({ serverUrl: "https://karakeep.example.com", apiKey: "ak1_demo",
     dragThreshold: 45, overlayEnabled: true, triggerMode: "always", modifierKey: "ctrl" }),
@@ -21,9 +23,7 @@ contextBridge.exposeInMainWorld("karakeep", {
   ingest: async () => ({ ok: true }),
   dismissOverlay: () => {},
   diag: () => {},
-  ingestClipboard: async () => ({ ok: true }),
-  beginRescue: () => {},
-  endRescue: () => {},
+  dropWasEmpty: (req) => emptyDrops.push(req),
   onOverlayShow: () => {},
   onOverlayHide: () => {},
 });

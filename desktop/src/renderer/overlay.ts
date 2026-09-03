@@ -259,7 +259,9 @@ function attachDropTarget(
       // arrives with zero types and zero files. There is nothing to parse;
       // the only way through is to let the user paste instead.
       if (payload.types.length === 0 && payload.files.length === 0) {
-        beginRescue(listId, listName);
+        // Nothing to parse — the site attached no data at all. Main takes it
+        // from here by watching for the next thing copied.
+        api.dropWasEmpty({ listId, listName });
         return;
       }
       await api.ingest({ payload, listId, listName });
@@ -267,52 +269,6 @@ function attachDropTarget(
   });
 }
 
-
-/* ------------------------------------------------------------------ *
- * Rescue: a drag that carried nothing
- * ------------------------------------------------------------------ */
-
-const rescueEl = document.getElementById("rescue")!;
-const panelEl = document.getElementById("panel")!;
-let rescueTarget: { listId: string | null; listName: string | null } | null =
-  null;
-
-function beginRescue(listId: string | null, listName: string | null): void {
-  rescueTarget = { listId, listName };
-  panelEl.classList.add("rescuing");
-  setStatus("That drag carried no data");
-  rescueEl.textContent = listName
-    ? `This site sent nothing with the drag. Copy the image (right-click → Copy Image), then press Ctrl+V to save it into ${listName}.`
-    : "This site sent nothing with the drag. Copy the image (right-click → Copy Image), then press Ctrl+V to save it.";
-  // Asks main for focus, so the keypress below actually reaches us.
-  api.beginRescue();
-}
-
-function endRescue(): void {
-  rescueTarget = null;
-  panelEl.classList.remove("rescuing");
-  api.endRescue();
-}
-
-document.addEventListener("keydown", (e) => {
-  if (!rescueTarget) {
-    return;
-  }
-  if (e.key === "Escape") {
-    endRescue();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
-    e.preventDefault();
-    const target = rescueTarget;
-    rescueTarget = null;
-    setStatus("Saving from clipboard…");
-    void (async () => {
-      await api.ingestClipboard(target);
-      panelEl.classList.remove("rescuing");
-    })();
-  }
-});
 
 /* ------------------------------------------------------------------ *
  * Panel lifecycle
@@ -351,8 +307,6 @@ api.onOverlayShow(() => {
 
 api.onOverlayHide(() => {
   cancelHoverTimer();
-  rescueTarget = null;
-  panelEl.classList.remove("rescuing");
   for (const row of rows) {
     row.el.classList.remove("over");
   }

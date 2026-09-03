@@ -15,15 +15,10 @@ import {
 import { getSettings, isConfigured, saveSettings } from "./config";
 import { dragWatcher } from "./dragWatch";
 import { dropLogPath, logDrop, logLine } from "./dropLog";
-import { ingest, ingestClipboard } from "./ingest";
+import { ingest } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
 import { buildTree } from "../shared/listTree";
-import {
-  ClipboardIngestRequest,
-  IngestRequest,
-  ListNode,
-  Settings,
-} from "../shared/types";
+import { IngestRequest, ListNode, Settings } from "../shared/types";
 
 const OVERLAY_W = 272;
 const OVERLAY_H = 380;
@@ -150,10 +145,6 @@ function hideOverlay(): void {
     overlay.webContents.send("overlay:hide");
     overlay.hide();
   }
-  // Always drop back to non-focusable; the rescue prompt is the only thing
-  // that ever wants focus, and leaving it on would let the panel steal focus
-  // from the drag source on the next show.
-  overlay?.setFocusable(false);
 }
 
 function notify(title: string, body: string): void {
@@ -309,38 +300,14 @@ function registerIpc(): void {
   // A drag that carried no data at all (some sites drag an empty element).
   // The drag is over by now, so taking focus is safe and lets the panel read
   // a Ctrl+V directly instead of hijacking a global shortcut.
-  ipcMain.on("rescue:begin", () => {
-    dropHandled = true;
-    overlay?.setFocusable(true);
-    overlay?.focus();
-  });
-
-  ipcMain.on("rescue:end", () => {
+  ipcMain.on("drop:empty", (_e, target: { listName: string | null }) => {
+    logLine(`drop carried no data; list=${target.listName ?? "(none)"}`);
     hideOverlay();
+    notify(
+      "That drag carried no data",
+      "The site attached nothing to the drag, so there was nothing to save.",
+    );
   });
-
-  ipcMain.handle(
-    "clipboard:ingest",
-    async (_e, req: ClipboardIngestRequest) => {
-      hideOverlay();
-      const result = await ingestClipboard(req);
-      logLine(
-        `clipboard save -> ${result.ok ? "saved" : `FAILED: ${result.error}`}`,
-      );
-      if (result.ok && req.listId) {
-        rememberListUse(req.listId);
-      }
-      if (result.ok) {
-        notify(
-          result.alreadyExists ? "Already saved" : "Saved to Karakeep",
-          result.listName ? `Filed into ${result.listName}.` : "Bookmark created.",
-        );
-      } else {
-        notify("Karakeep upload failed", result.error ?? "Unknown error");
-      }
-      return result;
-    },
-  );
 
   // The renderer tells us when the pointer leaves the panel entirely, so a
   // drag that passes over it on the way elsewhere doesn't leave it stuck open.

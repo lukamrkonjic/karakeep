@@ -20,10 +20,8 @@ const api = {
     ipcRenderer.invoke("drop:ingest", req),
   dismissOverlay: (): void => ipcRenderer.send("overlay:dismiss"),
   diag: (line: string): void => ipcRenderer.send("drop:diag", line),
-  ingestClipboard: (req: ClipboardIngestRequest): Promise<IngestResult> =>
-    ipcRenderer.invoke("clipboard:ingest", req),
-  beginRescue: (): void => ipcRenderer.send("rescue:begin"),
-  endRescue: (): void => ipcRenderer.send("rescue:end"),
+  dropWasEmpty: (req: ClipboardIngestRequest): void =>
+    ipcRenderer.send("drop:empty", req),
   onOverlayShow: (fn: () => void): void => {
     ipcRenderer.on("overlay:show", () => fn());
   },

@@ -146,23 +146,14 @@ app.whenReady().then(async () => {
   await sleep(200);
 
   check(
-    "an empty drop switches the panel to the paste rescue instead of failing",
-    await js(`document.getElementById('panel').classList.contains('rescuing')`),
-    true,
+    "an empty drop reports upward instead of failing, keeping the target list",
+    await js(`JSON.stringify(window.__test.emptyDrops().slice(-1))`),
+    JSON.stringify([{ listId: "1b", listName: "Colour" }]),
   );
   check(
-    "the rescue names the list you dropped on, so the target isn't lost",
-    await js(
-      `document.getElementById('rescue').textContent.includes('Colour')`,
-    ),
+    "and puts no panel in the way — the tree is still what's shown",
+    await js(`document.getElementById('rescue') === null`),
     true,
-  );
-  check(
-    "Escape leaves the rescue",
-    await js(`
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      document.getElementById('panel').classList.contains('rescuing')`),
-    false,
   );
 
   for (const f of failures) {

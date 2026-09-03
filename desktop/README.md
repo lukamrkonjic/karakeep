@@ -125,28 +125,21 @@ record of why — the data cannot be read back after the event.
 
 ## Sites that send nothing with a drag
 
-Some sites drag an element that carries no data at all. Pinterest is the one
-that prompted this: the drop arrives with **zero types and zero files**, from
-the very first `dragenter` — confirmed in the drop log:
+Some sites attach nothing to a drag. Pinterest is the one that prompted this:
+the drop arrives with **zero types and zero files**, from the very first
+`dragenter` — confirmed in the drop log:
 
 ```
 Pinterest:     dragenter types=[] items=0 files=0  ->  drop types=[]
 Google Images: dragenter types=[text/plain, text/uri-list, text/html, Files]
 ```
 
-There is nothing to parse, so no amount of markup handling reaches it (the
-telltale is the drag ghost being an empty translucent box rather than the
-image). The fix has to come from somewhere other than the drop payload.
-
-So an empty drop no longer fails: the panel keeps the list you dropped on and
-asks for a paste. Right-click the image → **Copy Image**, then **Ctrl+V** —
-which lands the real full-resolution bitmap from the clipboard, not something
-scraped off the screen. Escape dismisses it.
-
-The panel is normally created non-focusable, since taking focus mid-drag can
-cancel the drag. For the rescue it is briefly made focusable — the drag is
-over by then — so it can read the keypress without hijacking a global
-shortcut.
+There is no payload to parse, so nothing on the receiving side can fix it.
+`tools/drag-probe.html` exists to tell the two cases apart: open it in the
+browser, drag an image onto it, and it prints every flavour the page attached
+along with its contents. If the probe shows an empty drag, no application
+could have received anything and the site is stripping it; if it shows data
+that this app then fails on, the bug is here.
 
 ## Known limits
 

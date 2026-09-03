@@ -1,29 +1,11 @@
 import { basename } from "node:path";
-import electron from "electron";
-import {
-  ClipboardIngestRequest,
-  DropPayload,
-  IngestRequest,
-  IngestResult,
-} from "../shared/types";
+import { DropPayload, IngestRequest, IngestResult } from "../shared/types";
 import {
   addToList,
   createAssetBookmark,
   createLinkBookmark,
   uploadAsset,
 } from "./karakeep";
-
-/**
- * Electron's own .d.ts pulls the DOM `Clipboard` interface into scope, so
- * `electron.clipboard` resolves to the browser's async clipboard rather than
- * Electron's synchronous one. Pin just the two methods used here instead of
- * fighting the ambient types.
- */
-interface NativeClipboard {
-  readImage(): { isEmpty(): boolean; toPNG(): Buffer };
-  readText(): string;
-}
-const nativeClipboard = electron.clipboard as unknown as NativeClipboard;
 
 /**
  * What the server will accept as a bookmark's own content, mirroring
@@ -212,76 +194,6 @@ async function resolveMedia(payload: DropPayload): Promise<Media | null> {
     throw lastError;
   }
   return null;
-}
-
-/**
- * Saves whatever is on the clipboard.
- *
- * The rescue path for sites whose drag carries no data at all (Pinterest
- * drags an empty element, so the drop arrives with zero types). "Copy Image"
- * in the browser puts the real bitmap on the clipboard, so this actually
- * gets full-resolution pixels rather than anything scraped off the screen.
- */
-export async function ingestClipboard(
-  req: ClipboardIngestRequest,
-): Promise<IngestResult> {
-  try {
-    const image = nativeClipboard.readImage();
-    if (!image.isEmpty()) {
-      const bytes = new Uint8Array(image.toPNG());
-      const asset = await uploadAsset(bytes, "clipboard.png", "image/png");
-      const bookmark = await createAssetBookmark({
-        asset,
-        assetType: "image",
-        title: null,
-        sourceUrl: null,
-      });
-      return await fileInto(bookmark, req);
-    }
-
-    const text = nativeClipboard.readText().trim();
-    if (text && /^https?:\/\//i.test(text)) {
-      // A copied link: hand the URL through the same path a dropped one takes,
-      // so an image URL still lands as an asset rather than a bare link.
-      return await ingest({
-        payload: {
-          files: [],
-          urls: [text],
-          sourcePageUrl: null,
-          title: null,
-          types: ["clipboard"],
-          raw: { clipboard: text },
-        },
-        listId: req.listId,
-        listName: req.listName,
-      });
-    }
-
-    return {
-      ok: false,
-      error: "The clipboard has no image or link. Try right-click → Copy Image.",
-    };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-/** Adds a freshly created bookmark to the chosen list, if there was one. */
-async function fileInto(
-  bookmark: { id: string; alreadyExists?: boolean },
-  req: ClipboardIngestRequest,
-): Promise<IngestResult> {
-  let filedInto: string | null = null;
-  if (req.listId && !bookmark.alreadyExists) {
-    await addToList(req.listId, bookmark.id);
-    filedInto = req.listName;
-  }
-  return {
-    ok: true,
-    bookmarkId: bookmark.id,
-    alreadyExists: bookmark.alreadyExists,
-    listName: filedInto,
-  };
 }
 
 export async function ingest(req: IngestRequest): Promise<IngestResult> {

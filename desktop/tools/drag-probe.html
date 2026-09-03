@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Drag probe</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 20px;
+        font-size: 14px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 4px;
+      }
+      p.sub {
+        margin: 0 0 16px;
+        opacity: 0.7;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      #zone {
+        border: 2px dashed #888;
+        border-radius: 12px;
+        padding: 44px 20px;
+        text-align: center;
+        font-size: 15px;
+        opacity: 0.85;
+        margin-bottom: 16px;
+      }
+      #zone.over {
+        border-color: #0a7;
+        background: rgba(0, 170, 119, 0.08);
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: rgba(128, 128, 128, 0.12);
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        max-height: 55vh;
+        overflow: auto;
+      }
+      button {
+        font: inherit;
+        padding: 7px 14px;
+        border-radius: 7px;
+        margin-bottom: 12px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Drag probe</h1>
+    <p class="sub">
+      Open this file in <strong>Firefox</strong>, then drag an image onto the
+      box below. It reports exactly what the page attached to the drag — which
+      is the same data any other application would receive.
+      <br />Drag a Google Images result first (known good), then the Pinterest
+      one, and compare.
+    </p>
+
+    <div id="zone">Drop an image here</div>
+    <button id="copy">Copy report</button>
+    <pre id="out">No drop yet.</pre>
+
+    <script>
+      const zone = document.getElementById("zone");
+      const out = document.getElementById("out");
+      const lines = [];
+
+      function log(s) {
+        lines.push(s);
+        out.textContent = lines.join("\n");
+      }
+
+      // dragenter/dragover can only expose the type list (the spec keeps the
+      // data itself in "protected mode" until the drop), but the list alone
+      // says whether the payload exists at all.
+      for (const type of ["dragenter", "dragover"]) {
+        zone.addEventListener(type, (e) => {
+          e.preventDefault();
+          zone.classList.add("over");
+          if (type === "dragenter") {
+            const dt = e.dataTransfer;
+            log(
+              `[${type}] types=[${Array.from(dt.types).join(", ")}] ` +
+                `items=${dt.items.length} files=${dt.files.length} ` +
+                `effectAllowed=${dt.effectAllowed}`,
+            );
+          }
+        });
+      }
+
+      zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("over");
+        const dt = e.dataTransfer;
+        log("");
+        log(`=== DROP at ${new Date().toISOString()} ===`);
+        log(`page: ${location.href}`);
+        log(`types: [${Array.from(dt.types).join(", ")}]`);
+        log(`items: ${dt.items.length}   files: ${dt.files.length}`);
+
+        for (const t of Array.from(dt.types)) {
+          let v;
+          try {
+            v = dt.getData(t);
+          } catch (err) {
+            v = `<threw: ${err}>`;
+          }
+          log(`\n--- ${t} (${v ? v.length : 0} chars) ---\n${(v || "").slice(0, 1500)}`);
+        }
+
+        for (const f of Array.from(dt.files)) {
+          log(`\n--- file --- name=${f.name} type=${f.type} size=${f.size}`);
+        }
+
+        if (dt.types.length === 0 && dt.files.length === 0) {
+          log(
+            "\n>>> EMPTY. The page attached nothing to this drag, so no " +
+              "application could receive anything from it.",
+          );
+        }
+      });
+
+      document.getElementById("copy").addEventListener("click", async () => {
+        await navigator.clipboard.writeText(out.textContent);
+        const b = document.getElementById("copy");
+        b.textContent = "Copied";
+        setTimeout(() => (b.textContent = "Copy report"), 1200);
+      });
+    </script>
+  </body>
+</html>
