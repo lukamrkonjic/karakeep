@@ -15,7 +15,8 @@ import {
 import { getSettings, isConfigured, saveSettings } from "./config";
 import { dragWatcher } from "./dragWatch";
 import { ingest } from "./ingest";
-import { buildTree, fetchLists, testConnection } from "./karakeep";
+import { fetchLists, testConnection } from "./karakeep";
+import { buildTree } from "../shared/listTree";
 import { IngestRequest, ListNode, Settings } from "../shared/types";
 
 const OVERLAY_W = 260;
@@ -215,6 +216,19 @@ function refreshTray(): void {
   );
 }
 
+/** Keeps the most-recently-used list at the top of the picker next time. */
+function rememberListUse(listId: string): void {
+  const recentLists = { ...getSettings().recentLists, [listId]: Date.now() };
+  // Lists get deleted and renamed; without a cap this map grows forever and
+  // keeps entries for ids the server no longer knows about.
+  const trimmed = Object.fromEntries(
+    Object.entries(recentLists)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 50),
+  );
+  saveSettings({ recentLists: trimmed });
+}
+
 function registerIpc(): void {
   ipcMain.handle("settings:get", (): Settings => getSettings());
   ipcMain.handle("settings:save", (_e, patch: Partial<Settings>): Settings => {
@@ -229,13 +243,16 @@ function registerIpc(): void {
     if (!isConfigured()) {
       return [];
     }
-    return buildTree(await fetchLists());
+    return buildTree(await fetchLists(), getSettings().recentLists);
   });
 
   ipcMain.handle("drop:ingest", async (_e, req: IngestRequest) => {
     dropHandled = true;
     hideOverlay();
     const result = await ingest(req);
+    if (result.ok && req.listId) {
+      rememberListUse(req.listId);
+    }
     if (result.ok) {
       notify(
         result.alreadyExists ? "Already saved" : "Saved to Karakeep",

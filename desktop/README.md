@@ -14,9 +14,13 @@ so it needs no server changes.
   threshold and the picker appears right next to the cursor — about a
   centimetre away, so filing is a flick rather than a trip across the screen.
   No hotkey, no window to find first.
-- **Shows your real list tree**, ordered exactly like the web sidebar
-  (`position` descending), with hover-to-expand so you can drop into a
-  subfolder without letting go.
+- **Puts the lists you actually use at the top.** Ordering is
+  most-recently-used first, and using a subfolder lifts its parent too, so a
+  folder you keep filing into never sinks. Lists you've never dropped into
+  fall back to the web sidebar's own order, so an untouched tree looks
+  familiar.
+- **Opens folders under the drag.** Dwell on a folder for a moment and it
+  expands in place, so you can reach an exact subfolder without letting go.
 - **Handles browser drags, not just files.** A drag out of Firefox or Chrome
   usually carries a URL rather than bytes, so the app reads every flavour the
   browser offers (`text/html`, `text/uri-list`, `text/x-moz-url`,
@@ -56,6 +60,19 @@ Three files carry most of the weight:
 | `src/main/dragWatch.ts` | The global hook. Windows has no "a drag started" event, so this infers one from *left button down → cursor moved past a threshold while still held* — the same heuristic Eagle uses. |
 | `src/shared/dropParse.ts` | Turns a `DataTransfer` into an ordered list of candidate media URLs. This is the fiddly part; it has its own test suite. |
 | `src/main/ingest.ts` | Bytes → `POST /api/v1/assets` → `POST /api/v1/bookmarks` → `PUT /api/v1/lists/:id/bookmarks/:id`. |
+| `src/shared/listTree.ts` | Builds and orders the tree. Pure, so it lives in `shared/` and is tested directly. |
+
+**Rows are built once and afterwards only shown or hidden.** This is the
+non-obvious constraint in the whole UI: a drag does not survive its drop
+target being replaced, so re-rendering the tree to expand a folder silently
+kills the drag that triggered it. Expanding therefore only toggles classes.
+`test/overlay.test.cjs` pins this by tagging the hovered row and asserting it
+is the same element, still highlighted, after an expand.
+
+The "recent" ordering is this app's own record: the server does have a
+`createdAt` on lists but doesn't expose it, and `position` is already
+backfilled from it, so recency here means *recently used from this app* and
+lives in `settings.json`.
 
 Two placement details are easy to get wrong and worth keeping:
 
@@ -101,9 +118,10 @@ The overlay is shown with `showInactive()` and created with `focusable: false`
 npm test
 ```
 
-Runs the drop-parser suite inside a real Electron renderer (it needs
-`DOMParser`) against the flavour combinations Firefox and Chrome actually put
-on a cross-application drag.
+Runs two suites in a real Electron renderer: the drop parser and tree
+ordering (`test/parse.test.ts`, needs `DOMParser`) against the flavour
+combinations Firefox and Chrome actually put on a cross-application drag, and
+the overlay's drag interactions (`test/overlay.test.cjs`).
 
 ```bash
 npx electron test/preview.cjs

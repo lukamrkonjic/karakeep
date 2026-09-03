@@ -27,18 +27,22 @@ async function shoot({ file, width, height, out, expand, over, theme }) {
     if (expand) {
       // Open every collapsed folder so the nesting shows up in the shot.
       await win.webContents.executeJavaScript(
-        `document.querySelectorAll('.chev:not(.chev-empty):not(.open)').forEach((c) => {
-           c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-         }); true`,
+        `document.querySelectorAll('.chev:not(.chev-empty):not(.open)')[0]
+           ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); true`,
       );
       await sleep(300);
     }
     if (over) {
       await win.webContents.executeJavaScript(
-        `document.querySelectorAll('.row')[3]?.classList.add('over'); true`,
+        `document.querySelectorAll('.row:not(.collapsed)')[2]?.classList.add('over'); true`,
       );
-      await sleep(150);
     }
+    // A hidden window composites lazily, so give the class changes (and the
+    // chevron's transition) a couple of frames before grabbing the pixels.
+    await win.webContents.executeJavaScript(
+      "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))",
+    );
+    await sleep(400);
     const img = await win.webContents.capturePage();
     writeFileSync(join(__dirname, "..", out), img.toPNG());
     console.log(`wrote ${out}`);

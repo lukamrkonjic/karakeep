@@ -162,6 +162,12 @@ body {
   visibility: hidden;
 }
 
+/* Rows are hidden rather than removed, so the element under the pointer
+   survives an expand mid-drag. */
+.row.collapsed {
+  display: none;
+}
+
 .icon {
   flex: none;
   font-size: 12px;

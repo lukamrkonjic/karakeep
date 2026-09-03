@@ -13,6 +13,11 @@ export interface KarakeepList {
 /** A list plus its children, as rendered in the overlay tree. */
 export interface ListNode extends KarakeepList {
   children: ListNode[];
+  /**
+   * Last use of this list *or anything under it*, so a folder whose subfolder
+   * you keep dropping into rises too instead of being stranded at the bottom.
+   */
+  recencyKey: number;
 }
 
 export interface Settings {
@@ -24,6 +29,11 @@ export interface Settings {
   overlayEnabled: boolean;
   /** Start with Windows. Off unless the user turns it on. */
   launchAtLogin: boolean;
+  /**
+   * listId -> epoch ms of the last drop into it. The server doesn't expose
+   * list timestamps, so "recent" is this app's own record of what you use.
+   */
+  recentLists: Record<string, number>;
   /**
    * "always" pops the overlay on any drag; "modifier" requires the trigger
    * key to be held, which is the escape hatch if "always" feels noisy.
@@ -38,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dragThreshold: 45,
   overlayEnabled: true,
   launchAtLogin: false,
+  recentLists: {},
   triggerMode: "always",
   modifierKey: "ctrl",
 };
