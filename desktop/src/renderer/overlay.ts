@@ -56,6 +56,28 @@ function setStatus(text: string): void {
   statusEl.textContent = text;
 }
 
+const CHEVRON_SVG =
+  '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">' +
+  '<path d="M2.6 1.2 5.6 4l-3 2.8" stroke="currentColor" stroke-width="1.3" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function makeChevron(
+  hasKids: boolean,
+  isOpen: boolean,
+  onToggle: () => void,
+): HTMLElement {
+  const chevron = document.createElement("span");
+  chevron.className = `chev${hasKids ? "" : " chev-empty"}${isOpen ? " open" : ""}`;
+  if (hasKids) {
+    chevron.innerHTML = CHEVRON_SVG;
+    chevron.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      onToggle();
+    });
+  }
+  return chevron;
+}
+
 function renderRows(nodes: ListNode[], depth: number, into: HTMLElement): void {
   for (const node of nodes) {
     const row = document.createElement("div");
@@ -64,22 +86,17 @@ function renderRows(nodes: ListNode[], depth: number, into: HTMLElement): void {
     row.dataset.listId = node.id;
 
     const hasKids = node.children.length > 0;
-    const chevron = document.createElement("span");
-    chevron.className = `chev${hasKids ? "" : " chev-empty"}`;
-    chevron.textContent = hasKids ? (expanded.has(node.id) ? "▾" : "▸") : "";
-    chevron.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
-      toggle(node.id);
-    });
-    row.appendChild(chevron);
+    row.appendChild(makeChevron(hasKids, expanded.has(node.id), () => toggle(node.id)));
 
-    const icon = document.createElement("span");
-    icon.className = "icon";
-    // The web app stores "??" for lists with no real emoji; hide that here too.
-    icon.textContent = /\p{Extended_Pictographic}/u.test(node.icon)
-      ? node.icon
-      : "📁";
-    row.appendChild(icon);
+    // Only a real emoji earns a slot. The web app stores "??" as its
+    // placeholder, and a default folder glyph on every row is exactly the
+    // clutter the redesign strips out.
+    if (/\p{Extended_Pictographic}/u.test(node.icon)) {
+      const icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = node.icon;
+      row.appendChild(icon);
+    }
 
     const name = document.createElement("span");
     name.className = "name";
@@ -109,7 +126,11 @@ function render(): void {
 
   const loose = document.createElement("div");
   loose.className = "row row-loose";
-  loose.innerHTML = `<span class="chev chev-empty"></span><span class="icon">📥</span><span class="name">Save without a list</span>`;
+  loose.appendChild(makeChevron(false, false, () => undefined));
+  const looseName = document.createElement("span");
+  looseName.className = "name";
+  looseName.textContent = "Save without a list";
+  loose.appendChild(looseName);
   attachDropTarget(loose, null, null, false);
   treeEl.appendChild(loose);
 

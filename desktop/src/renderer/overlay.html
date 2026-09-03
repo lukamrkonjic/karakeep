@@ -11,7 +11,25 @@
   <body class="overlay-body">
     <div id="panel" class="panel">
       <div class="panel-head">
-        <span class="dot"></span>
+        <span class="mark">
+          <!-- The karakeep panel mark, in the current foreground colour. -->
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <rect
+              x="1.1"
+              y="1.1"
+              width="13.8"
+              height="13.8"
+              rx="3.4"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path
+              d="M6.2 1.9v12.2"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+          </svg>
+        </span>
         <span id="status" class="status">Drop into a list</span>
       </div>
       <div id="tree" class="tree"></div>

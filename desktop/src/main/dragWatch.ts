@@ -16,11 +16,12 @@ class DragWatcher extends EventEmitter {
   private started = false;
   private modifiers = { ctrl: false, alt: false, shift: false };
 
-  /** Emitted once per drag, at the point the threshold is crossed. */
-  declare on: ((
-    e: "dragstart",
-    fn: (pos: { x: number; y: number }) => void,
-  ) => this) &
+  /**
+   * Emitted once per drag, at the point the threshold is crossed. No position
+   * is reported: the hook's coordinates are physical pixels, which are wrong
+   * for window placement on a scaled display, so main.ts asks Electron.
+   */
+  declare on: ((e: "dragstart", fn: () => void) => this) &
     ((e: "dragend", fn: () => void) => this);
 
   start(): void {
@@ -80,7 +81,7 @@ class DragWatcher extends EventEmitter {
         return;
       }
       this.dragging = true;
-      this.emit("dragstart", { x: e.x, y: e.y });
+      this.emit("dragstart");
     });
 
     uIOhook.on("mouseup", (e) => {

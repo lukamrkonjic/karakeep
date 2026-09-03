@@ -48,7 +48,7 @@ const builds = [
 
 async function copyStatic() {
   await mkdir("dist/renderer", { recursive: true });
-  for (const f of ["overlay.html", "settings.html", "style.css", "icon.png"]) {
+  for (const f of ["overlay.html", "settings.html", "style.css", "icon-dark.png", "icon-light.png"]) {
     await cp(`src/renderer/${f}`, `dist/renderer/${f}`);
   }
   await mkdir("dist/test", { recursive: true });

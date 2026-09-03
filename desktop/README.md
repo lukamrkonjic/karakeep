@@ -11,8 +11,9 @@ so it needs no server changes.
 ## What it does
 
 - **Watches for drags globally.** Press the left mouse button and move past a
-  threshold and the picker appears next to the cursor. No hotkey, no window to
-  find first.
+  threshold and the picker appears right next to the cursor — about a
+  centimetre away, so filing is a flick rather than a trip across the screen.
+  No hotkey, no window to find first.
 - **Shows your real list tree**, ordered exactly like the web sidebar
   (`position` descending), with hover-to-expand so you can drop into a
   subfolder without letting go.
@@ -23,6 +24,8 @@ so it needs no server changes.
 - **Keeps the source URL** on the bookmark, which a naive uploader loses.
 - **Falls back to a link bookmark** when the media can't be fetched, so a drop
   is never silently lost.
+- **Follows the Windows light/dark theme**, in a monochrome palette matched to
+  the karakeep redesign.
 
 ## Setup
 
@@ -54,6 +57,25 @@ Three files carry most of the weight:
 | `src/shared/dropParse.ts` | Turns a `DataTransfer` into an ordered list of candidate media URLs. This is the fiddly part; it has its own test suite. |
 | `src/main/ingest.ts` | Bytes → `POST /api/v1/assets` → `POST /api/v1/bookmarks` → `PUT /api/v1/lists/:id/bookmarks/:id`. |
 
+Two placement details are easy to get wrong and worth keeping:
+
+- **The cursor position comes from Electron, not the hook.** `uiohook` reports
+  *physical* pixels while `setBounds` takes *device-independent* ones, so on a
+  scaled display (150% here) every position was off by half again and the
+  panel ended up pinned to the right screen edge. `screen.getCursorScreenPoint()`
+  is already in DIP.
+- **Near an edge the panel flips rather than slides.** Clamping it into the
+  work area is what strands it far from the cursor on a wide monitor.
+
+## Theming
+
+Both themes are plain CSS: one palette on `:root`, the dark overrides under
+`@media (prefers-color-scheme: dark)`. Electron already tracks the Windows app
+theme and re-evaluates that query live, so nothing in the main process is
+involved — except the tray bitmap, which has no template-image concept on
+Windows and so is swapped between a dark and a light mark on
+`nativeTheme.on("updated")`.
+
 The overlay is shown with `showInactive()` and created with `focusable: false`
 — taking focus mid-drag can cancel the drag outright.
 
@@ -82,6 +104,13 @@ npm test
 Runs the drop-parser suite inside a real Electron renderer (it needs
 `DOMParser`) against the flavour combinations Firefox and Chrome actually put
 on a cross-application drag.
+
+```bash
+npx electron test/preview.cjs
+```
+
+Renders both windows in both themes to PNGs with a stubbed bridge, so the UI
+can be reviewed without a running server.
 
 ## Why it lives outside the pnpm workspace
 
