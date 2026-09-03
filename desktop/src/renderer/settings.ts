@@ -17,6 +17,7 @@ const apiKey = $<HTMLInputElement>("apiKey");
 const triggerMode = $<HTMLSelectElement>("triggerMode");
 const modifierKey = $<HTMLSelectElement>("modifierKey");
 const dragThreshold = $<HTMLInputElement>("dragThreshold");
+const copyToSave = $<HTMLSelectElement>("copyToSave");
 const result = $<HTMLSpanElement>("result");
 
 function syncModifierVisibility(): void {
@@ -37,6 +38,7 @@ async function load(): Promise<void> {
   triggerMode.value = s.triggerMode;
   modifierKey.value = s.modifierKey;
   dragThreshold.value = String(s.dragThreshold);
+  copyToSave.value = String(s.copyToSave);
   syncModifierVisibility();
 }
 
@@ -46,6 +48,7 @@ function collect(): Partial<Settings> {
     apiKey: apiKey.value.trim(),
     triggerMode: triggerMode.value as Settings["triggerMode"],
     modifierKey: modifierKey.value as Settings["modifierKey"],
+    copyToSave: copyToSave.value === "true",
     dragThreshold: Math.min(
       400,
       Math.max(10, Number(dragThreshold.value) || 45),

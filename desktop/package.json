@@ -10,11 +10,12 @@
     "dev": "node build.mjs --watch",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
-    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/dragfix.test.cjs",
+    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/dragfix.test.cjs && electron test/clipboard.test.cjs",
     "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
-    "uiohook-napi": "^1.5.5"
+    "uiohook-napi": "^1.5.5",
+    "get-windows": "^9.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

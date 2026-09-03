@@ -299,3 +299,8 @@ hr {
   border-top: 1px solid var(--border);
   margin: 26px 0 4px;
 }
+
+/* In copy mode the rows are clicked rather than dropped on. */
+.panel.copy-mode .row {
+  cursor: pointer;
+}

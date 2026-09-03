@@ -42,6 +42,19 @@
       <option value="shift">Shift</option>
     </select>
 
+    <label for="copyToSave">When a media link or image is copied in a browser</label>
+    <select id="copyToSave">
+      <option value="true">Offer to save it</option>
+      <option value="false">Do nothing</option>
+    </select>
+    <p class="hint">
+      The way in for sites whose drags carry no data at all (Pinterest) and for
+      media that can't be dragged (a YouTube video): right-click &rarr;
+      <strong>Copy image link</strong> / <strong>Copy video URL</strong> and the
+      picker appears. Only fires for media links copied in a browser &mdash;
+      ordinary copying is ignored.
+    </p>
+
     <label for="dragThreshold">Drag distance before it appears (px)</label>
     <input id="dragThreshold" type="number" min="10" max="400" step="5" />
     <p class="hint">

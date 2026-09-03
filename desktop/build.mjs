@@ -39,6 +39,14 @@ const builds = [
   },
   {
     ...common,
+    entryPoints: ["src/main/clipboardWatch.ts"],
+    outfile: "dist/main/clipboardWatch.cjs",
+    platform: "node",
+    format: "cjs",
+    external: ["electron", "uiohook-napi"],
+  },
+  {
+    ...common,
     entryPoints: ["test/parse.test.ts"],
     outdir: "dist/test",
     platform: "browser",

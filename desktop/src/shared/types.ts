@@ -27,6 +27,12 @@ export interface Settings {
   dragThreshold: number;
   /** Master switch for the global drag watcher. */
   overlayEnabled: boolean;
+  /**
+   * Watch for media links/images copied in a browser and offer to save them.
+   * The only way in for sites whose drags carry no data (Pinterest), and for
+   * media that can't be dragged at all (a YouTube video).
+   */
+  copyToSave: boolean;
   /** Start with Windows. Off unless the user turns it on. */
   launchAtLogin: boolean;
   /**
@@ -47,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
   dragThreshold: 45,
   overlayEnabled: true,
+  copyToSave: true,
   launchAtLogin: false,
   recentLists: {},
   triggerMode: "always",
@@ -86,6 +93,12 @@ export interface IngestRequest {
 }
 
 /** Saving whatever is on the clipboard, used to rescue a data-less drag. */
+export interface ClipboardIngestRequest {
+  listId: string | null;
+  listName: string | null;
+}
+
+/** Saving whatever was just copied, used by copy-to-save. */
 export interface ClipboardIngestRequest {
   listId: string | null;
   listName: string | null;

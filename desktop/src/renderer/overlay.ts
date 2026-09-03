@@ -9,6 +9,7 @@ declare global {
 }
 
 const api = window.karakeep;
+const panelEl = document.getElementById("panel")!;
 const treeEl = document.getElementById("tree")!;
 const statusEl = document.getElementById("status")!;
 
@@ -78,6 +79,11 @@ interface Row {
 let rows: Row[] = [];
 const expanded = new Set<string>();
 let hoverTimer: number | null = null;
+/**
+ * True when the picker was opened by a copy rather than a drag. There's no
+ * drag in flight then, so rows are chosen by clicking instead of dropping.
+ */
+let copyMode = false;
 
 const CHEVRON_SVG =
   '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">' +
@@ -128,6 +134,7 @@ function makeRow(node: ListNode, depth: number, ancestors: string[]): Row {
   el.appendChild(name);
 
   attachDropTarget(el, node.id, node.name, hasKids);
+  attachClickTarget(el, node.id, node.name);
   return { node, ancestors, el, chevron };
 }
 
@@ -179,6 +186,7 @@ function renderTree(tree: ListNode[]): void {
   looseName.textContent = "Save without a list";
   loose.appendChild(looseName);
   attachDropTarget(loose, null, null, false);
+  attachClickTarget(loose, null, null);
   treeEl.appendChild(loose);
 
   if (tree.length === 0) {
@@ -270,6 +278,31 @@ function attachDropTarget(
 }
 
 
+/**
+ * Click-to-choose, used only in copy mode. Hover feedback is applied the same
+ * way the drag path marks its target, so both routes look identical.
+ */
+function attachClickTarget(
+  el: HTMLElement,
+  listId: string | null,
+  listName: string | null,
+): void {
+  el.addEventListener("mouseenter", () => {
+    if (copyMode) {
+      el.classList.add("over");
+    }
+  });
+  el.addEventListener("mouseleave", () => el.classList.remove("over"));
+  el.addEventListener("click", () => {
+    if (!copyMode) {
+      return;
+    }
+    copyMode = false;
+    setStatus(listName ? `Saving to ${listName}…` : "Saving…");
+    void api.saveClipboard({ listId, listName });
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Panel lifecycle
  * ------------------------------------------------------------------ */
@@ -295,7 +328,15 @@ async function refreshLists(): Promise<void> {
   }
 }
 
+api.onCopyMode((kind) => {
+  copyMode = true;
+  panelEl.classList.add("copy-mode");
+  setStatus(kind === "image" ? "Save copied image to…" : "Save copied link to…");
+});
+
 api.onOverlayShow(() => {
+  copyMode = false;
+  panelEl.classList.remove("copy-mode");
   setStatus("Drop into a list");
   // Start compact every time: most-recently-used sorts to the top, so the
   // common case is one flick with nothing expanded.
@@ -307,6 +348,8 @@ api.onOverlayShow(() => {
 
 api.onOverlayHide(() => {
   cancelHoverTimer();
+  copyMode = false;
+  panelEl.classList.remove("copy-mode");
   for (const row of rows) {
     row.el.classList.remove("over");
   }

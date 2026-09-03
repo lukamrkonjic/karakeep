@@ -156,6 +156,41 @@ app.whenReady().then(async () => {
     true,
   );
 
+  // Copy-to-save: the same picker, opened by a copy rather than a drag, so
+  // rows are chosen by clicking. Clicking must do nothing until that mode is
+  // on, or an ordinary drag would fire a save on mouse-up.
+  await js(`window.__t.rowFor('Film stills').click(); true`);
+  check(
+    "clicking a row does nothing outside copy mode",
+    await js(`window.__test.saved().length`),
+    0,
+  );
+
+  await js(`window.__test.enterCopyMode('url'); true`);
+  check(
+    "copy mode marks the panel, so rows show they're clickable",
+    await js(`document.getElementById('panel').classList.contains('copy-mode')`),
+    true,
+  );
+  check(
+    "and says what will be saved",
+    await js(`document.getElementById('status').textContent`),
+    "Save copied link to…",
+  );
+
+  await js(`window.__t.rowFor('Film stills').click(); true`);
+  await sleep(120);
+  check(
+    "clicking a row in copy mode saves into that list",
+    await js(`JSON.stringify(window.__test.saved().slice(-1))`),
+    JSON.stringify([{ listId: "3", listName: "Film stills" }]),
+  );
+  check(
+    "a second click can't double-save",
+    await js(`window.__t.rowFor('Film stills').click(); window.__test.saved().length`),
+    1,
+  );
+
   for (const f of failures) {
     console.error(f);
   }

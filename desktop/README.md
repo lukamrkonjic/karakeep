@@ -144,7 +144,29 @@ an image onto it, and it prints every flavour the page attached along with its
 contents. An empty report means the site is the cause; a report with data that
 this app then fails on means the bug is here.
 
-### The fix: tools/karakeep-drag-fix.user.js
+### Copy-to-save (in the app, nothing to install)
+
+Both of those sites *do* offer the right thing in their context menu — "Copy
+image link" on Pinterest, "Copy video URL" on YouTube — and that hands over
+the full-resolution URL. So the app watches for that copy and opens the same
+picker; click a list and it's saved.
+
+Two gates keep it out of the way of ordinary work, because a picker appearing
+on every copy would be intolerable:
+
+1. **The copy has to have happened in a browser.** The foreground executable
+   is checked against a list of known browsers, and only once the content
+   already looks worth saving — so the check runs a handful of times a day,
+   not every poll.
+2. **The content has to look like media.** A direct media-file URL, a page
+   that *is* one piece of media (YouTube watch/shorts, a Pinterest pin, Vimeo
+   …), or a copied bitmap. Prose, code, file paths, an ordinary link, a bare
+   domain: all ignored. `test/clipboard.test.cjs` pins both halves, negatives
+   included.
+
+Turn it off in the tray or in Settings.
+
+### The other route: tools/karakeep-drag-fix.user.js
 
 The only place with enough information is the page itself, at `dragstart`,
 where the `<img>` is still reachable. That script finds the image under the

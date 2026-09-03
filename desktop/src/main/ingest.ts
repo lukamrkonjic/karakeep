@@ -1,5 +1,12 @@
 import { basename } from "node:path";
-import { DropPayload, IngestRequest, IngestResult } from "../shared/types";
+import { clipboard } from "electron";
+import {
+  ClipboardIngestRequest,
+  DropPayload,
+  IngestRequest,
+  IngestResult,
+} from "../shared/types";
+import { readClipboardImage } from "./clipboardWatch";
 import {
   addToList,
   createAssetBookmark,
@@ -194,6 +201,67 @@ async function resolveMedia(payload: DropPayload): Promise<Media | null> {
     throw lastError;
   }
   return null;
+}
+
+/** Adds a freshly created bookmark to the chosen list, if there was one. */
+async function fileInto(
+  bookmark: { id: string; alreadyExists?: boolean },
+  req: ClipboardIngestRequest,
+): Promise<IngestResult> {
+  let filedInto: string | null = null;
+  if (req.listId && !bookmark.alreadyExists) {
+    await addToList(req.listId, bookmark.id);
+    filedInto = req.listName;
+  }
+  return {
+    ok: true,
+    bookmarkId: bookmark.id,
+    alreadyExists: bookmark.alreadyExists,
+    listName: filedInto,
+  };
+}
+
+/**
+ * Saves whatever is on the clipboard. A copied bitmap goes up as-is; a copied
+ * URL takes the same route a dropped one does, so an image link becomes a
+ * real asset and a YouTube link becomes a bookmark the server can crawl.
+ */
+export async function ingestClipboard(
+  req: ClipboardIngestRequest,
+): Promise<IngestResult> {
+  try {
+    const text = (await clipboard.readText()).trim();
+    if (/^https?:\/\//i.test(text)) {
+      return await ingest({
+        payload: {
+          files: [],
+          urls: [text],
+          sourcePageUrl: null,
+          title: null,
+          types: ["clipboard"],
+          raw: { clipboard: text },
+        },
+        listId: req.listId,
+        listName: req.listName,
+      });
+    }
+
+    const bytes = await readClipboardImage();
+    if (bytes) {
+      const asset = await uploadAsset(bytes, "clipboard.png", "image/png");
+      const bookmark = await createAssetBookmark({
+        asset,
+        assetType: "image",
+        title: null,
+        sourceUrl: null,
+      });
+      return await fileInto(bookmark, req);
+    }
+
+    return { ok: false, error: "Nothing saveable on the clipboard." };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export async function ingest(req: IngestRequest): Promise<IngestResult> {

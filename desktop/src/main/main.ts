@@ -14,11 +14,22 @@ import {
 
 import { getSettings, isConfigured, saveSettings } from "./config";
 import { dragWatcher } from "./dragWatch";
+import {
+  acknowledgeClipboard,
+  Copied,
+  startClipboardWatch,
+  stopClipboardWatch,
+} from "./clipboardWatch";
 import { dropLogPath, logDrop, logLine } from "./dropLog";
-import { ingest } from "./ingest";
+import { ingest, ingestClipboard } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
 import { buildTree } from "../shared/listTree";
-import { IngestRequest, ListNode, Settings } from "../shared/types";
+import {
+  ClipboardIngestRequest,
+  IngestRequest,
+  ListNode,
+  Settings,
+} from "../shared/types";
 
 const OVERLAY_W = 272;
 const OVERLAY_H = 380;
@@ -121,6 +132,31 @@ function overlayPositionFor(cursor: { x: number; y: number }): {
   return { x: Math.round(x), y: Math.round(y) };
 }
 
+/** Auto-dismiss for the copy-triggered picker; a drag has no such timer. */
+let copyModeTimer: NodeJS.Timeout | null = null;
+
+function clearCopyModeTimer(): void {
+  if (copyModeTimer) {
+    clearTimeout(copyModeTimer);
+    copyModeTimer = null;
+  }
+}
+
+async function showOverlayForCopy(copied: Copied): Promise<void> {
+  if (!isConfigured()) {
+    return;
+  }
+  await showOverlay();
+  overlay?.webContents.send("overlay:copy-mode", copied.kind);
+  clearCopyModeTimer();
+  // Unlike a drag, nothing else will dismiss this, so it times out on its own
+  // rather than sitting over the user's screen indefinitely.
+  copyModeTimer = setTimeout(() => {
+    acknowledgeClipboard();
+    hideOverlay();
+  }, 9000);
+}
+
 async function showOverlay(): Promise<void> {
   if (!isConfigured()) {
     return;
@@ -141,6 +177,7 @@ async function showOverlay(): Promise<void> {
 }
 
 function hideOverlay(): void {
+  clearCopyModeTimer();
   if (overlay?.isVisible()) {
     overlay.webContents.send("overlay:hide");
     overlay.hide();
@@ -200,6 +237,16 @@ function buildTrayMenu(): Menu {
       },
     },
     {
+      label: "Save media copied in a browser",
+      type: "checkbox",
+      checked: s.copyToSave,
+      click: (item) => {
+        saveSettings({ copyToSave: item.checked });
+        syncClipboardWatch();
+        refreshTray();
+      },
+    },
+    {
       label: "Start with Windows",
       type: "checkbox",
       checked: s.launchAtLogin,
@@ -240,6 +287,15 @@ function refreshTray(): void {
   );
 }
 
+/** Starts or stops the copy watcher to match the current settings. */
+function syncClipboardWatch(): void {
+  if (getSettings().copyToSave && isConfigured()) {
+    startClipboardWatch((copied) => void showOverlayForCopy(copied));
+  } else {
+    stopClipboardWatch();
+  }
+}
+
 /** Keeps the most-recently-used list at the top of the picker next time. */
 function rememberListUse(listId: string): void {
   const recentLists = { ...getSettings().recentLists, [listId]: Date.now() };
@@ -258,6 +314,7 @@ function registerIpc(): void {
   ipcMain.handle("settings:save", (_e, patch: Partial<Settings>): Settings => {
     const next = saveSettings(patch);
     refreshTray();
+    syncClipboardWatch();
     return next;
   });
   ipcMain.handle("settings:test", () => testConnection());
@@ -300,6 +357,38 @@ function registerIpc(): void {
   // A drag that carried no data at all (some sites drag an empty element).
   // The drag is over by now, so taking focus is safe and lets the panel read
   // a Ctrl+V directly instead of hijacking a global shortcut.
+  ipcMain.handle(
+    "clipboard:save",
+    async (_e, req: ClipboardIngestRequest) => {
+      clearCopyModeTimer();
+      acknowledgeClipboard();
+      hideOverlay();
+      const result = await ingestClipboard(req);
+      logLine(
+        `copy-to-save -> ${result.ok ? "saved" : `FAILED: ${result.error}`}`,
+      );
+      if (result.ok && req.listId) {
+        rememberListUse(req.listId);
+      }
+      if (result.ok) {
+        notify(
+          result.alreadyExists ? "Already saved" : "Saved to Karakeep",
+          result.listName
+            ? `Filed into ${result.listName}.`
+            : "Bookmark created.",
+        );
+      } else {
+        notify("Karakeep upload failed", result.error ?? "Unknown error");
+      }
+      return result;
+    },
+  );
+
+  ipcMain.on("clipboard:dismiss", () => {
+    acknowledgeClipboard();
+    hideOverlay();
+  });
+
   ipcMain.on("drop:empty", (_e, target: { listName: string | null }) => {
     logLine(`drop carried no data; list=${target.listName ?? "(none)"}`);
     hideOverlay();
@@ -341,7 +430,11 @@ app.whenReady().then(() => {
 
   overlay = createOverlay();
 
-  dragWatcher.on("dragstart", () => void showOverlay());
+  dragWatcher.on("dragstart", () => {
+    // A drag supersedes a copy prompt that's still on screen.
+    clearCopyModeTimer();
+    void showOverlay();
+  });
   dragWatcher.on("dragend", () => {
     // The renderer's drop handler runs a beat after the OS mouseup, so give it
     // a moment to claim the drag before tearing the panel down.
@@ -351,6 +444,8 @@ app.whenReady().then(() => {
       }
     }, 250);
   });
+
+  syncClipboardWatch();
 
   try {
     dragWatcher.start();
@@ -372,6 +467,7 @@ app.on("second-instance", openSettings);
 app.on("window-all-closed", () => undefined);
 
 app.on("before-quit", () => {
+  stopClipboardWatch();
   try {
     dragWatcher.stop();
   } catch {
