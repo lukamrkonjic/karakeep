@@ -18,7 +18,7 @@ quick to resolve.
 - **~8 files were substantially reworked** and are the real conflict risk on
   a `git merge upstream/main`. They're called out explicitly below with
   guidance on how to reconcile them.
-- **One real migration.** `0086_add_list_position.sql` adds a `position`
+- **One real migration.** `0094_add_list_position.sql` adds a `position`
   column to `bookmarkLists` (list drag-to-reorder) and backfills it from
   `createdAt` for existing rows. A separate additive `AssetTypes` enum value
   (video thumbnails, `packages/db/schema.ts`) needed no migration at all —
@@ -45,8 +45,36 @@ git fetch upstream
    pnpm turbo --no-daemon typecheck lint format --continue
    pnpm --filter @karakeep/trpc test
    ```
+   If the merge touched `packages/db/drizzle/`, also confirm the snapshot
+   chain is intact — this must print *"No schema changes, nothing to
+   migrate"*:
+   ```bash
+   pnpm --filter @karakeep/db exec drizzle-kit generate
+   ```
 5. Push → wait for **Build Fork Image** to go green → deploy the new tag on
    the NAS (Container Manager → YAML → bump the image tag → Build).
+
+### Note for checkouts on Windows
+
+Git here runs with `core.autocrlf=true`, so every file lands in the working
+tree with CRLF endings while `oxfmt` and the OpenAPI generator both emit LF.
+That makes two of the checks above fail on *every* package — including ones
+the merge never touched — for reasons that have nothing to do with the code:
+
+- `format` (`oxfmt --check`) reports issues repo-wide.
+- `pnpm run --filter @karakeep/open-api check` exits 1 with no message.
+
+Neither is a real failure, and neither should be "fixed" by reformatting the
+repo. To check them meaningfully, run the formatter/generator in write mode
+and then look at `git diff` — git normalises line endings through the index,
+so an empty diff means the content was already correct:
+
+```bash
+npx oxfmt <the files you changed> && git diff --stat -- <those files>
+```
+
+The same applies to the husky pre-commit hook, which runs the OpenAPI check;
+`git commit --no-verify` is the pragmatic way through it on this machine.
 
 ---
 
@@ -68,7 +96,7 @@ git fetch upstream
 | `apps/web/components/dashboard/preview/BookmarkListBadges.tsx` | Clickable badges in the preview modal showing which list(s) a bookmark belongs to |
 | `apps/web/lib/list-drag.ts` | HTML5 drag-and-drop MIME constant for reordering sidebar lists (distinct from `bookmark-drag.ts`, which is for dragging bookmarks *onto* a list) |
 | `apps/web/components/dashboard/lists/ListSubfolders.tsx` | Eagle-style row of subfolder tiles shown at the top of a parent list's page, above its bookmarks |
-| `packages/db/drizzle/0086_add_list_position.sql` | Real migration: adds `bookmarkLists.position` (real, not-null, default 0) + an index, then backfills existing rows from `createdAt` so they keep their creation order instead of all tying at 0 |
+| `packages/db/drizzle/0094_add_list_position.sql` | Real migration: adds `bookmarkLists.position` (real, not-null, default 0) + an index, then backfills existing rows from `createdAt` so they keep their creation order instead of all tying at 0. **Was `0086_` until the first upstream merge, which brought its own `0086`–`0093`.** When renumbering a fork migration that is already deployed, keep its original `when` in `meta/_journal.json` (here `1782916466061`) and rebuild its snapshot on top of the new predecessor: drizzle applies any migration whose journal `when` exceeds the newest `created_at` in `__drizzle_migrations`, so an unchanged timestamp is what stops a live database re-running an `ALTER TABLE` that would fail. Confirm with `drizzle-kit generate` — it must report *no schema changes*. |
 | `apps/web/lib/sidebarCollapse.ts` | Zustand store (with `persist` middleware) for whether the desktop sidebar is folded in — `{ collapsed, toggle }` |
 | `apps/web/components/shared/sidebar/SidebarCollapseWrapper.tsx` | Wraps the sidebar `<aside>`; collapses its width to 0 (overflow-hidden, animated) instead of unmounting it, so its scroll position/state survives a fold in/out |
 | `apps/web/components/shared/sidebar/KarakeepLogoToggle.tsx` | The header logo doubles as the sidebar fold in/out toggle — replaced the old `<Link>` back to the home page entirely |
@@ -82,11 +110,11 @@ git fetch upstream
 | `apps/web/components/dashboard/ErrorFallback.tsx`, `bookmarks/NoBookmarksBanner.tsx` | Removed border; kept a `bg-muted/40` panel for definition |
 | `apps/web/components/dashboard/GlobalActions.tsx` | Added `<NewBookmarkDialog />` to the top header's action icons |
 | `apps/web/components/dashboard/bookmarks/BookmarkActionBar.tsx` | Added an optional `className` prop (lets the masonry hover overlay force icons white) |
-| `apps/web/components/dashboard/bookmarks/BookmarkLayoutAdaptingCard.tsx` | Exported `MultiBookmarkSelector` so `MasonryMediaCard` can reuse it |
+| `apps/web/components/dashboard/bookmarks/BookmarkLayoutAdaptingCard.tsx` | Exported the bulk-selection overlay so `MasonryMediaCard` can reuse it. Upstream has since renamed it `MultiBookmarkSelector` → `BulkEditSelectionOverlay`; the fork took upstream's name and kept only the `export` |
 | `apps/web/components/dashboard/header/Header.tsx` | Removed bottom divider; 64px→80px tall; search bar/profile icon padding aligned to match the grid's own inset; the logo's `<Link>` was replaced by `<KarakeepLogoToggle>` (see below) |
 | `apps/web/components/dashboard/lists/ListHeader.tsx` | Added `<NewBookmarkDialog />` next to the `⋯` menu; icon hidden unless it's a real emoji |
-| `apps/web/components/shared/sidebar/Sidebar.tsx`, `SidebarLayout.tsx` | Removed the sidebar/content divider; `64px`→`80px` height calc (must match Header's new height everywhere it appears); top padding `16px`→`20px`. `SidebarLayout.tsx` also swapped its plain `<div>{sidebar}</div>` for `<SidebarCollapseWrapper>{sidebar}</SidebarCollapseWrapper>` (see 🟢 above) |
-| `apps/web/components/ui/button-group.tsx`, `calendar.tsx`, `command.tsx`, `input-group.tsx`, `input.tsx`, `select.tsx`, `switch.tsx`, `tabs.tsx` | Flat-design pass: removed border/shadow, added `bg-muted` where needed for definition |
+| `apps/web/components/shared/sidebar/Sidebar.tsx`, `SidebarLayout.tsx` | Removed the sidebar/content divider; `64px`→`80px` height calc (must match Header's new height everywhere it appears); top padding `16px`→`20px`; kept upstream's `xl:w-72`. Note the expanded width is duplicated in three places that must stay in sync — `Sidebar.tsx`, `SidebarCollapseWrapper.tsx` (which clips the aside, so a wider aside needs a wider wrapper) and `Header.tsx`'s logo block (`xl:w-[17rem]`). `SidebarLayout.tsx` also swapped its plain `<div>{sidebar}</div>` for `<SidebarCollapseWrapper>{sidebar}</SidebarCollapseWrapper>` (see 🟢 above) |
+| `apps/web/components/ui/calendar.tsx`, `command.tsx`, `input.tsx`, `select.tsx`, `switch.tsx`, `tabs.tsx` | Flat-design pass: removed border/shadow, added `bg-muted` where needed for definition. (`button-group.tsx` and `input-group.tsx` also got this pass but upstream has since deleted both — nothing imported them — and the fork accepted the deletion.) |
 | `apps/web/components/ui/card.tsx` | Removed border + shadow; background changed `bg-card`→`bg-muted` (bg-card is identical to the page background in light theme, so it was invisible) |
 | `packages/shared-react/components/ui/textarea.tsx` | Removed border; `bg-background`→`bg-muted` |
 | `apps/web/components/dashboard/preview/BookmarkPreview.tsx` | Added `<BookmarkListBadges bookmarkId={bookmark.id} />` to the title row |
@@ -116,8 +144,8 @@ git fetch upstream
 | `packages/sdk/src/karakeep-api.d.ts` | Hand-patched the 2 `assetType: "image" \| "pdf"` occurrences to include `"video"`, instead of a full `openapi-typescript` regenerate — the installed codegen version (7.8.0) reformats the entire ~6800-line file well beyond this change, so a full regenerate would bury the real diff in unrelated noise. Only re-run the generator wholesale if you're already touching this file for another reason. |
 | `apps/web/components/admin/BackgroundJobs.tsx` | Added "Generate missing video thumbnails" + "Regenerate all video thumbnails" buttons to the Asset Preprocessing job card (Settings → Admin → Background Jobs), and a "Cancel queued jobs" button to every queue card that supports it (crawler, inference, indexing, embeddings, asset preprocessing, video), each calling the mutations above |
 | `apps/workers/workers/videoWorker.ts` | After an auto-downloaded video (yt-dlp, e.g. embedded YouTube/X/Reddit videos) is saved, now also enqueues a thumbnail job — this path writes the asset straight to the DB and previously bypassed thumbnail generation entirely, unlike the manual-attach path |
-| `packages/trpc/testUtils.ts` | Added `AssetPreprocessingQueue` to the shared queue mock used by `defaultBeforeEach` — it was missing, so any trpc test that reached a real `.enqueue()` call for it would fail against the in-memory test DB (no `tasks` table); surfaced while adding a real test for `generateVideoThumbnails` |
-| `packages/trpc/routers/admin.test.ts` | Switched from a bespoke `buildTestContext` beforeEach to the shared `defaultBeforeEach` (picks up the queue mocks above); added tests for `generateVideoThumbnails` |
+| `packages/trpc/testUtils.ts` | *(No longer a fork change.)* The fork added `AssetPreprocessingQueue` to the shared queue mock; upstream has since added its own, wired to an observable `testQueueMocks.assetPreprocessingEnqueue`. **Merge trap:** git happily auto-merges both into the same object literal, and the duplicate key silently shadows upstream's mock with an anonymous `vi.fn()`, so assertions against it fail for no visible reason. Keep upstream's, drop ours. |
+| `packages/trpc/routers/admin.test.ts` | Adds tests for `generateVideoThumbnails` and `cancelQueuedJobs`. Uses upstream's own `beforeEach` (it clears mocks and installs the search/vectorStore mocks its tests need) — `defaultBeforeEach` isn't required here, because `testUtils.ts`'s `vi.mock("@karakeep/shared-server")` is hoisted to that module's top level and so applies to every test file importing it |
 
 ## 🔴 Substantially reworked files — highest conflict risk, check these first
 
@@ -132,7 +160,7 @@ git fetch upstream
 | `apps/web/components/dashboard/sidebar/AllLists.tsx` | Same chevron-reservation fix, for the sidebar tree; removed the default 📋/⭐ emoji icons on "All Lists"/"Favourites"; added `useDropTarget` (drag-and-drop true-move: `addToList` then `removeFromList` from the source list, using existing tRPC mutations — no backend change); passes `reorderable` to the owned-lists `CollapsibleBookmarkLists` (shared lists aren't reorderable — see below). | Same as above; also re-verify `useDropTarget`'s drop handler after merging. |
 | `apps/web/components/dashboard/lists/CollapsibleBookmarkLists.tsx` | Removed the two `.sort((a,b) => a.item.name.localeCompare(...))` alphabetical sorts, replaced with sorting by the new `position` field (descending — newest/most-recently-moved-up sorts first). Added `ReorderableSiblings`, a wrapper that adds HTML5 drag-and-drop reordering (with an insertion-line indicator) around a group of same-parent siblings, gated by a new `reorderable` prop (only the owned-lists tree passes `true` — reordering a shared list's row would silently reorder it for the owner too, since `position` lives on the same DB row regardless of who's viewing). | If upstream changes the sort or the recursion here, keep the `position`-based sort and re-wrap the sibling `.map()` calls (root-level and `ListItem`'s children) in `ReorderableSiblings`. |
 | `packages/trpc/models/lists.ts` | Added `List.getNextPosition()` (new lists get `max(siblings) + 1`, so newest sorts first) and `List.reorder()` (moves a list to a new index among its siblings; interpolates a new `position` between its new neighbors — or beyond the top/bottom edge — so only the moved row is touched, no renumbering). `create()` now calls `getNextPosition()`. | Additive — two new methods plus one line in `create()`. Should merge cleanly unless upstream restructures `create()`, in which case keep the `position` assignment. |
-| `packages/trpc/routers/lists.ts` | **Backend logic change, not cosmetic — two of them.** (1) Rewrote the `stats` procedure to batch all manual-list bookmark counts into a single grouped SQL query instead of issuing one query per list (the original perf fix). (2) `stats` now also rolls a parent (sub)folder's count up from everything nested under it (recursively, via each list's `parentId`), instead of showing only bookmarks added to the parent directly — most "parent" lists are pure organizational folders with 0 bookmarks of their own. (3) Added the `reorder` mutation (owner-only, see `List.reorder()` above). | **This is the one file where a careless merge could silently reintroduce a real performance bug or drop the rollup.** If upstream also touches `stats`, read both versions fully — don't take "theirs" by default. Smart lists still call `getSize()` individually; only manual-list counts are batched, and the rollup pass runs after. |
+| `packages/trpc/routers/lists.ts` | **Backend logic change, not cosmetic.** (1) `stats` rolls a parent (sub)folder's count up from everything nested under it (recursively, via each list's `parentId`), instead of showing only bookmarks added to the parent directly — most "parent" lists are pure organizational folders with 0 bookmarks of their own. (2) Added the `reorder` mutation (owner-only, see `List.reorder()` above). The fork's *other* `stats` change — batching all manual-list counts into one grouped SQL query instead of one query per list — is **no longer a fork change**: upstream landed the same optimisation as `List.getSizes()`, so the hand-rolled version was dropped in favour of theirs and the rollup now runs on top of it. | **The rollup is the part a careless merge silently drops.** If upstream touches `stats` again, read both versions fully — don't take "theirs" by default, since taking theirs wholesale reverts parent folders to showing 0. |
 | `packages/trpc/models/assets.ts` | `attachAsset()` now enqueues an `AssetPreprocessingQueue` job (with `assetId` set) whenever a `video` asset is attached, to generate a poster-frame thumbnail. `detachAsset()` now also deletes the orphaned `linkVideoThumbnail` companion asset when its `linkVideo` is detached. | If upstream changes `attachAsset`/`detachAsset`, keep both new blocks (the `if (input.asset.assetType === "video")` enqueue, and the thumbnail-cleanup block in `detachAsset`) and reapply around upstream's version. |
 | `apps/workers/workers/assetPreprocessingWorker.ts` | Added `extractAndSaveVideoThumbnail()`: probes the video's duration with `ffprobe` and seeks to **20%** in before grabbing a frame (`-ss` before `-i`, capped to 1280px wide, `-frames:v 1 -update 1`), falling back to a first-frame grab if the probe or seek fails. The 20% seek is the fix for **all-black thumbnails** — a naive first-frame grab captured the black title-card/fade-in that opens most music videos, so those rendered as black boxes in the feed (while the backfill still counted them as "has a thumbnail" since the row existed). `run()` branches early on `req.data.assetId` to target this specific-asset job type before the existing primary-asset logic (unchanged). Its asset-type gate uses the same `linkVideo`-OR-(`bookmarkAsset`-and-video-`contentType`) check as the admin query above (kept in sync manually — the two need slightly different data shapes). | Additive — a new function plus one early branch at the top of `run()`. Should merge cleanly unless upstream restructures `run()`'s dispatch, in which case keep the `req.data.assetId` branch and the new function. |
 | `apps/web/components/dashboard/bookmarks/BookmarkVideo.tsx` | Added `thumbnailAssetId` prop: renders the real poster-frame image (via `GatedImage`) behind the play-icon overlay instead of a flat black box; falls back to black if no thumbnail exists yet (older attachments, or extraction failed). | Should merge cleanly — additive prop + conditional render. |
