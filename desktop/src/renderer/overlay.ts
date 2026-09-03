@@ -208,6 +208,11 @@ function attachDropTarget(
 ): void {
   el.addEventListener("dragenter", (e) => {
     e.preventDefault();
+    api.diag(
+      `dragenter types=[${Array.from(e.dataTransfer?.types ?? []).join(", ")}] ` +
+        `items=${e.dataTransfer?.items.length ?? -1} ` +
+        `files=${e.dataTransfer?.files.length ?? -1}`,
+    );
     el.classList.add("over");
     cancelHoverTimer();
     if (hasKids && listId && !expanded.has(listId)) {
@@ -239,15 +244,75 @@ function attachDropTarget(
     el.classList.remove("over");
     cancelHoverTimer();
     if (!e.dataTransfer) {
+      api.diag("drop with NO dataTransfer at all");
       return;
     }
+    api.diag(
+      `drop types=[${Array.from(e.dataTransfer.types).join(", ")}] ` +
+        `items=${e.dataTransfer.items.length} files=${e.dataTransfer.files.length} ` +
+        `effect=${e.dataTransfer.dropEffect}/${e.dataTransfer.effectAllowed}`,
+    );
     setStatus(listName ? `Saving to ${listName}…` : "Saving…");
     void (async () => {
       const payload = await extractPayload(e.dataTransfer!);
+      // Some sites drag an element carrying nothing at all, so the drop
+      // arrives with zero types and zero files. There is nothing to parse;
+      // the only way through is to let the user paste instead.
+      if (payload.types.length === 0 && payload.files.length === 0) {
+        beginRescue(listId, listName);
+        return;
+      }
       await api.ingest({ payload, listId, listName });
     })();
   });
 }
+
+
+/* ------------------------------------------------------------------ *
+ * Rescue: a drag that carried nothing
+ * ------------------------------------------------------------------ */
+
+const rescueEl = document.getElementById("rescue")!;
+const panelEl = document.getElementById("panel")!;
+let rescueTarget: { listId: string | null; listName: string | null } | null =
+  null;
+
+function beginRescue(listId: string | null, listName: string | null): void {
+  rescueTarget = { listId, listName };
+  panelEl.classList.add("rescuing");
+  setStatus("That drag carried no data");
+  rescueEl.textContent = listName
+    ? `This site sent nothing with the drag. Copy the image (right-click → Copy Image), then press Ctrl+V to save it into ${listName}.`
+    : "This site sent nothing with the drag. Copy the image (right-click → Copy Image), then press Ctrl+V to save it.";
+  // Asks main for focus, so the keypress below actually reaches us.
+  api.beginRescue();
+}
+
+function endRescue(): void {
+  rescueTarget = null;
+  panelEl.classList.remove("rescuing");
+  api.endRescue();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!rescueTarget) {
+    return;
+  }
+  if (e.key === "Escape") {
+    endRescue();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+    e.preventDefault();
+    const target = rescueTarget;
+    rescueTarget = null;
+    setStatus("Saving from clipboard…");
+    void (async () => {
+      await api.ingestClipboard(target);
+      panelEl.classList.remove("rescuing");
+    })();
+  }
+});
 
 /* ------------------------------------------------------------------ *
  * Panel lifecycle
@@ -286,6 +351,8 @@ api.onOverlayShow(() => {
 
 api.onOverlayHide(() => {
   cancelHoverTimer();
+  rescueTarget = null;
+  panelEl.classList.remove("rescuing");
   for (const row of rows) {
     row.el.classList.remove("over");
   }

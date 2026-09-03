@@ -14,11 +14,16 @@ import {
 
 import { getSettings, isConfigured, saveSettings } from "./config";
 import { dragWatcher } from "./dragWatch";
-import { dropLogPath, logDrop } from "./dropLog";
-import { ingest } from "./ingest";
+import { dropLogPath, logDrop, logLine } from "./dropLog";
+import { ingest, ingestClipboard } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
 import { buildTree } from "../shared/listTree";
-import { IngestRequest, ListNode, Settings } from "../shared/types";
+import {
+  ClipboardIngestRequest,
+  IngestRequest,
+  ListNode,
+  Settings,
+} from "../shared/types";
 
 const OVERLAY_W = 272;
 const OVERLAY_H = 380;
@@ -52,13 +57,23 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
+/** Matches the renderer's --bg so the frame never flashes a different colour. */
+function panelBackground(): string {
+  return nativeTheme.shouldUseDarkColors ? "#191919" : "#ffffff";
+}
+
 function createOverlay(): BrowserWindow {
   const win = new BrowserWindow({
     width: OVERLAY_W,
     height: OVERLAY_H,
     show: false,
     frame: false,
-    transparent: true,
+    // Deliberately NOT transparent. A transparent window is a documented
+    // source of input quirks on Windows, and this panel is opaque anyway —
+    // Windows 11 rounds a frameless window's corners on its own. Drops were
+    // arriving with a completely empty DataTransfer while it was set.
+    backgroundColor: panelBackground(),
+    roundedCorners: true,
     resizable: false,
     movable: false,
     minimizable: false,
@@ -67,7 +82,7 @@ function createOverlay(): BrowserWindow {
     // Never take focus: stealing it mid-drag can cancel the drag outright.
     focusable: false,
     alwaysOnTop: true,
-    hasShadow: false,
+    hasShadow: true,
     webPreferences: {
       preload: join(__dirname, "../preload/preload.js"),
       contextIsolation: true,
@@ -135,6 +150,10 @@ function hideOverlay(): void {
     overlay.webContents.send("overlay:hide");
     overlay.hide();
   }
+  // Always drop back to non-focusable; the rescue prompt is the only thing
+  // that ever wants focus, and leaving it on would let the panel steal focus
+  // from the drag source on the next show.
+  overlay?.setFocusable(false);
 }
 
 function notify(title: string, body: string): void {
@@ -207,7 +226,16 @@ function buildTrayMenu(): Menu {
     { label: "Settings…", click: openSettings },
     {
       label: "Open drop log…",
-      click: () => void shell.openPath(dropLogPath()),
+      click: () => {
+        void (async () => {
+          const err = await shell.openPath(dropLogPath());
+          if (err) {
+            // No handler registered for the extension, or the file is gone —
+            // showing it in Explorer always works.
+            shell.showItemInFolder(dropLogPath());
+          }
+        })();
+      },
     },
     { type: "separator" },
     { label: "Quit", click: () => app.quit() },
@@ -274,6 +302,46 @@ function registerIpc(): void {
     return result;
   });
 
+  ipcMain.on("drop:diag", (_e, line: string) => {
+    logLine(line);
+  });
+
+  // A drag that carried no data at all (some sites drag an empty element).
+  // The drag is over by now, so taking focus is safe and lets the panel read
+  // a Ctrl+V directly instead of hijacking a global shortcut.
+  ipcMain.on("rescue:begin", () => {
+    dropHandled = true;
+    overlay?.setFocusable(true);
+    overlay?.focus();
+  });
+
+  ipcMain.on("rescue:end", () => {
+    hideOverlay();
+  });
+
+  ipcMain.handle(
+    "clipboard:ingest",
+    async (_e, req: ClipboardIngestRequest) => {
+      hideOverlay();
+      const result = await ingestClipboard(req);
+      logLine(
+        `clipboard save -> ${result.ok ? "saved" : `FAILED: ${result.error}`}`,
+      );
+      if (result.ok && req.listId) {
+        rememberListUse(req.listId);
+      }
+      if (result.ok) {
+        notify(
+          result.alreadyExists ? "Already saved" : "Saved to Karakeep",
+          result.listName ? `Filed into ${result.listName}.` : "Bookmark created.",
+        );
+      } else {
+        notify("Karakeep upload failed", result.error ?? "Unknown error");
+      }
+      return result;
+    },
+  );
+
   // The renderer tells us when the pointer leaves the panel entirely, so a
   // drag that passes over it on the way elsewhere doesn't leave it stuck open.
   ipcMain.on("overlay:dismiss", () => {
@@ -299,6 +367,7 @@ app.whenReady().then(() => {
     if (!next.isEmpty()) {
       tray?.setImage(next);
     }
+    overlay?.setBackgroundColor(panelBackground());
   });
 
   registerIpc();

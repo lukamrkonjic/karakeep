@@ -7,7 +7,7 @@ const { writeFileSync } = require("node:fs");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function shoot({ file, width, height, out, expand, over, theme }) {
+async function shoot({ file, width, height, out, expand, over, rescue, theme }) {
   // Forcing the source lets one run capture both themes; the renderers pick
   // it up through prefers-color-scheme exactly as they do from Windows.
   nativeTheme.themeSource = theme;
@@ -31,6 +31,16 @@ async function shoot({ file, width, height, out, expand, over, theme }) {
            ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); true`,
       );
       await sleep(300);
+    }
+    if (rescue) {
+      await win.webContents.executeJavaScript(`
+        const r = Array.from(document.querySelectorAll('.row'))
+          .find((x) => x.querySelector('.name')?.textContent === 'Colour');
+        const ev = new Event('drop', { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'dataTransfer', { value: new DataTransfer() });
+        r.dispatchEvent(ev);
+        true`);
+      await sleep(250);
     }
     if (over) {
       await win.webContents.executeJavaScript(
@@ -74,6 +84,15 @@ app.whenReady().then(async () => {
         out: `preview-overlay-${theme}-over.png`,
         expand: true,
         over: true,
+        theme,
+      });
+      await shoot({
+        file: "overlay.html",
+        width: 272,
+        height: 380,
+        out: `preview-rescue-${theme}.png`,
+        expand: true,
+        rescue: true,
         theme,
       });
       await shoot({

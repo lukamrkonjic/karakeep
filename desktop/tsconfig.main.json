@@ -1,0 +1,17 @@
+{
+  // Main process and preload. Deliberately NO "DOM" lib: main-process code
+  // has no document, and having DOM in scope silently resolves names like
+  // `Clipboard` to the browser's interface instead of Electron's.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/shared/types.ts",
+    "src/shared/listTree.ts",
+    "build.mjs"
+  ]
+}

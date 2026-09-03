@@ -131,6 +131,40 @@ app.whenReady().then(async () => {
     true,
   );
 
+  // A drop carrying nothing is the Pinterest case: the site drags an empty
+  // element, so there is no payload to parse and the only way through is to
+  // offer a paste instead of failing.
+  await js(`
+    window.__t.drop = (label, dt) => {
+      const r = window.__t.rowFor(label);
+      const ev = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'dataTransfer', { value: dt });
+      r.dispatchEvent(ev);
+    };
+    window.__t.drop('Colour', new DataTransfer());
+    true`);
+  await sleep(200);
+
+  check(
+    "an empty drop switches the panel to the paste rescue instead of failing",
+    await js(`document.getElementById('panel').classList.contains('rescuing')`),
+    true,
+  );
+  check(
+    "the rescue names the list you dropped on, so the target isn't lost",
+    await js(
+      `document.getElementById('rescue').textContent.includes('Colour')`,
+    ),
+    true,
+  );
+  check(
+    "Escape leaves the rescue",
+    await js(`
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.getElementById('panel').classList.contains('rescuing')`),
+    false,
+  );
+
   for (const f of failures) {
     console.error(f);
   }

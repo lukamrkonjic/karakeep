@@ -15,7 +15,22 @@ import { DropPayload } from "../shared/types";
 const MAX_BYTES = 256 * 1024;
 
 export function dropLogPath(): string {
-  return join(app.getPath("userData"), "drops.log");
+  // .txt, not .log: Windows has no default handler for .log, so
+  // shell.openPath silently does nothing and the log looks absent.
+  return join(app.getPath("userData"), "drops.txt");
+}
+
+/** Appends one raw line — used for the drag-event trace. */
+export function logLine(line: string): void {
+  try {
+    appendFileSync(
+      dropLogPath(),
+      `${new Date().toISOString()} ${line}\n`,
+      "utf-8",
+    );
+  } catch {
+    // Diagnostics must never break a drop.
+  }
 }
 
 export function logDrop(payload: DropPayload, outcome: string): void {

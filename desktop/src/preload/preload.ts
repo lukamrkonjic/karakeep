@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import {
+  ClipboardIngestRequest,
   ConnectionResult,
   IngestRequest,
   IngestResult,
@@ -18,6 +19,11 @@ const api = {
   ingest: (req: IngestRequest): Promise<IngestResult> =>
     ipcRenderer.invoke("drop:ingest", req),
   dismissOverlay: (): void => ipcRenderer.send("overlay:dismiss"),
+  diag: (line: string): void => ipcRenderer.send("drop:diag", line),
+  ingestClipboard: (req: ClipboardIngestRequest): Promise<IngestResult> =>
+    ipcRenderer.invoke("clipboard:ingest", req),
+  beginRescue: (): void => ipcRenderer.send("rescue:begin"),
+  endRescue: (): void => ipcRenderer.send("rescue:end"),
   onOverlayShow: (fn: () => void): void => {
     ipcRenderer.on("overlay:show", () => fn());
   },

@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("karakeep", {
   getLists: async () => lists,
   ingest: async () => ({ ok: true }),
   dismissOverlay: () => {},
+  diag: () => {},
+  ingestClipboard: async () => ({ ok: true }),
+  beginRescue: () => {},
+  endRescue: () => {},
   onOverlayShow: () => {},
   onOverlayHide: () => {},
 });

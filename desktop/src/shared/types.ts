@@ -85,6 +85,12 @@ export interface IngestRequest {
   listName: string | null;
 }
 
+/** Saving whatever is on the clipboard, used to rescue a data-less drag. */
+export interface ClipboardIngestRequest {
+  listId: string | null;
+  listName: string | null;
+}
+
 export interface IngestResult {
   ok: boolean;
   bookmarkId?: string;
