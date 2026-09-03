@@ -28,11 +28,17 @@ export interface Settings {
   /** Master switch for the global drag watcher. */
   overlayEnabled: boolean;
   /**
-   * Watch for media links/images copied in a browser and offer to save them.
-   * The only way in for sites whose drags carry no data (Pinterest), and for
-   * media that can't be dragged at all (a YouTube video).
+   * How a copied link or image gets saved — the way in for sites whose drags
+   * carry no data (Pinterest) and for media that can't be dragged at all (a
+   * YouTube video).
+   *
+   * "hotkey" never shows anything you didn't ask for, so it's the default.
+   * "auto" opens the picker by itself whenever media is copied in a browser,
+   * which is fewer keystrokes but appears unbidden.
    */
-  copyToSave: boolean;
+  copyMode: "off" | "hotkey" | "auto";
+  /** Accelerator for copyMode "hotkey", in Electron's syntax. */
+  copyHotkey: string;
   /** Start with Windows. Off unless the user turns it on. */
   launchAtLogin: boolean;
   /**
@@ -53,7 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
   dragThreshold: 45,
   overlayEnabled: true,
-  copyToSave: true,
+  copyMode: "hotkey",
+  copyHotkey: "Control+Alt+S",
   launchAtLogin: false,
   recentLists: {},
   triggerMode: "always",

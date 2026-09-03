@@ -3,6 +3,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  globalShortcut,
   Menu,
   nativeImage,
   nativeTheme,
@@ -17,6 +18,7 @@ import { dragWatcher } from "./dragWatch";
 import {
   acknowledgeClipboard,
   Copied,
+  readClipboard,
   startClipboardWatch,
   stopClipboardWatch,
 } from "./clipboardWatch";
@@ -237,14 +239,53 @@ function buildTrayMenu(): Menu {
       },
     },
     {
-      label: "Save media copied in a browser",
-      type: "checkbox",
-      checked: s.copyToSave,
-      click: (item) => {
-        saveSettings({ copyToSave: item.checked });
-        syncClipboardWatch();
-        refreshTray();
+      label: "Save what I copied",
+      enabled: isConfigured(),
+      click: () => {
+        void (async () => {
+          const copied = await readClipboard();
+          if (copied) {
+            await showOverlayForCopy(copied);
+          } else {
+            notify("Nothing to save", "Copy an image or a link first.");
+          }
+        })();
       },
+    },
+    {
+      label: "Saving a copied link",
+      submenu: [
+        {
+          label: `On the shortcut (${s.copyHotkey})`,
+          type: "radio",
+          checked: s.copyMode === "hotkey",
+          click: () => {
+            saveSettings({ copyMode: "hotkey" });
+            syncCopyMode();
+            refreshTray();
+          },
+        },
+        {
+          label: "Automatically, for media copied in a browser",
+          type: "radio",
+          checked: s.copyMode === "auto",
+          click: () => {
+            saveSettings({ copyMode: "auto" });
+            syncCopyMode();
+            refreshTray();
+          },
+        },
+        {
+          label: "Never",
+          type: "radio",
+          checked: s.copyMode === "off",
+          click: () => {
+            saveSettings({ copyMode: "off" });
+            syncCopyMode();
+            refreshTray();
+          },
+        },
+      ],
     },
     {
       label: "Start with Windows",
@@ -287,12 +328,45 @@ function refreshTray(): void {
   );
 }
 
-/** Starts or stops the copy watcher to match the current settings. */
-function syncClipboardWatch(): void {
-  if (getSettings().copyToSave && isConfigured()) {
+/**
+ * Applies the current copy-save mode: a global hotkey (nothing ever appears
+ * unbidden), an automatic watcher, or neither.
+ */
+function syncCopyMode(): void {
+  const { copyMode, copyHotkey } = getSettings();
+  stopClipboardWatch();
+  globalShortcut.unregisterAll();
+
+  if (!isConfigured() || copyMode === "off") {
+    return;
+  }
+
+  if (copyMode === "auto") {
     startClipboardWatch((copied) => void showOverlayForCopy(copied));
-  } else {
-    stopClipboardWatch();
+    return;
+  }
+
+  try {
+    const ok = globalShortcut.register(copyHotkey, () => {
+      void (async () => {
+        // Explicit request, so anything saveable counts — no guessing about
+        // whether the user meant it.
+        const copied = await readClipboard();
+        if (!copied) {
+          notify(
+            "Nothing to save",
+            "Copy an image or a link first, then press the shortcut again.",
+          );
+          return;
+        }
+        await showOverlayForCopy(copied);
+      })();
+    });
+    if (!ok) {
+      logLine(`could not register copy hotkey "${copyHotkey}" (already taken)`);
+    }
+  } catch (e) {
+    logLine(`bad copy hotkey "${copyHotkey}": ${String(e)}`);
   }
 }
 
@@ -314,7 +388,7 @@ function registerIpc(): void {
   ipcMain.handle("settings:save", (_e, patch: Partial<Settings>): Settings => {
     const next = saveSettings(patch);
     refreshTray();
-    syncClipboardWatch();
+    syncCopyMode();
     return next;
   });
   ipcMain.handle("settings:test", () => testConnection());
@@ -445,7 +519,7 @@ app.whenReady().then(() => {
     }, 250);
   });
 
-  syncClipboardWatch();
+  syncCopyMode();
 
   try {
     dragWatcher.start();
@@ -468,6 +542,7 @@ app.on("window-all-closed", () => undefined);
 
 app.on("before-quit", () => {
   stopClipboardWatch();
+  globalShortcut.unregisterAll();
   try {
     dragWatcher.stop();
   } catch {

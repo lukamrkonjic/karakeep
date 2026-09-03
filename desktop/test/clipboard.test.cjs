@@ -2,7 +2,10 @@
 // the copy happened in a browser. Getting either wrong means the picker
 // interrupts ordinary work, which is the whole reason the gates exist.
 const { app, clipboard } = require("electron");
-const { classifyClipboard } = require("../dist/main/clipboardWatch.cjs");
+const {
+  classifyClipboard,
+  readClipboard,
+} = require("../dist/main/clipboardWatch.cjs");
 
 const failures = [];
 let passed = 0;
@@ -38,6 +41,20 @@ app.whenReady().then(async () => {
   check("a windows file path", await kindOf("C:\Users\Luka\notes.txt"), null);
   check("a bare domain", await kindOf("https://example.com"), null);
   check("an email address", await kindOf("someone@example.com"), null);
+
+  // The hotkey path is an explicit request, so it accepts anything saveable
+  // — the strict gate exists only to stop "auto" mode interrupting.
+  const explicit = async (text) => {
+    await clipboard.writeText(text);
+    const r = await readClipboard();
+    return r ? r.kind : null;
+  };
+  check("hotkey accepts an ordinary link the auto gate rejects",
+    await explicit("https://news.ycombinator.com/item?id=1"), "url");
+  check("hotkey accepts a media link too",
+    await explicit("https://i.pinimg.com/1200x/a.jpg"), "url");
+  check("hotkey still refuses plain prose",
+    await explicit("some notes"), null);
 
   for (const f of failures) console.error(f);
   console.log(`\n  ${passed} passed, ${failures.length} failed\n`);

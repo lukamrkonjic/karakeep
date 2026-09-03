@@ -108,20 +108,37 @@ async function fingerprint(): Promise<string> {
   return `${text}|${hasImage ? "img" : ""}`;
 }
 
-export async function classifyClipboard(): Promise<Copied | null> {
+/**
+ * What's on the clipboard, with no judgement about whether it was meant for
+ * us. Used by the hotkey, where the user asked explicitly.
+ */
+export async function readClipboard(): Promise<Copied | null> {
   const text = (await clipboard.readText()).trim();
-  if (text) {
-    if (MEDIA_FILE_RE.test(text) || MEDIA_PAGE_RES.some((re) => re.test(text))) {
-      return { kind: "url", url: text };
-    }
-    // Text that isn't a media link wins over a bitmap still sitting on the
-    // clipboard, so copying a sentence never resurfaces an older image.
-    return null;
+  if (/^https?:\/\//i.test(text)) {
+    return { kind: "url", url: text };
   }
-  if (await clipboard.has(IMAGE_MIME)) {
+  if (!text && (await clipboard.has(IMAGE_MIME))) {
     return { kind: "image", url: null };
   }
   return null;
+}
+
+/**
+ * The stricter test used by "auto" mode, where nothing was asked for and a
+ * false positive puts a window over the user's work.
+ */
+export async function classifyClipboard(): Promise<Copied | null> {
+  const copied = await readClipboard();
+  if (!copied) {
+    return null;
+  }
+  if (copied.kind === "image") {
+    return copied;
+  }
+  const url = copied.url ?? "";
+  const isMedia =
+    MEDIA_FILE_RE.test(url) || MEDIA_PAGE_RES.some((re) => re.test(url));
+  return isMedia ? copied : null;
 }
 
 /** Reads a copied bitmap as PNG bytes, or null when there isn't one. */

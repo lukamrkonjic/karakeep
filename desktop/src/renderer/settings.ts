@@ -17,7 +17,8 @@ const apiKey = $<HTMLInputElement>("apiKey");
 const triggerMode = $<HTMLSelectElement>("triggerMode");
 const modifierKey = $<HTMLSelectElement>("modifierKey");
 const dragThreshold = $<HTMLInputElement>("dragThreshold");
-const copyToSave = $<HTMLSelectElement>("copyToSave");
+const copyMode = $<HTMLSelectElement>("copyMode");
+const copyHotkey = $<HTMLInputElement>("copyHotkey");
 const result = $<HTMLSpanElement>("result");
 
 function syncModifierVisibility(): void {
@@ -38,7 +39,8 @@ async function load(): Promise<void> {
   triggerMode.value = s.triggerMode;
   modifierKey.value = s.modifierKey;
   dragThreshold.value = String(s.dragThreshold);
-  copyToSave.value = String(s.copyToSave);
+  copyMode.value = s.copyMode;
+  copyHotkey.value = s.copyHotkey;
   syncModifierVisibility();
 }
 
@@ -48,7 +50,8 @@ function collect(): Partial<Settings> {
     apiKey: apiKey.value.trim(),
     triggerMode: triggerMode.value as Settings["triggerMode"],
     modifierKey: modifierKey.value as Settings["modifierKey"],
-    copyToSave: copyToSave.value === "true",
+    copyMode: copyMode.value as Settings["copyMode"],
+    copyHotkey: copyHotkey.value.trim() || "Control+Alt+S",
     dragThreshold: Math.min(
       400,
       Math.max(10, Number(dragThreshold.value) || 45),
