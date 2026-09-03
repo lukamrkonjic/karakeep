@@ -14,7 +14,6 @@ import {
 } from "electron";
 
 import { getSettings, isConfigured, saveSettings } from "./config";
-import { dragWatcher } from "./dragWatch";
 import {
   acknowledgeClipboard,
   Copied,
@@ -22,30 +21,20 @@ import {
   startClipboardWatch,
   stopClipboardWatch,
 } from "./clipboardWatch";
-import { dropLogPath, logDrop, logLine } from "./dropLog";
-import { ingest, ingestClipboard } from "./ingest";
+import { dropLogPath, logLine } from "./dropLog";
+import { ingestClipboard } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
 import { buildTree } from "../shared/listTree";
-import {
-  ClipboardIngestRequest,
-  IngestRequest,
-  ListNode,
-  Settings,
-} from "../shared/types";
+import { ClipboardIngestRequest, ListNode, Settings } from "../shared/types";
 
 const OVERLAY_W = 272;
 const OVERLAY_H = 380;
-/**
- * How far the panel sits from the cursor. Small on purpose: the point is to
- * flick the drag a centimetre and be on a list, not to cross the screen.
- */
+/** How far the panel sits from the cursor when it opens. */
 const CURSOR_OFFSET = 10;
 
 let tray: Tray | null = null;
 let overlay: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
-/** True between a drop landing on the overlay and the drag ending. */
-let dropHandled = false;
 
 /**
  * A single-colour mark, inverted for the theme so it stays legible on either
@@ -59,8 +48,8 @@ const iconPath = (): string =>
       : "../renderer/icon-dark.png",
   );
 
-// A second instance would install a second global hook and fight the first
-// over the overlay, so hand off to the running one instead.
+// A second instance would fight the first over the tray icon and the global
+// shortcut, so hand off to the one already running.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
@@ -87,7 +76,8 @@ function createOverlay(): BrowserWindow {
     minimizable: false,
     maximizable: false,
     skipTaskbar: true,
-    // Never take focus: stealing it mid-drag can cancel the drag outright.
+    // Focus is taken only while the picker is open (see showOverlayForCopy),
+    // so it can dismiss on blur like a menu.
     focusable: false,
     alwaysOnTop: true,
     hasShadow: true,
@@ -113,10 +103,9 @@ function createOverlay(): BrowserWindow {
 
 /**
  * Places the panel just off the cursor, flipping to the other side when it
- * would run off the display rather than sliding along the edge — sliding is
- * what strands it far from the cursor on a wide monitor.
- *
- * `cursor` must already be in device-independent pixels; see showOverlay.
+ * would run off the display rather than sliding along the edge. Clicking the
+ * tray puts the cursor at the bottom-right, so in practice it opens up and to
+ * the left.
  */
 function overlayPositionFor(cursor: { x: number; y: number }): {
   x: number;
@@ -141,7 +130,7 @@ function overlayPositionFor(cursor: { x: number; y: number }): {
   return { x: Math.round(x), y: Math.round(y) };
 }
 
-/** Auto-dismiss for the copy-triggered picker; a drag has no such timer. */
+/** Failsafe dismissal for the picker, in case blur never arrives. */
 let copyModeTimer: NodeJS.Timeout | null = null;
 
 function clearCopyModeTimer(): void {
@@ -158,9 +147,8 @@ async function showOverlayForCopy(copied: Copied): Promise<void> {
   await showOverlay();
   overlay?.webContents.send("overlay:copy-mode", copied.kind);
 
-  // A drag can't be interrupted by taking focus, but this isn't a drag — the
-  // user clicked the tray. Focus lets the panel close the way any menu does:
-  // click elsewhere, or press Escape.
+  // Focus lets the panel close the way any menu does: click elsewhere, or
+  // press Escape.
   overlay?.setFocusable(true);
   overlay?.focus();
 
@@ -177,23 +165,16 @@ async function showOverlay(): Promise<void> {
     return;
   }
   overlay ??= createOverlay();
-  dropHandled = false;
 
-  // Deliberately not the hook's coordinates: uiohook reports physical pixels
-  // while setBounds expects device-independent ones, so on this machine's
-  // 150%-scaled display every position was off by half again and ended up
-  // pinned to the right edge. Electron's own cursor read is already in DIP.
   const cursor = screen.getCursorScreenPoint();
   const pos = overlayPositionFor(cursor);
   overlay.setBounds({ ...pos, width: OVERLAY_W, height: OVERLAY_H });
   overlay.webContents.send("overlay:show");
-  // showInactive keeps focus with the drag source.
   overlay.showInactive();
 }
 
 function hideOverlay(): void {
   clearCopyModeTimer();
-  // Back to non-focusable, so the next drag can't have its focus stolen.
   overlay?.setFocusable(false);
   if (overlay?.isVisible()) {
     overlay.webContents.send("overlay:hide");
@@ -244,15 +225,6 @@ function buildTrayMenu(): Menu {
       enabled: false,
     },
     { type: "separator" },
-    {
-      label: "Pop up while dragging",
-      type: "checkbox",
-      checked: s.overlayEnabled,
-      click: (item) => {
-        saveSettings({ overlayEnabled: item.checked });
-        refreshTray();
-      },
-    },
     {
       label: "Save what I copied  (or just left-click this icon)",
       enabled: isConfigured(),
@@ -426,36 +398,6 @@ function registerIpc(): void {
     return buildTree(await fetchLists(), getSettings().recentLists);
   });
 
-  ipcMain.handle("drop:ingest", async (_e, req: IngestRequest) => {
-    dropHandled = true;
-    hideOverlay();
-    const result = await ingest(req);
-    logDrop(req.payload, result.ok ? "saved" : `FAILED: ${result.error}`);
-    if (result.ok && req.listId) {
-      rememberListUse(req.listId);
-    }
-    if (result.ok) {
-      notify(
-        result.alreadyExists ? "Already saved" : "Saved to Karakeep",
-        result.alreadyExists
-          ? "That one was already in your library."
-          : result.listName
-            ? `Filed into ${result.listName}.`
-            : "Bookmark created.",
-      );
-    } else {
-      notify("Karakeep upload failed", result.error ?? "Unknown error");
-    }
-    return result;
-  });
-
-  ipcMain.on("drop:diag", (_e, line: string) => {
-    logLine(line);
-  });
-
-  // A drag that carried no data at all (some sites drag an empty element).
-  // The drag is over by now, so taking focus is safe and lets the panel read
-  // a Ctrl+V directly instead of hijacking a global shortcut.
   ipcMain.handle(
     "clipboard:save",
     async (_e, req: ClipboardIngestRequest) => {
@@ -488,22 +430,6 @@ function registerIpc(): void {
     hideOverlay();
   });
 
-  ipcMain.on("drop:empty", (_e, target: { listName: string | null }) => {
-    logLine(`drop carried no data; list=${target.listName ?? "(none)"}`);
-    hideOverlay();
-    notify(
-      "That drag carried no data",
-      "The site attached nothing to the drag, so there was nothing to save.",
-    );
-  });
-
-  // The renderer tells us when the pointer leaves the panel entirely, so a
-  // drag that passes over it on the way elsewhere doesn't leave it stuck open.
-  ipcMain.on("overlay:dismiss", () => {
-    if (!dropHandled) {
-      hideOverlay();
-    }
-  });
 }
 
 app.whenReady().then(() => {
@@ -529,31 +455,7 @@ app.whenReady().then(() => {
 
   overlay = createOverlay();
 
-  dragWatcher.on("dragstart", () => {
-    // A drag supersedes a copy prompt that's still on screen.
-    clearCopyModeTimer();
-    void showOverlay();
-  });
-  dragWatcher.on("dragend", () => {
-    // The renderer's drop handler runs a beat after the OS mouseup, so give it
-    // a moment to claim the drag before tearing the panel down.
-    setTimeout(() => {
-      if (!dropHandled) {
-        hideOverlay();
-      }
-    }, 250);
-  });
-
   syncCopyMode();
-
-  try {
-    dragWatcher.start();
-  } catch (e) {
-    notify(
-      "Karakeep Drop",
-      `Global drag detection unavailable: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
 
   if (!isConfigured()) {
     openSettings();
@@ -568,9 +470,4 @@ app.on("window-all-closed", () => undefined);
 app.on("before-quit", () => {
   stopClipboardWatch();
   globalShortcut.unregisterAll();
-  try {
-    dragWatcher.stop();
-  } catch {
-    // Shutting down anyway.
-  }
 });

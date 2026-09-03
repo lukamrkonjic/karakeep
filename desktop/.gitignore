@@ -2,5 +2,3 @@ node_modules/
 dist/
 release/
 preview-*.png
-tools/bookmarklet.txt
-tools/install-bookmarklet.html

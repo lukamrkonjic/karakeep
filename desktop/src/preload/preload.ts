@@ -3,7 +3,6 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   ClipboardIngestRequest,
   ConnectionResult,
-  IngestRequest,
   IngestResult,
   ListNode,
   Settings,
@@ -16,12 +15,6 @@ const api = {
   testConnection: (): Promise<ConnectionResult> =>
     ipcRenderer.invoke("settings:test"),
   getLists: (): Promise<ListNode[]> => ipcRenderer.invoke("lists:get"),
-  ingest: (req: IngestRequest): Promise<IngestResult> =>
-    ipcRenderer.invoke("drop:ingest", req),
-  dismissOverlay: (): void => ipcRenderer.send("overlay:dismiss"),
-  diag: (line: string): void => ipcRenderer.send("drop:diag", line),
-  dropWasEmpty: (req: ClipboardIngestRequest): void =>
-    ipcRenderer.send("drop:empty", req),
   saveClipboard: (req: ClipboardIngestRequest): Promise<IngestResult> =>
     ipcRenderer.invoke("clipboard:save", req),
   dismissClipboard: (): void => ipcRenderer.send("clipboard:dismiss"),

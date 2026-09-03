@@ -2,9 +2,8 @@ import { basename } from "node:path";
 import { clipboard } from "electron";
 import {
   ClipboardIngestRequest,
-  DropPayload,
-  IngestRequest,
   IngestResult,
+  SaveSource,
 } from "../shared/types";
 import { readClipboardImage } from "./clipboardWatch";
 import {
@@ -158,49 +157,66 @@ async function downloadMedia(
 }
 
 /**
- * Picks the best thing in a drop. Real bytes always beat a URL: they're
- * already local, and they can't 403.
+ * Saves one thing into an optional list. Bytes are uploaded as they are; a
+ * URL is fetched first and only falls back to a link bookmark when it isn't
+ * media the server would accept as a bookmark's own content.
  */
-async function resolveMedia(payload: DropPayload): Promise<Media | null> {
-  for (const file of payload.files) {
-    const bytes = new Uint8Array(file.bytes);
-    const mime = sniffMime(bytes) ?? normaliseMime(file.type) ?? "";
-    if (ASSET_KIND_BY_MIME[mime]) {
-      return {
-        bytes,
-        mime,
-        fileName: fileNameFor(null, mime, file.name || "dropped"),
-        sourceUrl: payload.sourcePageUrl,
-      };
-    }
-  }
+export async function saveSource(
+  source: SaveSource,
+  target: ClipboardIngestRequest,
+): Promise<IngestResult> {
+  try {
+    let bookmark: { id: string; alreadyExists?: boolean };
 
-  let lastError: Error | null = null;
-  for (const url of payload.urls) {
-    try {
-      // Browsers rarely hand a native drop the originating page URL, but most
-      // hotlink checks only compare hosts — so fall back to the media's own
-      // origin rather than sending no Referer at all.
-      let referer = payload.sourcePageUrl;
-      if (!referer && !url.startsWith("data:")) {
-        try {
-          referer = new URL(url).origin + "/";
-        } catch {
-          referer = null;
+    let media: Media | null = null;
+    let downloadError: string | null = null;
+
+    if (source.bytes) {
+      const mime = sniffMime(source.bytes) ?? "image/png";
+      media = {
+        bytes: source.bytes,
+        mime,
+        fileName: fileNameFor(null, mime, "clipboard"),
+        sourceUrl: null,
+      };
+    } else if (source.url) {
+      try {
+        // Most hotlink checks only compare hosts, so the media's own origin
+        // works as a Referer when we have nothing better.
+        let referer: string | null = null;
+        if (!source.url.startsWith("data:")) {
+          try {
+            referer = new URL(source.url).origin + "/";
+          } catch {
+            referer = null;
+          }
         }
+        media = await downloadMedia(source.url, referer);
+      } catch (e) {
+        downloadError = e instanceof Error ? e.message : String(e);
       }
-      const media = await downloadMedia(url, referer);
-      if (media) {
-        return media;
-      }
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
     }
+
+    if (media) {
+      const asset = await uploadAsset(media.bytes, media.fileName, media.mime);
+      bookmark = await createAssetBookmark({
+        asset,
+        assetType: ASSET_KIND_BY_MIME[media.mime]!,
+        title: source.title,
+        sourceUrl: media.sourceUrl,
+      });
+    } else if (source.url) {
+      // Not a media file — a YouTube page, say. Save the link and let the
+      // server's crawler do the rest.
+      bookmark = await createLinkBookmark(source.url, source.title);
+    } else {
+      return { ok: false, error: downloadError ?? "Nothing to save." };
+    }
+
+    return await fileInto(bookmark, target);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-  if (lastError) {
-    throw lastError;
-  }
-  return null;
 }
 
 /** Adds a freshly created bookmark to the chosen list, if there was one. */
@@ -222,9 +238,9 @@ async function fileInto(
 }
 
 /**
- * Saves whatever is on the clipboard. A copied bitmap goes up as-is; a copied
- * URL takes the same route a dropped one does, so an image link becomes a
- * real asset and a YouTube link becomes a bookmark the server can crawl.
+ * Saves whatever is on the clipboard. A copied URL is fetched (an image link
+ * becomes a real asset; a YouTube link becomes a bookmark the server crawls);
+ * a copied bitmap goes up as-is.
  */
 export async function ingestClipboard(
   req: ClipboardIngestRequest,
@@ -232,88 +248,13 @@ export async function ingestClipboard(
   try {
     const text = (await clipboard.readText()).trim();
     if (/^https?:\/\//i.test(text)) {
-      return await ingest({
-        payload: {
-          files: [],
-          urls: [text],
-          sourcePageUrl: null,
-          title: null,
-          types: ["clipboard"],
-          raw: { clipboard: text },
-        },
-        listId: req.listId,
-        listName: req.listName,
-      });
+      return await saveSource({ url: text, bytes: null, title: null }, req);
     }
-
     const bytes = await readClipboardImage();
     if (bytes) {
-      const asset = await uploadAsset(bytes, "clipboard.png", "image/png");
-      const bookmark = await createAssetBookmark({
-        asset,
-        assetType: "image",
-        title: null,
-        sourceUrl: null,
-      });
-      return await fileInto(bookmark, req);
+      return await saveSource({ url: null, bytes, title: null }, req);
     }
-
     return { ok: false, error: "Nothing saveable on the clipboard." };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-export async function ingest(req: IngestRequest): Promise<IngestResult> {
-  const { payload, listId, listName } = req;
-  try {
-    let bookmark: { id: string; alreadyExists?: boolean };
-
-    let media: Media | null = null;
-    let downloadError: string | null = null;
-    try {
-      media = await resolveMedia(payload);
-    } catch (e) {
-      downloadError = e instanceof Error ? e.message : String(e);
-    }
-
-    if (media) {
-      const asset = await uploadAsset(media.bytes, media.fileName, media.mime);
-      bookmark = await createAssetBookmark({
-        asset,
-        assetType: ASSET_KIND_BY_MIME[media.mime]!,
-        title: payload.title,
-        sourceUrl: media.sourceUrl,
-      });
-    } else {
-      // Nothing downloadable — fall back to a link bookmark so the drop still
-      // lands somewhere and the server's crawler can have a go at it. This is
-      // the usual outcome for cookie-gated media.
-      const link = payload.urls[0] ?? payload.sourcePageUrl;
-      if (!link) {
-        const seen = payload.types.join(", ") || "nothing";
-        return {
-          ok: false,
-          error:
-            downloadError ??
-            `No image or video URL in that drop (it offered: ${seen}). See the drop log in the tray menu.`,
-        };
-      }
-      bookmark = await createLinkBookmark(link, payload.title);
-    }
-
-    let filedInto: string | null = null;
-    if (listId && !bookmark.alreadyExists) {
-      await addToList(listId, bookmark.id);
-      filedInto = listName;
-    }
-
-    return {
-      ok: true,
-      bookmarkId: bookmark.id,
-      alreadyExists: bookmark.alreadyExists,
-      listName: filedInto,
-    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

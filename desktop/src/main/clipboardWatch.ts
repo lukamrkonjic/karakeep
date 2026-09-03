@@ -1,18 +1,16 @@
 import { clipboard } from "electron";
 
 /**
- * Copy-to-save.
+ * Reading the clipboard.
  *
- * A second way in for sites whose drags carry nothing at all. Pinterest
- * attaches zero types to a drag (verified in both a desktop app and a plain
- * browser page), and a YouTube video can't be dragged at all — but both offer
- * "Copy image link" / "Copy video URL" in their context menu, which hands
- * over exactly the URL worth saving, at full resolution.
+ * `readClipboard` backs the tray click and the shortcut, where the user asked
+ * explicitly and anything saveable counts.
  *
- * Two gates keep this out of the way of ordinary work:
- *   1. the copy has to have happened in a browser, and
- *   2. the content has to look like media worth saving.
- * Copying code, prose, a file path or an ordinary link does nothing at all.
+ * `classifyClipboard` is the stricter test used only by the optional
+ * automatic mode, which opens the picker without being asked. There a false
+ * positive costs the user a window over their work, so it demands both that
+ * the copy happened in a browser and that the content looks like media;
+ * prose, code, file paths and ordinary links are ignored.
  *
  * Note the clipboard API here is Electron's current asynchronous one
  * (`readText`/`has`/`read` returning promises, `read` yielding ClipboardItems);

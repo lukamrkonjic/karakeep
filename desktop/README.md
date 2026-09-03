@@ -1,8 +1,8 @@
 # Karakeep Drop
 
-An Eagle-style desktop companion for Karakeep. Start dragging an image or
-video anywhere on screen; a list picker appears under the cursor; drop it on a
-list and it's uploaded and filed.
+A tray companion for Karakeep. Copy an image or a link in your browser, click
+the tray icon, and a list picker opens by your cursor — click a list and it's
+saved.
 
 Built because the browser extension is awkward for the "I just want to keep
 this picture" case. It talks to the same public REST API the extension does,
@@ -10,24 +10,16 @@ so it needs no server changes.
 
 ## What it does
 
-- **Watches for drags globally.** Press the left mouse button and move past a
-  threshold and the picker appears right next to the cursor — about a
-  centimetre away, so filing is a flick rather than a trip across the screen.
-  No hotkey, no window to find first.
+- **Copy, then click the tray icon.** The picker opens right by the cursor
+  (which is down at the tray, so it opens up and to the left) and a click
+  files it. Nothing ever appears unless you ask for it.
+- **Works on every site.** A copied URL is fetched: an image link becomes a
+  real asset at full resolution; a page link (a YouTube video, say) becomes a
+  bookmark the server crawls. A copied bitmap is uploaded as-is.
 - **Puts the lists you actually use at the top.** Ordering is
   most-recently-used first, and using a subfolder lifts its parent too, so a
-  folder you keep filing into never sinks. Lists you've never dropped into
-  fall back to the web sidebar's own order, so an untouched tree looks
-  familiar.
-- **Opens folders under the drag.** Dwell on a folder for a moment and it
-  expands in place, so you can reach an exact subfolder without letting go.
-- **Handles browser drags, not just files.** A drag out of Firefox or Chrome
-  usually carries a URL rather than bytes, so the app reads every flavour the
-  browser offers (`text/html`, `text/uri-list`, `text/x-moz-url`,
-  `text/plain`), picks the best media URL, and downloads it.
-- **Keeps the source URL** on the bookmark, which a naive uploader loses.
-- **Falls back to a link bookmark** when the media can't be fetched, so a drop
-  is never silently lost.
+  folder you keep filing into never sinks. Lists you've never used fall back
+  to the web sidebar's own order.
 - **Follows the Windows light/dark theme**, in a monochrome palette matched to
   the karakeep redesign.
 
@@ -42,181 +34,81 @@ npm start
 On first run the settings window opens. Paste your server URL and an API key
 from Karakeep's **Settings → API Keys**, then hit *Test connection*.
 
-The app then lives in the tray. Right-click it for the on/off switch, *Start
-with Windows* (off by default), and settings.
-
-To build a standalone installer:
+The app then lives in the tray. Left-click saves what you copied; right-click
+gives the menu. To build a standalone installer:
 
 ```bash
 npm run dist
 ```
 
-## How it works
+## Why copy rather than drag
 
-Three files carry most of the weight:
+The obvious design is dragging an image straight out of the browser, and this
+app used to work that way — a global mouse hook spotted a drag starting
+anywhere on screen and popped the picker under the cursor.
+
+Two things killed it:
+
+- **Some sites attach nothing to a drag.** Pinterest is the clearest case: the
+  drop arrives with zero types and zero files, from the very first
+  `dragenter`, confirmed both here and in a plain browser page. Nothing
+  crosses the process boundary, so no drop target can recover it.
+- **A global mouse hook interferes with the browser's own dragging**, which is
+  a bad trade for a feature that couldn't work everywhere anyway.
+
+Copying sidesteps both. Every site that hides its image from a drag still
+offers *Copy image link* in its context menu, and that hands over the
+full-resolution URL. The trigger being an explicit click also means the app
+never has to guess whether you meant it, so it accepts any link or image
+rather than a curated list of hosts.
+
+## How it works
 
 | File | Role |
 |---|---|
-| `src/main/dragWatch.ts` | The global hook. Windows has no "a drag started" event, so this infers one from *left button down → cursor moved past a threshold while still held* — the same heuristic Eagle uses. |
-| `src/shared/dropParse.ts` | Turns a `DataTransfer` into an ordered list of candidate media URLs. This is the fiddly part; it has its own test suite. |
-| `src/main/ingest.ts` | Bytes → `POST /api/v1/assets` → `POST /api/v1/bookmarks` → `PUT /api/v1/lists/:id/bookmarks/:id`. |
+| `src/main/clipboardWatch.ts` | Reads the clipboard, and — for the optional automatic mode — decides whether something is worth interrupting for. |
+| `src/main/ingest.ts` | URL or bytes → `POST /api/v1/assets` → `POST /api/v1/bookmarks` → `PUT /api/v1/lists/:id/bookmarks/:id`. |
 | `src/shared/listTree.ts` | Builds and orders the tree. Pure, so it lives in `shared/` and is tested directly. |
 
-**Rows are built once and afterwards only shown or hidden.** This is the
-non-obvious constraint in the whole UI: a drag does not survive its drop
-target being replaced, so re-rendering the tree to expand a folder silently
-kills the drag that triggered it. Expanding therefore only toggles classes.
-`test/overlay.test.cjs` pins this by tagging the hovered row and asserting it
-is the same element, still highlighted, after an expand.
+Two details worth keeping:
 
-The "recent" ordering is this app's own record: the server does have a
-`createdAt` on lists but doesn't expose it, and `position` is already
-backfilled from it, so recency here means *recently used from this app* and
-lives in `settings.json`.
+- **The cursor position comes from Electron**, via
+  `screen.getCursorScreenPoint()`, which is already in device-independent
+  pixels. Physical pixels are wrong for window placement on a scaled display —
+  on a 150% monitor every position lands half again too far.
+- **The picker takes focus while open**, which is what lets it dismiss on
+  click-away or Escape like any menu. It returns to non-focusable when hidden.
 
-Two placement details are easy to get wrong and worth keeping:
+Note the clipboard API in use is Electron's current asynchronous one
+(`readText`/`has`/`read` returning promises, `read` yielding `ClipboardItem`s).
+The synchronous `readImage`/`availableFormats` no longer exist.
 
-- **The cursor position comes from Electron, not the hook.** `uiohook` reports
-  *physical* pixels while `setBounds` takes *device-independent* ones, so on a
-  scaled display (150% here) every position was off by half again and the
-  panel ended up pinned to the right screen edge. `screen.getCursorScreenPoint()`
-  is already in DIP.
-- **Near an edge the panel flips rather than slides.** Clamping it into the
-  work area is what strands it far from the cursor on a wide monitor.
+## Optional extras
 
-## Theming
+Both off the critical path, both in the tray and in Settings:
 
-Both themes are plain CSS: one palette on `:root`, the dark overrides under
-`@media (prefers-color-scheme: dark)`. Electron already tracks the Windows app
-theme and re-evaluates that query live, so nothing in the main process is
-involved — except the tray bitmap, which has no template-image concept on
-Windows and so is swapped between a dark and a light mark on
-`nativeTheme.on("updated")`.
-
-The overlay is shown with `showInactive()` and created with `focusable: false`
-— taking focus mid-drag can cancel the drag outright.
-
-## The drag ghost is the browser's, not ours
-
-The big translucent copy of the image that follows the cursor is drawn by
-Firefox (via the drag-source half of the OS drag protocol). A drop target
-receives the drag; it cannot replace, resize or remove the source's ghost.
-So "make the preview a small thumbnail" isn't something this app can do.
-
-Two things that do help:
-
-- In Firefox, `about:config` → `nglayout.enable_drag_images` → **false**.
-  That drops the translucent image entirely and leaves a small cursor, so
-  the picker is never obscured. It applies to all dragging in Firefox.
-- Rows here are deliberately tall and the active one is a solid filled bar,
-  so the target stays readable through a translucent ghost.
-
-Rendering our own thumbnail during the drag isn't possible either: the HTML
-drag-and-drop spec puts the drag data store in *protected mode* until the
-drop actually happens, so a drop target can see the list of MIME types on
-dragover but not read any of the values.
-
-## Troubleshooting a drop that didn't work
-
-Tray → **Open drop log…**. Every drop appends what it actually carried: the
-advertised MIME types, any files, the URLs the parser found, and the raw
-flavour bodies. When a site's markup defeats the parser that log is the only
-record of why — the data cannot be read back after the event.
-
-## Sites that send nothing with a drag
-
-Some sites attach nothing to a drag. Pinterest is the clearest case: the drop
-arrives with **zero types and zero files**, from the very first `dragenter`.
-Two independent receivers agree:
-
-```
-Pinterest, into this app:      dragenter types=[] items=0 files=0
-Pinterest, into a browser page: dragenter types=[] items=0 files=0
-Google Images, into this app:   types=[text/plain, text/uri-list, text/html, Files]
-```
-
-Nothing crosses the process boundary, so **no** drop target can recover it —
-not this app, not Explorer, not any other tool. Every fix attempted on the
-receiving side is doomed for the same reason.
-
-`tools/drag-probe.html` is what establishes this: open it in the browser, drag
-an image onto it, and it prints every flavour the page attached along with its
-contents. An empty report means the site is the cause; a report with data that
-this app then fails on means the bug is here.
-
-### Copy, then click the tray icon
-
-Both of those sites *do* offer the right thing in their context menu — "Copy
-image link" on Pinterest, "Copy video URL" on YouTube — and that hands over
-the full-resolution URL. So: copy it, then **left-click the tray icon**. The
-picker opens right by the cursor (which is down at the tray, so it flips up
-and to the left), and a click files it.
-
-The important property is that **nothing ever appears unbidden**. An earlier
-version watched the clipboard and opened the picker by itself; even gated to
-browsers and to media-looking URLs, a window arriving at the cursor
-uninvited is the wrong interaction — gating only changes how often it's
-wrong. Because the tray click is an explicit request, it also accepts *any*
-link or image, so it works on every site rather than a curated host list.
-
-Since it's opened deliberately rather than mid-drag, this is the one case
-where the panel takes focus — so it dismisses like a menu, on click-away or
-Escape.
-
-Two optional extras in the tray/Settings: the same action on a global
-shortcut (`Control+Alt+S` by default), and a fully automatic mode. Automatic
-mode keeps the strict gate — browser foreground plus media-looking content,
-with `test/clipboard.test.cjs` pinning the negatives as carefully as the
-positives — because there a false positive costs you a window over your
-work.
-
-### The other route: tools/karakeep-drag-fix.user.js
-
-The only place with enough information is the page itself, at `dragstart`,
-where the `<img>` is still reachable. That script finds the image under the
-cursor — looking through transparent overlays via `elementsFromPoint`, and
-handling `srcset` and CSS `background-image` — and fills in the standard
-flavours the site left empty. It never overwrites data a site set
-deliberately, so well-behaved sites are untouched.
-
-Two ways to run it, neither of which is a browser extension in the usual
-sense:
-
-- **Bookmarklet, nothing installed.** `npm run build` regenerates
-  `tools/install-bookmarklet.html`; open it, drag the button to the bookmarks
-  toolbar, and click it once on a page where dragging is broken. Pinterest is
-  a single-page app, so one click generally covers a whole browsing session.
-- **Userscript manager** (Violentmonkey / Tampermonkey) for the same thing
-  permanently, with no per-visit click.
-
-A plain unsigned extension is the one option that doesn't work well here:
-Firefox requires signing, so it would load only temporarily via
-`about:debugging` and vanish on restart.
-
-`test/dragfix.test.cjs` pins the behaviour against a fixture reproducing the
-overlay pattern — including a baseline assertion that the fixture really is
-empty without the script, so the test can't pass vacuously. It also runs the
-generated bookmarklet payload itself, so minification can't silently break it.
+- **A global shortcut** (`Control+Alt+S`) for the same action, when a hand is
+  already on the keyboard.
+- **Automatic mode**, where copying media in a browser opens the picker with
+  no click at all. This one keeps a strict gate — the foreground app must be a
+  browser *and* the content must look like media — because a false positive
+  puts a window over your work. `test/clipboard.test.cjs` pins the negatives
+  (prose, code, file paths, ordinary links) as carefully as the positives.
 
 ## Known limits
 
-- **Cookie-gated media may fail.** When a drag hands over a URL instead of
-  bytes, the download happens outside your browser session, so images behind a
-  login (some Instagram/Discord/Patreon URLs) can 403 where the extension
-  succeeds. The app sends a browser User-Agent and a Referer — derived from the
-  page when the browser provides one, otherwise from the media's own origin —
-  which is enough for most hotlink checks, and falls back to a link bookmark
-  when it isn't.
-- **The picker appears on any drag,** including text selection. Raise the
-  threshold, or switch to *Only while holding a key* in settings.
-- **Sites vary wildly in what they put on a drag.** The parser handles
-  `<img>` (including `srcset`), `<video>`/`<source>`, CSS `background-image`,
-  and falls back to scanning the raw markup for a media URL. Something will
-  still defeat it eventually; the drop log is how you find out what.
-- **Windows-first.** The hook and the overlay are cross-platform in principle,
-  but nothing here has been tested on macOS or Linux.
+- **Cookie-gated media may fail.** The download happens outside your browser
+  session, so images behind a login can 403. A browser User-Agent and a Referer
+  are sent, which is enough for most hotlink checks, and anything that isn't
+  fetchable media falls back to a link bookmark rather than being lost.
+- **Windows-first.** Nothing here has been tested on macOS or Linux.
 - **The API key is stored in plain text** in the app's user-data folder
   (`%APPDATA%/karakeep-drop/settings.json`).
+
+## Troubleshooting
+
+Tray → **Open drop log…**. Each save appends what happened; when something
+only misbehaves against a real site, that log is the record of why.
 
 ## Tests
 
@@ -224,10 +116,8 @@ generated bookmarklet payload itself, so minification can't silently break it.
 npm test
 ```
 
-Runs two suites in a real Electron renderer: the drop parser and tree
-ordering (`test/parse.test.ts`, needs `DOMParser`) against the flavour
-combinations Firefox and Chrome actually put on a cross-application drag, and
-the overlay's drag interactions (`test/overlay.test.cjs`).
+Three suites in a real Electron renderer: list ordering, the overlay's
+click-to-choose behaviour, and the clipboard gate.
 
 ```bash
 npx electron test/preview.cjs

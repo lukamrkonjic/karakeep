@@ -12,8 +12,8 @@
   <body class="settings-body">
     <h1>Karakeep Drop</h1>
     <p class="sub">
-      Drag an image or video anywhere on screen and a list picker appears under
-      the cursor. Drop it on a list to save it.
+      Copy an image or a link in your browser, then left-click the tray icon.
+      A list picker opens by your cursor — click a list and it's saved.
     </p>
 
     <label for="serverUrl">Server URL</label>
@@ -28,19 +28,6 @@
     </p>
 
     <hr />
-
-    <label for="triggerMode">Show the picker</label>
-    <select id="triggerMode">
-      <option value="always">On any drag</option>
-      <option value="modifier">Only while holding a key</option>
-    </select>
-
-    <label for="modifierKey">Hold key</label>
-    <select id="modifierKey">
-      <option value="ctrl">Ctrl</option>
-      <option value="alt">Alt</option>
-      <option value="shift">Shift</option>
-    </select>
 
     <p class="hint" style="margin-top: 4px">
       For sites whose drags carry no data at all (Pinterest) and for media that
@@ -59,13 +46,6 @@
 
     <label for="copyHotkey">Shortcut</label>
     <input id="copyHotkey" type="text" placeholder="Control+Alt+S" />
-
-    <label for="dragThreshold">Drag distance before it appears (px)</label>
-    <input id="dragThreshold" type="number" min="10" max="400" step="5" />
-    <p class="hint">
-      Lower feels more immediate; higher stops the picker appearing when you
-      only meant to select some text.
-    </p>
 
     <div class="actions">
       <button id="save" class="primary">Save</button>

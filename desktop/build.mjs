@@ -18,9 +18,8 @@ const builds = [
     outfile: "dist/main/main.js",
     platform: "node",
     format: "cjs",
-    // Electron and the native hook resolve at runtime from node_modules;
-    // bundling either one breaks them.
-    external: ["electron", "uiohook-napi"],
+    // Electron resolves at runtime from node_modules; bundling it breaks it.
+    external: ["electron"],
   },
   {
     ...common,
@@ -43,7 +42,7 @@ const builds = [
     outfile: "dist/main/clipboardWatch.cjs",
     platform: "node",
     format: "cjs",
-    external: ["electron", "uiohook-napi"],
+    external: ["electron"],
   },
   {
     ...common,

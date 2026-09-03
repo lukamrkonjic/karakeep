@@ -162,8 +162,7 @@ body {
   visibility: hidden;
 }
 
-/* Rows are hidden rather than removed, so the element under the pointer
-   survives an expand mid-drag. */
+/* Rows are hidden rather than removed, so expanding never rebuilds the tree. */
 .row.collapsed {
   display: none;
 }
@@ -300,7 +299,7 @@ hr {
   margin: 26px 0 4px;
 }
 
-/* In copy mode the rows are clicked rather than dropped on. */
+/* Rows are clickable while the picker is open for a copied item. */
 .panel.copy-mode .row {
   cursor: pointer;
 }
