@@ -48,6 +48,11 @@ const iconPath = (): string =>
       : "../renderer/icon-dark.png",
   );
 
+// Packaged, app.getName() is the productName ("Karakeep Drop"), which would
+// point userData somewhere different from the unpackaged run and lose the
+// server URL and API key. Pin it so both use the same folder.
+app.setPath("userData", join(app.getPath("appData"), "karakeep-drop"));
+
 // A second instance would fight the first over the tray icon and the global
 // shortcut, so hand off to the one already running.
 if (!app.requestSingleInstanceLock()) {

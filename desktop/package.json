@@ -22,5 +22,33 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
+  },
+  "build": {
+    "appId": "app.karakeep.drop",
+    "productName": "Karakeep Drop",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/get-windows/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Karakeep Drop"
+    }
   }
 }
