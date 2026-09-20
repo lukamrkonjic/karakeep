@@ -2,3 +2,11 @@ node_modules/
 dist/
 release/
 preview-*.png
+
+# Baked connection details: the API key must not enter git history.
+src/shared/defaults.ts
+
+# The app icon is generated (tools/make-icon.cjs) but tracked anyway: the root
+# .gitignore excludes "build", and without it electron-builder cannot package
+# a fresh clone until someone knows to run the generator first.
+!build/

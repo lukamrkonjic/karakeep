@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+    />
+    <title>Magpie</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="browser-body">
+    <header class="chrome">
+      <!-- The tab strip is the title bar. Its empty space drags the window. -->
+      <div class="titlebar">
+        <!-- Saved pages, as favicon-only tabs ahead of the real ones. -->
+        <div class="pinned" id="pinned"></div>
+        <div class="tabstrip" id="tabstrip"></div>
+
+        <div class="wincontrols">
+          <button id="win-min" title="Minimise" aria-label="Minimise">
+            &#8722;
+          </button>
+          <button id="win-max" title="Maximise" aria-label="Maximise">
+            &#9633;
+          </button>
+          <button
+            id="win-close"
+            class="danger"
+            title="Close"
+            aria-label="Close"
+          >
+            &#10005;
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="nav" id="back" title="Back (Alt+Left)" aria-label="Back">
+          &#8592;
+        </button>
+        <button
+          class="nav"
+          id="forward"
+          title="Forward (Alt+Right)"
+          aria-label="Forward"
+        >
+          &#8594;
+        </button>
+        <button class="nav" id="reload" title="Reload (F5)" aria-label="Reload">
+          &#8635;
+        </button>
+
+        <input
+          id="omnibox"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Search, or type a web address"
+        />
+
+        <button class="nav" id="more" title="More" aria-label="More">
+          &#8943;
+        </button>
+      </div>
+
+    </header>
+
+    <footer class="statusbar" id="statusbar">
+      <div class="status-line">
+        <span class="dot" id="dot"></span>
+        <span class="status-msg" id="status-msg"></span>
+        <span class="status-detail" id="status-detail"></span>
+        <span class="spacer"></span>
+      </div>
+
+      <div class="status-actions" id="status-actions">
+        <input
+          id="tagbox"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Add tags, comma separated, then Enter"
+        />
+        <button id="open-in-karakeep">Open</button>
+        <button id="undo">Undo</button>
+      </div>
+    </footer>
+
+    <script src="browser.js"></script>
+  </body>
+</html>

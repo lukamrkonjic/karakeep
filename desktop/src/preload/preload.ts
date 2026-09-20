@@ -18,6 +18,7 @@ const api = {
   saveClipboard: (req: ClipboardIngestRequest): Promise<IngestResult> =>
     ipcRenderer.invoke("clipboard:save", req),
   dismissClipboard: (): void => ipcRenderer.send("clipboard:dismiss"),
+  copyText: (text: string): void => ipcRenderer.send("settings:copy", text),
   onCopyMode: (fn: (kind: string) => void): void => {
     ipcRenderer.on("overlay:copy-mode", (_e, kind: string) => fn(kind));
   },

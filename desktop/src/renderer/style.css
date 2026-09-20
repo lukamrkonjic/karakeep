@@ -303,3 +303,716 @@ hr {
 .panel.copy-mode .row {
   cursor: pointer;
 }
+
+/* ---------------- Collector browser ---------------- */
+
+/*
+ * The chrome is one page filling the window, with the tab views inset over
+ * its middle. Only the top strip and the bottom bar are ever visible, so the
+ * status bar comes free: no second window, no transparency.
+ */
+.browser-body {
+  background: var(--bg);
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+/*
+ * There is no system title bar. Heights here are load-bearing: the main
+ * process insets the page by exactly this much, so a change on one side has
+ * to be a change on both.
+ */
+.chrome {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The whole top of the window drags it, and the controls inside punch holes
+ * in that. Marking a container no-drag is what makes a frameless window feel
+ * stuck: the tab strip fills the title bar, so opting the strip out leaves
+ * almost nothing to grab.
+ */
+.titlebar,
+.tabstrip,
+.pinned,
+.toolbar {
+  -webkit-app-region: drag;
+}
+
+.tab,
+.tab-new,
+.tab-close,
+.wincontrols,
+.pin,
+.toolbar button,
+#omnibox {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar {
+  height: 36px;
+  display: flex;
+  align-items: stretch;
+  padding-left: 6px;
+}
+
+.tabstrip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding-top: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.wincontrols {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+}
+
+.wincontrols button {
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.wincontrols button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* The one control you must not hit by accident says so on approach. */
+.wincontrols button.danger:hover {
+  background: #d93025;
+  color: #ffffff;
+}
+
+.tabstrip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 96px;
+  max-width: 220px;
+  padding: 0 4px 0 10px;
+  border-radius: 7px 7px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+}
+
+.tab.active {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.tab-close,
+.tab-new {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab-close:hover,
+.tab-new:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tab-new {
+  align-self: center;
+  margin-left: 4px;
+}
+
+.toolbar {
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+}
+
+/* ---------------- pinned pages ---------------- */
+
+/*
+ * Saved pages sit at the head of the tab strip as favicon-only tabs. Narrow
+ * and title-less on purpose: a dozen of them still cost less room than one
+ * bookmarks bar, and the icon is what you actually aim at.
+ */
+.pinned {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding-top: 5px;
+  padding-right: 4px;
+  margin-right: 4px;
+  border-right: 1px solid var(--border);
+}
+
+.pin {
+  flex: none;
+  width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+}
+
+.pin:hover {
+  background: var(--bg-hover);
+}
+
+/* The page that opens on launch, marked without a label to say so. */
+.pin.home {
+  background: var(--bg-raised);
+}
+
+.pin-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.pin-icon-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+button.nav {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+}
+
+button.nav:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+button.nav:disabled {
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
+#omnibox {
+  flex: 1;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+  user-select: text;
+}
+
+#omnibox:focus {
+  outline: none;
+  border-color: var(--text);
+}
+
+#save {
+  flex: none;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12.5px;
+}
+
+/* ---------------- status bar ---------------- */
+
+.statusbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 11.5px;
+  overflow: hidden;
+}
+
+.statusbar.expanded {
+  height: 72px;
+  justify-content: flex-start;
+  padding-top: 8px;
+  gap: 8px;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 18px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/*
+ * A filled dot rather than a colour: the palette has one accent and it is the
+ * foreground, so state reads from shape and weight instead of hue.
+ */
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.45;
+}
+
+.dot[data-kind="working"] {
+  background: var(--text);
+  opacity: 1;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.dot[data-kind="saved"] {
+  background: var(--text);
+  opacity: 1;
+}
+
+.dot[data-kind="error"] {
+  background: var(--text);
+  opacity: 1;
+  border-radius: 1px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.status-msg {
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-detail {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Everything that is not browsing lives behind this one. */
+#more {
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.status-actions {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.statusbar.expanded .status-actions {
+  display: flex;
+}
+
+#tagbox {
+  flex: 1;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  user-select: text;
+}
+
+#tagbox:focus {
+  outline: none;
+  border-color: var(--text);
+}
+
+.status-actions button {
+  flex: none;
+  height: 26px;
+  padding: 0 11px;
+  font-size: 11.5px;
+}
+
+/* ---------------- Drop panel ---------------- */
+
+/*
+ * The panel is its own view, sized to the card rather than the window, so it
+ * needs no transparency: whatever it does not cover is simply the page.
+ */
+.drop-body {
+  /* The view behind this is transparent, so the page shows through
+     everywhere the scrim and the card do not cover. */
+  background: transparent;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+/* Dims the page so it reads as "not the target", and carries the fade. */
+.drop-scrim {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0);
+  transition: background 170ms ease;
+}
+
+.drop-scrim.in {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.drop-panel {
+  width: min(820px, calc(100vw - 72px));
+  height: min(400px, calc(100vh - 72px));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateY(10px) scale(0.975);
+  transition:
+    opacity 170ms ease,
+    transform 190ms cubic-bezier(0.2, 0.9, 0.3, 1),
+    width 190ms ease,
+    height 190ms ease;
+}
+
+.drop-scrim.in .drop-panel {
+  opacity: 1;
+  transform: none;
+}
+
+/* The explorer is a different shape from the filing panel: narrower, and as
+   tall as it can be, because a folder tree is a vertical thing. */
+.drop-panel.explore {
+  width: min(620px, calc(100vw - 72px));
+  height: min(620px, calc(100vh - 72px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-scrim,
+  .drop-panel {
+    transition: none;
+  }
+}
+
+.drop-filing {
+  display: flex;
+  height: 100%;
+}
+
+/* The loose half: a big, hard-to-miss target for "just keep it". */
+.drop-loose {
+  flex: 0 0 46%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 20px;
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+
+.drop-loose.over {
+  background: var(--solid);
+  color: var(--solid-text);
+}
+
+.drop-arrow {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  margin-bottom: 6px;
+}
+
+.drop-loose.over .drop-arrow {
+  background: var(--solid-text);
+  color: var(--solid);
+}
+
+.drop-loose-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.drop-loose-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  max-width: 210px;
+}
+
+.drop-loose.over .drop-loose-sub {
+  color: var(--solid-text);
+  opacity: 0.8;
+}
+
+.drop-thumb {
+  margin-top: 12px;
+  max-width: 108px;
+  max-height: 76px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.drop-lists {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.drop-lists-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.drop-lists-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.drop-lists-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.drop-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.drop-row:hover {
+  background: var(--bg-hover);
+}
+
+/* Same filled-row language the tray picker uses for its drop target. */
+.drop-row.over {
+  background: var(--solid);
+  color: var(--solid-text);
+}
+
+.drop-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drop-row-path {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drop-row.over .drop-row-path {
+  color: var(--solid-text);
+  opacity: 0.7;
+}
+
+.drop-choose {
+  flex: none;
+  padding: 13px 17px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.drop-choose:hover,
+.drop-choose.over {
+  background: var(--solid);
+  color: var(--solid-text);
+}
+
+.drop-empty {
+  padding: 14px 11px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.drop-search {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  gap: 9px;
+}
+
+#query {
+  flex: none;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  user-select: text;
+}
+
+#query:focus {
+  outline: none;
+  border-color: var(--text);
+}
+
+.drop-hint {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* The explorer's disclosure arrow. Always present, so names stay aligned
+   whether or not a list has anything filed under it. */
+.drop-chev {
+  flex: none;
+  width: 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+
+.drop-chev.open {
+  transform: rotate(90deg);
+}
+
+.drop-row.over .drop-chev {
+  color: var(--solid-text);
+  opacity: 0.65;
+}
+
+/*
+ * The hidden attribute only sets display:none from the UA stylesheet, so any
+ * author rule that sets display — .drop-filing and .drop-search are both
+ * flex — silently beats it and shows both views at once.
+ */
+[hidden] {
+  display: none !important;
+}
+
+/*
+ * Karakeep list icons are emoji, and the interface font has no glyphs for
+ * them: without an emoji family in the stack they land as tofu.
+ */
+.drop-row-icon {
+  flex: none;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* A field with buttons beside it, as the API key needs. */
+.field-row {
+  display: flex;
+  gap: 7px;
+  align-items: stretch;
+}
+
+.field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-row button {
+  flex: none;
+  padding: 0 13px;
+  font-size: 12px;
+  white-space: nowrap;
+}

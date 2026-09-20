@@ -96,6 +96,16 @@ function fileNameFor(url: string | null, mime: string, fallback: string): string
   return name.replace(/[^\x20-\x7E]/g, "_").slice(0, 120) || `dropped.${ext ?? "bin"}`;
 }
 
+/**
+ * How a remote resource gets fetched. The collector browser passes its tab's
+ * session fetch, so cookies and referer come from the page you are actually
+ * looking at — which is what rescues media the tray flow can only 403 on.
+ */
+export type FetchImpl = (
+  url: string,
+  init?: { headers?: Record<string, string>; redirect?: "follow" | "error" | "manual" },
+) => Promise<Response>;
+
 interface Media {
   bytes: Uint8Array<ArrayBuffer>;
   mime: string;
@@ -106,6 +116,7 @@ interface Media {
 async function downloadMedia(
   url: string,
   referer: string | null,
+  fetchImpl: FetchImpl = fetch,
 ): Promise<Media | null> {
   if (url.startsWith("data:")) {
     const match = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(url);
@@ -135,7 +146,7 @@ async function downloadMedia(
     }
   }
 
-  const res = await fetch(url, { headers, redirect: "follow" });
+  const res = await fetchImpl(url, { headers, redirect: "follow" });
   if (!res.ok) {
     throw new Error(`Download failed (${res.status} ${res.statusText})`);
   }
@@ -164,6 +175,7 @@ async function downloadMedia(
 export async function saveSource(
   source: SaveSource,
   target: ClipboardIngestRequest,
+  opts?: { fetchImpl?: FetchImpl; referer?: string | null },
 ): Promise<IngestResult> {
   try {
     let bookmark: { id: string; alreadyExists?: boolean };
@@ -184,14 +196,16 @@ export async function saveSource(
         // Most hotlink checks only compare hosts, so the media's own origin
         // works as a Referer when we have nothing better.
         let referer: string | null = null;
-        if (!source.url.startsWith("data:")) {
+        if (opts?.referer !== undefined) {
+          referer = opts.referer;
+        } else if (!source.url.startsWith("data:")) {
           try {
             referer = new URL(source.url).origin + "/";
           } catch {
             referer = null;
           }
         }
-        media = await downloadMedia(source.url, referer);
+        media = await downloadMedia(source.url, referer, opts?.fetchImpl);
       } catch (e) {
         downloadError = e instanceof Error ? e.message : String(e);
       }

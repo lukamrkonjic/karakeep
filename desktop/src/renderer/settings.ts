@@ -17,6 +17,7 @@ const apiKey = $<HTMLInputElement>("apiKey");
 const copyMode = $<HTMLSelectElement>("copyMode");
 const copyHotkey = $<HTMLInputElement>("copyHotkey");
 const result = $<HTMLSpanElement>("result");
+const reveal = $<HTMLButtonElement>("reveal");
 
 function setResult(text: string, kind: "ok" | "err" | ""): void {
   result.textContent = text;
@@ -39,6 +40,21 @@ function collect(): Partial<Settings> {
     copyHotkey: copyHotkey.value.trim() || "Control+Alt+S",
   };
 }
+
+// The key is worth being able to read and hand to something else, since it
+// is the one thing that has to match what Karakeep issued.
+reveal.addEventListener("click", () => {
+  const hidden = apiKey.type === "password";
+  apiKey.type = hidden ? "text" : "password";
+  reveal.textContent = hidden ? "Hide" : "Show";
+});
+
+$("copyKey").addEventListener("click", () => {
+  void (async () => {
+    api.copyText(apiKey.value);
+    setResult("API key copied", "ok");
+  })();
+});
 
 $("save").addEventListener("click", () => {
   void (async () => {

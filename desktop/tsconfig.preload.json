@@ -1,0 +1,11 @@
+{
+  // Preloads run inside a renderer, so unlike the main process they really do
+  // have a document. They get their own project rather than DOM being added
+  // to the main one, which is what tsconfig.main.json is careful to avoid.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["src/preload/**/*.ts", "src/shared/**/*.ts"]
+}

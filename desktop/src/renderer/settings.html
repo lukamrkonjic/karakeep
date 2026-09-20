@@ -7,23 +7,30 @@
       content="default-src 'none'; style-src 'self'; script-src 'self'"
     />
     <link rel="stylesheet" href="style.css" />
-    <title>Karakeep Drop — Settings</title>
+    <title>Magpie — Settings</title>
   </head>
   <body class="settings-body">
-    <h1>Karakeep Drop</h1>
+    <h1>Magpie</h1>
     <p class="sub">
-      Copy an image or a link in your browser, then left-click the tray icon.
-      A list picker opens by your cursor — click a list and it's saved.
+      A browser that keeps things. Open it from the tray, or use the tray icon
+      on its own to save whatever you have just copied.
     </p>
 
     <label for="serverUrl">Server URL</label>
     <input id="serverUrl" type="text" placeholder="https://karakeep.example.com" />
 
     <label for="apiKey">API key</label>
-    <input id="apiKey" type="password" placeholder="ak1_…" />
+    <div class="field-row">
+      <input id="apiKey" type="password" placeholder="ak1_…" />
+      <button id="reveal" type="button">Show</button>
+      <button id="copyKey" type="button">Copy</button>
+    </div>
     <p class="hint">
-      Create one in Karakeep under <strong>Settings → API Keys</strong>. It is
-      stored in plain text in this app's user-data folder, so treat it like a
+      Create one in Karakeep under <strong>Settings → API Keys</strong>. It
+      needs both <strong>assets:readwrite</strong> and
+      <strong>bookmarks:readwrite</strong> to archive a page. Leave this empty
+      to fall back to the key compiled into this build. It is stored in plain
+      text in the app's user-data folder either way, so treat it like a
       password.
     </p>
 

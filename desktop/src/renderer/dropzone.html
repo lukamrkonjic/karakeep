@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data: https: http:"
+    />
+    <title>Drop</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="drop-body">
+    <div class="drop-scrim" id="scrim">
+      <div class="drop-panel" id="panel">
+      <!-- Filing view: what you see while the image is still in the air. -->
+      <div class="drop-filing" id="filing">
+        <div class="drop-loose" id="zone-unsorted">
+          <div class="drop-arrow">&#8595;</div>
+          <div class="drop-loose-title">Drop here</div>
+          <div class="drop-loose-sub">
+            Saved to Karakeep without a list
+          </div>
+          <img class="drop-thumb" id="thumb" alt="" hidden />
+        </div>
+
+        <div class="drop-lists">
+          <div class="drop-lists-scroll" id="recents"></div>
+          <div class="drop-choose" id="zone-choose">Choose a list&#8230;</div>
+        </div>
+      </div>
+
+      <!-- Explorer: the drag is over, so the keyboard works again. Empty box
+           browses the whole tree; typing searches it. -->
+      <div class="drop-search" id="search" hidden>
+        <input
+          id="query"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Search, or browse the tree below"
+        />
+        <div class="drop-lists-scroll" id="results"></div>
+        <div class="drop-hint" id="hint"></div>
+      </div>
+      </div>
+    </div>
+
+    <script src="dropzone.js"></script>
+  </body>
+</html>

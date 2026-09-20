@@ -2,19 +2,21 @@
   "name": "karakeep-drop",
   "version": "0.1.0",
   "private": true,
-  "description": "Eagle-style drag-and-drop uploader for Karakeep",
+  "description": "A browser that keeps things, for Karakeep",
   "license": "AGPL-3.0-only",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",
     "start": "npm run build && electron .",
-    "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
-    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/clipboard.test.cjs",
+    "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json",
+    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/clipboard.test.cjs && electron test/capture.test.cjs",
     "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
-    "get-windows": "^9.3.0"
+    "@ghostery/adblocker-electron": "^2.18.2",
+    "get-windows": "^9.3.0",
+    "single-file-core": "^1.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -24,8 +26,8 @@
     "typescript": "^5.7.0"
   },
   "build": {
-    "appId": "app.karakeep.drop",
-    "productName": "Karakeep Drop",
+    "appId": "app.karakeep.magpie",
+    "productName": "Magpie",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -48,7 +50,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Karakeep Drop"
+      "shortcutName": "Magpie"
     }
   }
 }

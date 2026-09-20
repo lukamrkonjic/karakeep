@@ -2,6 +2,7 @@ import { join } from "node:path";
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
   globalShortcut,
   Menu,
@@ -21,6 +22,17 @@ import {
   startClipboardWatch,
   stopClipboardWatch,
 } from "./clipboardWatch";
+import {
+  captureWindow,
+  demoDrag,
+  demoDropLoose,
+  demoExplore,
+  demoRealDrag,
+  demoSavePage,
+  openBrowser,
+  registerBrowserIpc,
+  setSettingsOpener,
+} from "./browser";
 import { dropLogPath, logLine } from "./dropLog";
 import { ingestClipboard } from "./ingest";
 import { fetchLists, testConnection } from "./karakeep";
@@ -55,7 +67,16 @@ app.setPath("userData", join(app.getPath("appData"), "karakeep-drop"));
 
 // A second instance would fight the first over the tray icon and the global
 // shortcut, so hand off to the one already running.
-if (!app.requestSingleInstanceLock()) {
+/*
+ * A second launch hands off to the instance already running and must then
+ * stop. app.quit() only *asks* to close: the module goes on evaluating and
+ * whenReady still fires, so without this guard the doomed process builds a
+ * tray, a window and an IPC surface of its own and races its own shutdown.
+ * What you get is a window that draws but whose tab never loads and whose
+ * address bar does nothing.
+ */
+const isPrimaryInstance = app.requestSingleInstanceLock();
+if (!isPrimaryInstance) {
   app.quit();
 }
 
@@ -236,6 +257,10 @@ function buildTrayMenu(): Menu {
       click: () => void saveWhatICopied(),
     },
     {
+      label: "Open the collector browser",
+      click: () => openBrowser(),
+    },
+    {
       label: "Saving a copied link",
       submenu: [
         {
@@ -386,6 +411,11 @@ function rememberListUse(listId: string): void {
 }
 
 function registerIpc(): void {
+  registerBrowserIpc();
+  // The browser's own menu can reach Settings without importing main, which
+  // would be a cycle: main already imports the browser.
+  setSettingsOpener(openSettings);
+
   ipcMain.handle("settings:get", (): Settings => getSettings());
   ipcMain.handle("settings:save", (_e, patch: Partial<Settings>): Settings => {
     const next = saveSettings(patch);
@@ -430,6 +460,10 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.on("settings:copy", (_e, text: string) => {
+    clipboard.writeText(text);
+  });
+
   ipcMain.on("clipboard:dismiss", () => {
     acknowledgeClipboard();
     hideOverlay();
@@ -438,6 +472,10 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) {
+    return;
+  }
+
   // Only ever registers a login item because the user asked for one.
   app.setLoginItemSettings({ openAtLogin: getSettings().launchAtLogin });
 
@@ -462,12 +500,60 @@ app.whenReady().then(() => {
 
   syncCopyMode();
 
+  const shot = process.argv.find((a) => a.startsWith("--shot="));
+  if (process.argv.includes("--browser") || shot) {
+    openBrowser(process.env.MAGPIE_URL);
+    if (shot) {
+      // Long enough for the page to paint; the harness owns the timing.
+      setTimeout(() => {
+        void (process.env.MAGPIE_DEMO_DRAG ? demoDrag() : Promise.resolve())
+          .then(() => new Promise((r) => setTimeout(r, process.env.MAGPIE_DEMO_DRAG ? 1500 : 0)))
+          .then(() => {
+            if (process.env.MAGPIE_DEMO_DRAG === "explore") {
+              return demoExplore().then(
+                () => new Promise((r) => setTimeout(r, 900)),
+              );
+            }
+            if (process.env.MAGPIE_DEMO_DRAG === "real") {
+              return demoRealDrag().then(
+                () => new Promise((r) => setTimeout(r, 2500)),
+              );
+            }
+            if (process.env.MAGPIE_DEMO_DRAG === "save") {
+              return demoSavePage().then(
+                () => new Promise((r) => setTimeout(r, 26000)),
+              );
+            }
+            if (process.env.MAGPIE_DEMO_DRAG === "loose") {
+              return demoDropLoose().then(
+                () => new Promise((r) => setTimeout(r, 4000)),
+              );
+            }
+            return undefined;
+          })
+          .then(() => captureWindow(shot.slice("--shot=".length)))
+          .catch((e) => console.error("[magpie] shot failed:", e))
+          .finally(() => app.exit(0));
+      }, Number(process.env.MAGPIE_SHOT_DELAY ?? 6000));
+    }
+    return;
+  }
+
   if (!isConfigured()) {
     openSettings();
   }
 });
 
-app.on("second-instance", openSettings);
+// Relaunching should bring back the window you launched. The tray app
+// outlives its windows, so a second launch is almost always someone trying to
+// get the browser back after closing it — not asking for the settings dialog.
+app.on("second-instance", () => {
+  if (isConfigured()) {
+    openBrowser();
+  } else {
+    openSettings();
+  }
+});
 
 // Tray apps outlive their windows.
 app.on("window-all-closed", () => undefined);
