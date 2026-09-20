@@ -9,8 +9,8 @@ quick to resolve.
 
 **Very.** Of the ~42 changed files:
 
-- **8 are brand-new files.** Upstream will never touch these, so they can
-  never conflict.
+- **8 are brand-new files**, plus the whole of `desktop/`. Upstream will
+  never touch these, so they can never conflict.
 - **~20 are small, targeted edits** (a handful of lines each — removing a
   border class, dropping a prop, adding one line). If upstream changes a
   *different* part of the same file, git merges these automatically; if it
@@ -82,6 +82,7 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 
 | File | Purpose |
 |---|---|
+| `desktop/` (whole directory) | **Magpie**, an Electron collector browser, plus the Karakeep Drop tray app it grew out of. Lives outside the pnpm workspace with its own `package.json` and lockfile — see `desktop/README.md` for why — so upstream never touches it and the server's Docker build never installs it. Talks to the server only through the public REST API, so it needs no backend change. |
 | `.github/workflows/fork-build.yml` | Builds and pushes `ghcr.io/<you>/karakeep:latest` + `:<short-sha>` on every push to `main`, using the built-in `GITHUB_TOKEN` (no secrets needed) |
 | `apps/web/components/dashboard/bookmarks/BookmarkVideo.tsx` | Click-to-load video player for video attachments (feed thumbnails do zero network activity until clicked) |
 | `apps/web/components/dashboard/bookmarks/MasonryMediaCard.tsx` | Eagle/Pinterest-style borderless, media-only masonry tile with hover-dim + white action icons |

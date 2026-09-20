@@ -188,7 +188,7 @@ const SearchInput = React.forwardRef<
     parsedValue.result === "full" && parsedValue.text.length === 0;
 
   return (
-    <div className={cn("relative flex-1", className)}>
+    <div className={cn("relative min-w-0 flex-1", className)}>
       <EditListModal
         open={newNestedListModalOpen}
         setOpen={setNewNestedListModalOpen}
@@ -227,7 +227,7 @@ const SearchInput = React.forwardRef<
       </div>
       <Command
         shouldFilter={false}
-        className="relative rounded-md bg-transparent"
+        className="relative min-w-0 rounded-md bg-transparent [&_[cmdk-input-wrapper]]:min-w-0 [&_[cmdk-input]]:min-w-0"
         onKeyDown={handleCommandKeyDown}
       >
         <Popover open={isPopoverVisible}>
