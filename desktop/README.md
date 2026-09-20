@@ -202,33 +202,17 @@ are already rendering. The listener is in the capture phase, so a page that
 cancels its own `dragstart` is seen anyway, and the fetch that follows goes
 through the tab's session, so a login applies.
 
-The image rides under the cursor while you carry it: a 150px clone handed to
-`setDragImage`, built at `mousedown` so it has been laid out and decoded long
-before the snapshot is taken.
+The drag preview is Chromium's own, which for an image drag is the image.
+There is deliberately no custom one.
 
-The rule that governs all of this, and that cost several wrong attempts:
-**Chromium snapshots the element only if that element actually painted.**
-
-- Parked off-screen at `left: -10000px` — the recipe half the internet
-  suggests — it is never painted, so the snapshot is blank. That is worse than
-  doing nothing, because it replaces a working default with an empty picture.
-  It also only *looks* broken where the code runs, which is how a board came
-  to work while a pin page showed nothing.
-- Stacked far behind the page with a huge negative `z-index`, it paints, but
-  on a page with nothing in that corner it is simply visible: a thumbnail
-  sitting in the top left.
-
-So it goes **behind the very image being dragged**. That image is opaque,
-larger than the clone and exactly where the clone needs to be, and occlusion
-does not stop an element painting. The clone is repositioned on each press
-(it is `position: fixed`, so a page that scrolled under it would strand it in
-view) and removed on `mouseup` when the press never became a drag.
-
-`test/dragimage.test.cjs` pins it: the clone is inside the viewport, and
-raising it above the page changes rendered pixels — an element that cannot
-paint could not do that. That assertion is the whole point of the file, since
-the drag image itself lives outside the page and no screenshot of the page can
-ever show it.
+There was, for a while: a 150px clone of the image, parked off-screen and
+handed to `setDragImage` so every drag looked the same size. It never worked.
+An element at `left: -10000px` has no painted pixels, so what Chromium
+snapshots is empty — and it replaces a perfectly good default with nothing.
+The failure was invisible where the code did not run: a board fell through to
+the default and looked fine, while a pin page showed no preview at all, which
+made it look like a detection bug rather than what it was. Making the image
+draggable again is the whole job; the picture then takes care of itself.
 
 The panel is drawn the instant the drag begins, from lists already in hand,
 and takes a second message when fresh ones arrive. Waiting for the server

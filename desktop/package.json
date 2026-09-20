@@ -10,7 +10,7 @@
     "dev": "node build.mjs --watch",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json",
-    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/clipboard.test.cjs && electron test/capture.test.cjs && electron test/dragimage.test.cjs",
+    "test": "npm run build && electron test/run-tests.cjs && electron test/overlay.test.cjs && electron test/clipboard.test.cjs && electron test/capture.test.cjs",
     "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
