@@ -182,8 +182,12 @@ Pick up any image in a tab and a panel appears: a big loose half on the left
 that keeps it with no list, the lists you have filed into most recently on the
 right, and **Choose a list…** at the bottom. Drop on any of them.
 
-Dropping on *Choose a list…* does not file anything — it turns the panel into
-an explorer. An empty search box browses your whole list tree with the same
+Dropping on *Choose a list…* does not file anything — it pins the panel open
+as an explorer. It has to be pinned, because that drop *ends the drag*, and
+the page's `dragend` lands a moment after the drop did: without a flag saying
+the panel is now a modal, `dragend` schedules exactly the close the drop had
+just cancelled, and the explorer vanishes the instant it appears. From then on
+it goes only when you pick a list, click away, or press Escape. An empty search box browses your whole list tree with the same
 ordering the web sidebar uses, typing searches it, and Enter takes the top
 match. That only works after the drag is over, which is exactly when it opens:
 you cannot type mid-drag.

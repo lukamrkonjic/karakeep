@@ -850,6 +850,11 @@ export async function demoExplore(): Promise<void> {
   await dropView.webContents.executeJavaScript(
     `document.getElementById("zone-choose").click()`,
   );
+  // Dropping on "Choose a list" ends the drag, so the page's dragend lands
+  // just after. Replaying it here is the whole point: without it the harness
+  // could never catch the close it used to schedule.
+  await new Promise((r) => setTimeout(r, 120));
+  ipcMain.emit("magpie:drag-end");
 }
 
 /**
@@ -1010,6 +1015,15 @@ let pendingDrag: DragPayload | null = null;
 let dragSource: WebContents | null = null;
 let hideTimer: NodeJS.Timeout | null = null;
 let vanishTimer: NodeJS.Timeout | null = null;
+/**
+ * Set once the panel has become the explorer, which pins it open.
+ *
+ * Dropping on "Choose a list" ends the drag, so `dragend` arrives on the page
+ * a moment *after* the drop arrived on the panel — and it would schedule the
+ * very close the drop had just cancelled. From here on the panel is a modal:
+ * it goes when a list is picked, when you click away, or on Escape.
+ */
+let exploring = false;
 
 let listCache: {
   at: number;
@@ -1141,6 +1155,7 @@ function hideDropPanel(): void {
   // Cleared at once, so a drop that arrives during the fade files nothing.
   pendingDrag = null;
   dragSource = null;
+  exploring = false;
 
   if (!dropView || dropView.webContents.isDestroyed()) {
     return;
@@ -1169,6 +1184,7 @@ async function showDropPanel(
   }
   pendingDrag = payload;
   dragSource = source;
+  exploring = false;
 
   const view = ensureDropView();
   // Re-parented every time so it sits above any tab opened since it was made;
@@ -1329,9 +1345,13 @@ export function registerBrowserIpc(): void {
     void showDropPanel(payload, e.sender);
   });
   ipcMain.on("magpie:drag-end", () => {
-    // dragend fires on the source page and a drop on the panel arrives just
-    // after it, so the close is deferred far enough for that drop to cancel
-    // it and short enough that a cancelled drag does not leave the panel up.
+    // The explorer outlives the drag that opened it.
+    if (exploring) {
+      return;
+    }
+    // Otherwise: dragend and a drop on the panel arrive in either order, so
+    // the close is deferred far enough for a drop to cancel it and short
+    // enough that a cancelled drag does not leave the panel hanging.
     if (hideTimer) {
       clearTimeout(hideTimer);
     }
@@ -1342,16 +1362,24 @@ export function registerBrowserIpc(): void {
       clearTimeout(hideTimer);
       hideTimer = null;
     }
-    // "choose" is not a destination; it hands over to the panel's search
-    // view, which only works once the drag has ended and the keyboard is free.
-    if (target.kind !== "choose") {
-      void fileDrop(target);
+    // "choose" is not a destination; it hands the panel over to the explorer,
+    // which only works once the drag has ended and the keyboard is free. From
+    // then on nothing about the drag may close it.
+    if (target.kind === "choose") {
+      exploring = true;
+      return;
     }
+    void fileDrop(target);
   });
   ipcMain.on("magpie:drop-cancel", () => hideDropPanel());
   ipcMain.on("magpie:drop-explore", () => {
     // The drag is over by now, so the panel can take focus and a keyboard.
     // The card resizes itself in CSS; nothing here has to move.
+    exploring = true;
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
     dropView?.webContents.focus();
   });
 
