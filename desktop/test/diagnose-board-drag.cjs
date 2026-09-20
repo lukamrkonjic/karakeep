@@ -38,15 +38,19 @@ const FIND = `(() => {
   const imgs = [...document.images].filter((i) => {
     if (!i.currentSrc) return false;
     const b = i.getBoundingClientRect();
+    // The CENTRE has to be on screen, not the whole image: a pin closeup is
+    // routinely taller than the viewport, and demanding it fit entirely
+    // rejects the very image the page is about.
+    const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
     return b.width > 120 && b.height > 120 &&
-           b.top > 8 && b.left > 8 && b.bottom < vh - 8 && b.right < vw - 8;
+           cx > 8 && cx < vw - 8 && cy > 8 && cy < vh - 8;
   });
   if (!imgs.length) return null;
   const area = (i) => { const b = i.getBoundingClientRect(); return b.width * b.height; };
   const img = imgs.sort((a, b) => area(b) - area(a))[0];
   const r = img.getBoundingClientRect();
-  const cx = Math.round(r.left + r.width / 2);
-  const cy = Math.round(r.top + r.height / 2);
+  const cx = Math.round(Math.min(Math.max(r.left + r.width / 2, 8), vw - 8));
+  const cy = Math.round(Math.min(Math.max(r.top + r.height / 2, 8), vh - 8));
   const top = document.elementFromPoint(cx, cy);
   return {
     x: cx, y: cy,
@@ -84,6 +88,28 @@ app.whenReady().then(async () => {
 
   await wc.loadURL(target);
   await new Promise((r) => setTimeout(r, settle));
+
+  // Patch setDragImage in the PAGE's own world, so this records only what the
+  // site calls — our own calls live in an isolated world and cannot be seen
+  // from here, which is exactly what makes this a clean read of Pinterest.
+  await wc.executeJavaScript(`(() => {
+    window.__sdiCalls = [];
+    const orig = DataTransfer.prototype.setDragImage;
+    DataTransfer.prototype.setDragImage = function (el, x, y) {
+      try {
+        const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+        window.__sdiCalls.push({
+          tag: el && el.tagName ? el.tagName.toLowerCase() : String(el),
+          w: r ? Math.round(r.width) : null,
+          h: r ? Math.round(r.height) : null,
+          x, y,
+          src: (el && el.src ? String(el.src) : "").slice(0, 48),
+        });
+      } catch (e) { window.__sdiCalls.push({ error: String(e) }); }
+      return orig.call(this, el, x, y);
+    };
+    return true;
+  })()`);
 
   const spot = await wc.executeJavaScript(FIND);
   if (!spot) {
@@ -140,6 +166,10 @@ app.whenReady().then(async () => {
   press("mouseUp", spot.x + 170, spot.y + 85);
   await new Promise((r) => setTimeout(r, 800));
 
+  console.log(
+    "setDragImage calls made by THE PAGE:",
+    JSON.stringify(await wc.executeJavaScript("window.__sdiCalls || []")),
+  );
   console.log("setDragImage phases that ran:", JSON.stringify(phases));
   console.log("preload reported:", JSON.stringify(seen, null, 1));
   console.log(

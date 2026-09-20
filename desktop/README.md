@@ -202,37 +202,17 @@ are already rendering. The listener is in the capture phase, so a page that
 cancels its own `dragstart` is seen anyway, and the fetch that follows goes
 through the tab's session, so a login applies.
 
-The image itself rides under the cursor while you carry it: `setDragImage`
-with a 150px clone of it, centred on the pointer. Chromium's own drag image is
-the element at its rendered size, which for a full-width pin is an unwieldy
-slab and reads as a dragged *object* rather than a thing being placed.
+The drag preview is Chromium's own, which for an image drag is the image.
+There is deliberately no custom one.
 
-Two things about that are easy to get wrong, and both were:
-
-- **A clone, not a canvas.** Drawing a cross-origin pin into a canvas taints
-  it, and a tainted canvas is refused as a drag image — silently, so the drag
-  simply has no picture on it.
-- **Set twice: once in the capture phase and once, last, in the bubble.**
-  Neither alone is enough. Chromium snapshots whatever was set last before
-  `dragstart` finishes dispatching, so a page that sets its own would beat a
-  lone capture-phase call — but a pin page calls `stopPropagation()`, and then
-  the event never bubbles back to `window` at all and a lone bubble-phase call
-  never happens. That is exactly why the drag preview worked on a board and
-  not inside a pin. The late call is registered *during* dispatch, which
-  appends it to the end of `window`'s bubble listeners, so it lands after
-  anything the page registered at load time.
-- **Built at `mousedown`, not at `dragstart`.** The snapshot is taken after
-  `dragstart` returns, and an element created inside that handler has had no
-  layout and no decode yet, so what gets copied is empty and Chromium falls
-  back to its own image without complaining. A mousedown is hundreds of
-  milliseconds ahead of the drag, which is all the element needs.
-
-Finding the image under the cursor is one shared routine, used both to prepare
-the ghost and to resolve the drag, so a board and a pin behave the same.
-`elementsFromPoint` alone is not enough — it skips anything with
-`pointer-events: none`, which is exactly how a grid stops its pictures
-swallowing clicks meant for the card. When the stack holds no image, geometry
-answers instead: the smallest image whose box covers the point.
+There was, for a while: a 150px clone of the image, parked off-screen and
+handed to `setDragImage` so every drag looked the same size. It never worked.
+An element at `left: -10000px` has no painted pixels, so what Chromium
+snapshots is empty — and it replaces a perfectly good default with nothing.
+The failure was invisible where the code did not run: a board fell through to
+the default and looked fine, while a pin page showed no preview at all, which
+made it look like a detection bug rather than what it was. Making the image
+draggable again is the whole job; the picture then takes care of itself.
 
 The panel is drawn the instant the drag begins, from lists already in hand,
 and takes a second message when fresh ones arrive. Waiting for the server
