@@ -68,7 +68,7 @@ export function SearchModeSelector({
         >
           <ActiveIcon className="size-3.5" />
           <span className="hidden sm:inline">{t(activeMode.labelKey)}</span>
-          <ChevronDown className="group-data-[state=open]:rotate-180 size-3 opacity-60 transition-transform" />
+          <ChevronDown className="size-3 opacity-60 transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-2">

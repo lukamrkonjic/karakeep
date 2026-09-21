@@ -12,7 +12,7 @@ function PreWithCopyBtn({ className, ...props }: React.ComponentProps<"pre">) {
   return (
     <span className="group relative">
       <CopyBtn
-        className="group-hover:block absolute right-1 top-1 m-1 hidden text-white"
+        className="absolute right-1 top-1 m-1 hidden text-white group-hover:block"
         getStringToCopy={() => {
           return ref.current?.textContent ?? "";
         }}
