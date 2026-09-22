@@ -18,14 +18,16 @@ quick to resolve.
 - **~8 files were substantially reworked** and are the real conflict risk on
   a `git merge upstream/main`. They're called out explicitly below with
   guidance on how to reconcile them.
-- **One real migration.** `0094_add_list_position.sql` adds a `position`
+- **Three migrations.** `0094_add_list_position.sql` adds a `position`
   column to `bookmarkLists` (list drag-to-reorder) and backfills it from
-  `createdAt` for existing rows. A separate additive `AssetTypes` enum value
-  (video thumbnails, `packages/db/schema.ts`) needed no migration at all —
-  SQLite/Drizzle don't enforce enums at the DB level, so `drizzle-kit
-  generate` reported no schema change for that one. Aside from these two,
-  this is overwhelmingly a cosmetic/UI fork plus a few targeted backend
-  robustness/performance/feature additions.
+  `createdAt` for existing rows; `0095` is data-only (mangled list icons);
+  `0096_list_subscriptions.sql` adds the two list-subscription tables and a
+  user setting (Pinterest board sync — see below). A separate additive
+  `AssetTypes` enum value (video thumbnails, `packages/db/schema.ts`) needed
+  no migration at all — SQLite/Drizzle don't enforce enums at the DB level,
+  so `drizzle-kit generate` reported no schema change for that one. Aside
+  from these, this is overwhelmingly a cosmetic/UI fork plus a few targeted
+  backend robustness/performance/feature additions.
 
 ## One-time setup (if not already done)
 
@@ -110,6 +112,14 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 | `apps/web/lib/sublists.ts`, `apps/web/components/utils/useShowSublists.ts` | The "…" menu's "Show items from sub-lists" setting. A cookie, not localStorage, so the server-rendered list page builds the right query straight away instead of flashing the parent's own items first |
 | `apps/web/components/dashboard/lists/NewListButton.tsx` | The All Lists page's "New list" button, as a client component. Radix's `asChild` trigger clones its child to put the trigger's props on it, and a child handed down from a SERVER component is still an unresolved reference while the server renders — so the trigger cloned nothing, the button was missing from the server's HTML, and appeared only on hydration (that page's long-standing hydration mismatch). Any `asChild` trigger whose child comes from a server component has the same bug |
 | `packages/db/drizzle/0095_clear_mangled_list_icons.sql` | Data migration: clears list icons that are only "?"/U+FFFD/blanks. 94 of Luka's 103 lists stored `??` — an emoji that crossed a non-Unicode code page, one "?" per UTF-16 half — and every client printed it in front of the list name (web, browser extension, API). Pairs with `normalizeListIcon()`, which stops new ones being written |
+| `apps/workers/workers/subscriptionWorker.ts` | **List subscriptions** — keeps a manual list in sync with a public Pinterest board. An hourly cron queues what is due (per-user interval, 10 min slack so "every 3 h" doesn't drift to 4), the runner reads the whole board and files what is new: oldest first, each bookmark stamped with its own second (`createdAt` is second-precision and ties sort by random id), so the list shows the board's order. The `listSubscriptionImports` ledger means nothing downloads twice: a pin the subscription handled is never touched again (even after its bookmark was moved or deleted), and a picture the user already has — the same image pinned twice, or a board removed and added again — is linked into the list instead of copied. Downloads stream to disk under `MAX_ASSET_SIZE_MB`; a picture/video that can never be had is remembered as skipped, a passing failure retried next sync; five failures in a row, the quota, or losing the list stop the run with a message. Boards over 300 new pins continue in back-to-back runs. Worker name `subscription` (for `WORKERS_ENABLED_WORKERS`/`WORKERS_DISABLED_WORKERS`) |
+| `apps/workers/workers/connectors/pinterest.ts` | Reads a public board: the page's `__PWS_INITIAL_PROPS__` for page 1, then `BoardFeedResource/get` with the page's cookies + app version + CSRF token **and `x-pinterest-pws-handler`** (without it: 403 "Invalid Resource Request"), `filter_section_pins: false` like the page itself. Takes only each pin's own media from `*.pinimg.com` — the `.mp4` of a video (its `video_list` puts two HLS playlists of the same width first, which can't be stored), else `images.orig` — so avatars, favicons and "more ideas" never come in; skips `story` modules. `image_signature` is the media key. If Pinterest changes its front-end, this file is the one to fix |
+| `packages/trpc/routers/listSubscriptions.ts` | `list`/`listAll`/`create`/`update`/`delete`/`runNow`. Needs edit rights on the list; `create` normalises any Pinterest domain to `www.pinterest.com` and syncs straight away; resuming a paused one syncs too. Deleting keeps the pictures and the ledger |
+| `packages/shared/types/listSubscriptions.ts`, `packages/shared/utils/pinterest.ts` | Zod schemas + interval choices; `parsePinterestBoardUrl()` (board links only — not pins, profiles or their `_saved`/`_created` tabs, sections, or hosts that merely contain "pinterest") |
+| `packages/db/drizzle/0096_list_subscriptions.sql` | Real migration: `listSubscriptions`, `listSubscriptionImports` (the ledger: per user, `subscriptionId` set null on delete, indexed on `bookmarkId` so deleting a bookmark doesn't scan it) and `user.subscriptionIntervalHours` (default 12) |
+| `apps/web/components/dashboard/lists/ListSubscriptionsModal.tsx`, `ListSubscriptionStatus.tsx` | The list "…" → "Add subscription" modal (add a board link, pause/resume, remove, "Sync now") and the shared status line ("Syncing…" polls every 2 s; when a sync finishes the grid and counts refresh) |
+| `apps/web/components/settings/ListSubscriptionSettings.tsx`, `apps/web/app/settings/list-subscriptions/page.tsx` | Settings → List subscriptions: the schedule (only when asked / 3 h / 6 h / 12 h / daily / weekly) and every subscription with its list |
+| `apps/workers/imageFormats.ts` | AVIF and other formats. `imageForAnalysis()` hands OCR and AI tagging a PNG copy of anything they can't read (AVIF — Tesseract and the vision APIs don't take it); `convertForStorage()` turns a format no browser shows (TIFF) into a PNG before the subscription worker stores it. Uses `sharp` (now a workers dependency, same version the web app already ships). HEIC, JPEG XL and BMP can't be decoded by the bundled libvips, so they stay unsupported |
 
 ## 🟡 Modified upstream files — small, targeted edits (low conflict risk)
 
@@ -173,6 +183,18 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 | `apps/workers/workers/videoWorker.ts` | After an auto-downloaded video (yt-dlp, e.g. embedded YouTube/X/Reddit videos) is saved, now also enqueues a thumbnail job — this path writes the asset straight to the DB and previously bypassed thumbnail generation entirely, unlike the manual-attach path |
 | `packages/trpc/testUtils.ts` | *(No longer a fork change.)* The fork added `AssetPreprocessingQueue` to the shared queue mock; upstream has since added its own, wired to an observable `testQueueMocks.assetPreprocessingEnqueue`. **Merge trap:** git happily auto-merges both into the same object literal, and the duplicate key silently shadows upstream's mock with an anonymous `vi.fn()`, so assertions against it fail for no visible reason. Keep upstream's, drop ours. |
 | `packages/trpc/routers/admin.test.ts` | Adds tests for `generateVideoThumbnails` and `cancelQueuedJobs`. Uses upstream's own `beforeEach` (it clears mocks and installs the search/vectorStore mocks its tests need) — `defaultBeforeEach` isn't required here, because `testUtils.ts`'s `vi.mock("@karakeep/shared-server")` is hoisted to that module's top level and so applies to every test file importing it |
+| `packages/db/schema.ts` (list subscriptions) | `listSubscriptionsTable`, `listSubscriptionImportsTable` and `users.subscriptionIntervalHours` (see `0096` above) |
+| `packages/shared-server/src/queues.ts` (subscriptions) | `SubscriptionQueue` and `queueSubscriptionSync()`: marks the subscription "pending" and enqueues with idempotency key `subscription:<id>`, so a sync already queued or running absorbs another request |
+| `packages/trpc/routers/_app.ts` | Registers the router as `listSubscriptions` (upstream's `subscriptions` is Stripe billing) |
+| `packages/shared/types/users.ts`, `packages/trpc/models/users.ts`, `apps/web/lib/userSettings.tsx` | The `subscriptionIntervalHours` user setting (0–720, 0 = only on "Sync now"), read, written and defaulted like the others |
+| `packages/trpc/routers/users.test.ts` | The settings test asserts the exact shape, so it expects `subscriptionIntervalHours` (and sets it) |
+| `apps/workers/index.ts` | Registers the `subscription` worker and starts/stops its cron, like the feed worker's |
+| `apps/web/app/settings/layout.tsx` | "List subscriptions" entry under "RSS Subscriptions" |
+| `apps/web/components/dashboard/lists/ListOptions.tsx` (subscriptions) | "Add subscription" in the "…" menu, on manual lists you can edit |
+| `packages/shared/assetdb.ts` (AVIF) | `IMAGE_AVIF` in `ASSET_TYPES` and `IMAGE_ASSET_TYPES`, so an AVIF uploads, becomes an image bookmark, and a direct AVIF link is stored as a picture. Browsers show it as it is (`AssetCard` renders assets `unoptimized`) |
+| `apps/workers/workers/assetPreprocessingWorker.ts` (OCR), `apps/workers/workers/inference/tagging.ts` | Pass the image through `imageForAnalysis()` first (see `imageFormats.ts` above); JPEG/PNG/WebP/GIF go through untouched, as before |
+| `apps/workers/package.json`, `pnpm-lock.yaml` | `sharp` for the workers (the lockfile gains one importer entry; the package itself was already there for the web app). tsdown leaves it external and `pnpm deploy` ships its Linux binary |
+| `desktop/src/main/ingest.ts` (Magpie) | AVIF in its copy of the accepted types, and sniffed as `ftypavif`/`ftypavis` before the generic `ftyp` → MP4 rule. Vrana (separate repo) has the same list and still lacks AVIF |
 
 ## 🔴 Substantially reworked files — highest conflict risk, check these first
 
@@ -228,4 +250,6 @@ workflow.**
 - [ ] In the modal's List section: hover a chip → × removes it; + adds another list; with none left it reads "Unsorted". Drag a tile onto a sidebar list: from a list view it leaves that list, from home it leaves all its lists
 - [ ] Drag-and-drop a local `.mp4`/`.webm`/`.mkv` file onto the app — confirm it creates a bookmark (not "Unsupported asset type"), a poster-frame thumbnail appears in the feed within a few seconds without manual intervention, and the video plays in the feed and the preview modal
 - [ ] Paste-to-save: take a screenshot snippet (`⌘⌃⇧4` macOS / `Win+Shift+S` Windows), open a manual list, press `⌘/Ctrl+V` — confirm the image is uploaded and added to that list; on the home feed it should upload without a list; and pasting into a text field / note editor should still paste text (not hijack the screenshot)
+- [ ] List subscriptions: on a manual list, "…" → "Add subscription", paste a public Pinterest board link. It shows "Syncing…", then "Synced, N new"; the list fills in the board's order, the same picture pinned twice arrives once, and a board with videos brings `.mp4` videos (not their covers). "Sync now" again adds nothing; removing the board and adding it back downloads nothing. Settings → List subscriptions changes the schedule. If a sync fails with HTTP 403, Pinterest changed its front-end — see `connectors/pinterest.ts`
+- [ ] AVIF: drop an `.avif` on a list — it becomes an image bookmark that shows in the grid and the preview, and OCR/AI tagging don't fail on it
 - [ ] Deploy to the NAS and re-test against the real, large dataset before calling it done — several of these bugs only reproduced at real scale (thousands of bookmarks, 100+ lists), not against small local test data

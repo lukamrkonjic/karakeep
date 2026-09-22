@@ -21,6 +21,7 @@ export const UserSettingsContext = createContext<ZUserSettings>({
   tagStyle: "as-generated",
   curatedTagIds: null,
   inferredTagLang: null,
+  subscriptionIntervalHours: 12,
 });
 
 export function UserSettingsContextProvider({

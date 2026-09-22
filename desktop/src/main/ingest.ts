@@ -19,6 +19,7 @@ import {
  * has to become a link bookmark instead.
  */
 const ASSET_KIND_BY_MIME: Record<string, "image" | "video" | "pdf"> = {
+  "image/avif": "image",
   "image/gif": "image",
   "image/jpeg": "image",
   "image/png": "image",
@@ -30,6 +31,7 @@ const ASSET_KIND_BY_MIME: Record<string, "image" | "video" | "pdf"> = {
 };
 
 const EXT_BY_MIME: Record<string, string> = {
+  "image/avif": "avif",
   "image/gif": "gif",
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -56,6 +58,9 @@ function sniffMime(bytes: Uint8Array<ArrayBuffer>): string | null {
   }
   // ....ftyp — an ISO base-media container (mp4 and friends)
   if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    // ftypavif / ftypavis: an AVIF picture (or sequence), not a video
+    const brand = String.fromCharCode(b[8]!, b[9]!, b[10]!, b[11]!);
+    if (brand === "avif" || brand === "avis") return "image/avif";
     return "video/mp4";
   }
   return null;

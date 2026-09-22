@@ -1,5 +1,8 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import type { DB } from "@karakeep/db";
+import { listSubscriptionsTable } from "@karakeep/db/schema";
 import {
   EnqueueOptions,
   getQueueClient,
@@ -273,6 +276,45 @@ export const FeedQueue = createDeferredQueue<ZFeedRequestSchema>("feed_queue", {
   },
   keepFailedJobs: false,
 });
+
+// Fork: list subscriptions (a public Pinterest board synced into a list)
+export const zSubscriptionRequestSchema = z.object({
+  subscriptionId: z.string(),
+});
+export type ZSubscriptionRequestSchema = z.infer<
+  typeof zSubscriptionRequestSchema
+>;
+
+export const SubscriptionQueue =
+  createDeferredQueue<ZSubscriptionRequestSchema>("subscription_queue", {
+    defaultJobArgs: {
+      // Periodic, like the feed queue: one retry, then wait for the next run.
+      numRetries: 1,
+    },
+    keepFailedJobs: false,
+  });
+
+/**
+ * Asks for a sync of one subscription and shows it as syncing ("pending")
+ * until the worker is done. A sync that is already queued or running absorbs
+ * the request, so pressing "Sync now" twice runs it once.
+ */
+export async function queueSubscriptionSync(
+  db: DB,
+  subscription: { id: string; userId: string },
+) {
+  await db
+    .update(listSubscriptionsTable)
+    .set({ lastStatus: "pending" })
+    .where(eq(listSubscriptionsTable.id, subscription.id));
+  await SubscriptionQueue.enqueue(
+    { subscriptionId: subscription.id },
+    {
+      idempotencyKey: `subscription:${subscription.id}`,
+      groupId: subscription.userId,
+    },
+  );
+}
 
 // Preprocess Assets
 export const zAssetPreprocessingRequestSchema = z.object({

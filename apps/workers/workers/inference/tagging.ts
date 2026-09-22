@@ -1,4 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
+import { imageForAnalysis } from "imageFormats";
 import { getBookmarkDomain } from "network";
 import { buildImpersonatingTRPCClient } from "trpc";
 import { z } from "zod";
@@ -167,7 +168,9 @@ async function inferTagsFromImage(
     return null;
   }
 
-  const base64 = asset.toString("base64");
+  // Fork: vision APIs don't take AVIF and co.; they get a PNG copy.
+  const readable = await imageForAnalysis(asset, metadata.contentType);
+  const base64 = readable.image.toString("base64");
   addLogFields<"inferenceWorker.run">({
     "inference.model": serverConfig.inference.imageModel,
   });
@@ -179,7 +182,7 @@ async function inferTagsFromImage(
       curatedTags,
       potentialRelevantTags,
     ),
-    metadata.contentType,
+    readable.contentType,
     base64,
     { schema: openAIResponseSchema, abortSignal },
   );

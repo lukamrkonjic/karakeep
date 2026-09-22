@@ -1055,6 +1055,9 @@ importers:
       rss-parser:
         specifier: ^3.13.0
         version: 3.13.0
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@26.6.1)
       tesseract.js:
         specifier: ^7.0.0
         version: 7.0.0

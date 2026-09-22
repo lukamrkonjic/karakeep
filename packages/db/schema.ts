@@ -90,6 +90,12 @@ export const users = sqliteTable("user", {
     .default("weekly"),
   backupsRetentionDays: integer("backupsRetentionDays").notNull().default(30),
 
+  // Fork: how often list subscriptions are synced, in hours (0 = only when
+  // you press "Sync now"). See listSubscriptions below.
+  subscriptionIntervalHours: integer("subscriptionIntervalHours")
+    .notNull()
+    .default(12),
+
   // Reader view settings (nullable = opt-in, null means use client default)
   readerFontSize: integer("readerFontSize"),
   readerLineHeight: real("readerLineHeight"),
@@ -775,6 +781,88 @@ export const rssFeedImportsTable = sqliteTable(
       bl.rssFeedId,
       bl.bookmarkId,
     ),
+  ],
+);
+
+export const listSubscriptionsTable = sqliteTable(
+  "listSubscriptions",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    createdAt: createdAtField(),
+    // The list the fetched media lands in.
+    listId: text("listId")
+      .notNull()
+      .references(() => bookmarkLists.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Which connector reads `url`. Only public Pinterest boards for now.
+    kind: text("kind", { enum: ["pinterest"] })
+      .notNull()
+      .default("pinterest"),
+    url: text("url").notNull(),
+    // What the source calls itself (a board's name), for the UI.
+    name: text("name"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    lastRunAt: integer("lastRunAt", { mode: "timestamp" }),
+    lastStatus: text("lastStatus", {
+      enum: ["pending", "success", "failure"],
+    }).default("pending"),
+    lastError: text("lastError"),
+    lastImportedCount: integer("lastImportedCount"),
+  },
+  (t) => [
+    index("listSubscriptions_listId_idx").on(t.listId),
+    index("listSubscriptions_userId_idx").on(t.userId),
+    // The same source twice in one list would just fight itself.
+    unique().on(t.listId, t.url),
+  ],
+);
+
+// What the subscriptions have taken. It answers two questions: has this
+// subscription already handled an item (then never touch it again, even if
+// its bookmark was since moved or deleted), and does the user already have
+// this picture (then link that bookmark instead of downloading a copy).
+// Rows outlive their subscription so that re-adding a board doesn't download
+// the whole board again.
+export const listSubscriptionImportsTable = sqliteTable(
+  "listSubscriptionImports",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    createdAt: createdAtField(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Null once the subscription that took the item is removed.
+    subscriptionId: text("subscriptionId").references(
+      () => listSubscriptionsTable.id,
+      { onDelete: "set null" },
+    ),
+    // The source's own id for the item (a pin id).
+    externalId: text("externalId").notNull(),
+    // Identifies the picture itself (Pinterest's image signature), so the
+    // same image pinned twice is still one bookmark.
+    mediaKey: text("mediaKey"),
+    bookmarkId: text("bookmarkId").references(() => bookmarks.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    index("listSubscriptionImports_subscriptionId_idx").on(t.subscriptionId),
+    index("listSubscriptionImports_userId_mediaKey_idx").on(
+      t.userId,
+      t.mediaKey,
+    ),
+    // Deleting a bookmark nulls its rows here; without this index every
+    // bookmark deletion would scan the table.
+    index("listSubscriptionImports_bookmarkId_idx").on(t.bookmarkId),
+    unique().on(t.subscriptionId, t.externalId),
   ],
 );
 

@@ -216,6 +216,8 @@ export const zUserSettingsSchema = z.object({
   tagStyle: zTagStyleSchema,
   curatedTagIds: z.array(z.string()).nullable(),
   inferredTagLang: z.string().nullable(),
+  // Fork: how often list subscriptions sync, in hours (0 = only on demand).
+  subscriptionIntervalHours: z.number().int().min(0).max(720),
 });
 
 export type ZUserSettings = z.infer<typeof zUserSettingsSchema>;
@@ -235,6 +237,7 @@ export const zUpdateUserSettingsSchema = zUserSettingsSchema.partial().pick({
   tagStyle: true,
   curatedTagIds: true,
   inferredTagLang: true,
+  subscriptionIntervalHours: true,
 });
 
 export const zUpdateBackupSettingsSchema = zUpdateUserSettingsSchema.pick({

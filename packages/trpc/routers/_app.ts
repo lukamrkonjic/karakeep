@@ -9,6 +9,7 @@ import { feedsAppRouter } from "./feeds";
 import { highlightsAppRouter } from "./highlights";
 import { importSessionsRouter } from "./importSessions";
 import { invitesAppRouter } from "./invites";
+import { listSubscriptionsAppRouter } from "./listSubscriptions";
 import { listsAppRouter } from "./lists";
 import { promptsAppRouter } from "./prompts";
 import { publicBookmarks } from "./publicBookmarks";
@@ -36,6 +37,7 @@ export const appRouter = router({
   invites: invitesAppRouter,
   publicBookmarks: publicBookmarks,
   subscriptions: subscriptionsRouter,
+  listSubscriptions: listSubscriptionsAppRouter,
   config: configAppRouter,
 });
 // export type definition of API

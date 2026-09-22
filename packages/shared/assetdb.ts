@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const enum ASSET_TYPES {
+  IMAGE_AVIF = "image/avif",
   IMAGE_GIF = "image/gif",
   IMAGE_JPEG = "image/jpeg",
   IMAGE_PNG = "image/png",
@@ -21,6 +22,9 @@ export const VIDEO_ASSET_TYPES: Set<string> = new Set<string>([
 ]);
 
 export const IMAGE_ASSET_TYPES: Set<string> = new Set<string>([
+  // Fork: AVIF, which every current browser shows. OCR and AI tagging get a
+  // PNG copy of it (apps/workers/imageFormats.ts); neither reads AVIF itself.
+  ASSET_TYPES.IMAGE_AVIF,
   ASSET_TYPES.IMAGE_GIF,
   ASSET_TYPES.IMAGE_JPEG,
   ASSET_TYPES.IMAGE_PNG,

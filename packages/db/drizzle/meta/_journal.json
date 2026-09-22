@@ -673,6 +673,13 @@
       "when": 1790098482435,
       "tag": "0095_clear_mangled_list_icons",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1790104968919,
+      "tag": "0096_list_subscriptions",
+      "breakpoints": true
     }
   ]
 }

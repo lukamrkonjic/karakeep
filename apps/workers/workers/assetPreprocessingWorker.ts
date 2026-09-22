@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { promisify } from "util";
 import { and, eq } from "drizzle-orm";
+import { imageForAnalysis } from "imageFormats";
 import { workerStatsCounter } from "metrics";
 import { withWorkerEventLog, withWorkerTracing } from "workerTracing";
 
@@ -497,7 +498,12 @@ async function extractAndSaveImageText(
       `[assetPreprocessing][${jobId}] Attempting to extract text from image using LLM OCR.`,
     );
     try {
-      imageText = await readImageTextWithLLM(asset, contentType);
+      // Fork: AVIF and co. are read from a PNG copy.
+      const readable = await imageForAnalysis(asset, contentType);
+      imageText = await readImageTextWithLLM(
+        readable.image,
+        readable.contentType,
+      );
     } catch (e) {
       logger.error(
         `[assetPreprocessing][${jobId}] Failed to read image text with LLM: ${e}`,
@@ -508,7 +514,10 @@ async function extractAndSaveImageText(
       `[assetPreprocessing][${jobId}] Attempting to extract text from image using Tesseract.`,
     );
     try {
-      imageText = await readImageText(asset);
+      // Fork: AVIF and co. are read from a PNG copy.
+      imageText = await readImageText(
+        (await imageForAnalysis(asset, contentType)).image,
+      );
     } catch (e) {
       logger.error(
         `[assetPreprocessing][${jobId}] Failed to read image text: ${e}`,

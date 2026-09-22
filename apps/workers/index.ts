@@ -18,6 +18,7 @@ import {
   RuleEngineQueue,
   SearchIndexingQueue,
   shutdownEventLogger,
+  SubscriptionQueue,
   shutdownTracing,
   startQueue,
   VideoWorkerQueue,
@@ -33,6 +34,9 @@ let backupSchedulingWorker:
   | undefined;
 let feedRefreshingWorker:
   | typeof import("./workers/feedWorker").FeedRefreshingWorker
+  | undefined;
+let subscriptionRefreshingWorker:
+  | typeof import("./workers/subscriptionWorker").SubscriptionRefreshingWorker
   | undefined;
 
 const workerBuilders = {
@@ -79,6 +83,13 @@ const workerBuilders = {
     feedRefreshingWorker = FeedRefreshingWorker;
     await FeedQueue.ensureInit();
     return FeedWorker.build();
+  },
+  subscription: async () => {
+    const { SubscriptionRefreshingWorker, SubscriptionWorker } =
+      await import("./workers/subscriptionWorker");
+    subscriptionRefreshingWorker = SubscriptionRefreshingWorker;
+    await SubscriptionQueue.ensureInit();
+    return SubscriptionWorker.build();
   },
   assetPreprocessing: async () => {
     const { AssetPreprocessingWorker } =
@@ -152,6 +163,10 @@ async function main() {
     backupSchedulingWorker?.start();
   }
 
+  if (workers.some((w) => w.name === "subscription")) {
+    subscriptionRefreshingWorker?.start();
+  }
+
   // Start import polling worker
   let importWorker = null;
   let importWorkerPromise: Promise<void> | null = null;
@@ -182,6 +197,9 @@ async function main() {
   }
   if (workers.some((w) => w.name === "backup")) {
     backupSchedulingWorker?.stop();
+  }
+  if (workers.some((w) => w.name === "subscription")) {
+    subscriptionRefreshingWorker?.stop();
   }
   if (importWorker) {
     importWorker.stop();

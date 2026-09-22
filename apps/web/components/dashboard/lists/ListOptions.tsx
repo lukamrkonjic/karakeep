@@ -13,6 +13,7 @@ import {
   FolderInput,
   Pencil,
   Plus,
+  Rss,
   Share,
   Square,
   SquareCheck,
@@ -26,6 +27,7 @@ import { ZBookmarkList } from "@karakeep/shared/types/lists";
 import { EditListModal } from "../lists/EditListModal";
 import DeleteListConfirmationDialog from "./DeleteListConfirmationDialog";
 import LeaveListConfirmationDialog from "./LeaveListConfirmationDialog";
+import { ListSubscriptionsModal } from "./ListSubscriptionsModal";
 import { ManageCollaboratorsModal } from "./ManageCollaboratorsModal";
 import { MergeListModal } from "./MergeListModal";
 import { ShareListModal } from "./ShareListModal";
@@ -55,6 +57,7 @@ export function ListOptions({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
+  const [subscriptionsModalOpen, setSubscriptionsModalOpen] = useState(false);
 
   // Only owners can manage the list (edit, delete, manage collaborators, etc.)
   const isOwner = list.userRole === "owner";
@@ -105,6 +108,16 @@ export function ListOptions({
       visible: isOwner,
       disabled: false,
       onClick: () => setMergeListModalOpen(true),
+    },
+    {
+      id: "subscriptions",
+      title: t("lists.add_subscription", { defaultValue: "Add subscription" }),
+      icon: <Rss className="size-4" />,
+      // A subscription writes into the list, so only where you may write.
+      visible:
+        list.type === "manual" && (isOwner || list.userRole === "editor"),
+      disabled: false,
+      onClick: () => setSubscriptionsModalOpen(true),
     },
     {
       id: "toggle-sublists",
@@ -189,6 +202,11 @@ export function ListOptions({
         open={mergeListModalOpen}
         setOpen={setMergeListModalOpen}
         list={list}
+      />
+      <ListSubscriptionsModal
+        open={subscriptionsModalOpen}
+        setOpen={setSubscriptionsModalOpen}
+        listId={list.id}
       />
       <DeleteListConfirmationDialog
         list={list}
