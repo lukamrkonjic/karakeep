@@ -29,7 +29,7 @@ export default function DeleteListConfirmationDialog({
   const { mutate: deleteList, isPending } = useDeleteBookmarkList({
     onSuccess: () => {
       toast({
-        description: `List "${list.icon} ${list.name}" ${deleteChildren ? "and all its children are " : "is "} deleted!`,
+        description: `List "${list.icon ? `${list.icon} ` : ""}${list.name}" ${deleteChildren ? "and all its children are " : "is "} deleted!`,
       });
       setOpen(false);
       if (currentPath.includes(list.id)) {

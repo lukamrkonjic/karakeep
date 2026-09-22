@@ -37,6 +37,9 @@ export default function BookmarkPreviewPage(props: {
           picture or video, and gives everything else a 90% box. */}
       <DialogContent
         className="w-auto max-w-[95vw] gap-0 overflow-hidden rounded-xl p-0"
+        // Darker than other dialogs: a picture or video should sit against
+        // near-black, not a half-lit feed.
+        overlayClassName="bg-black/95"
         hideCloseBtn={true}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >

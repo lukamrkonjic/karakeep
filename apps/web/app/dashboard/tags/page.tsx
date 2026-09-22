@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AllTagsView from "@/components/dashboard/tags/AllTagsView";
+import TagsHome from "@/components/dashboard/tags/TagsHome";
 import { useTranslation } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -11,5 +11,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function TagsPage() {
-  return <AllTagsView />;
+  return <TagsHome />;
 }

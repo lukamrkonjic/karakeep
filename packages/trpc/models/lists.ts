@@ -21,6 +21,7 @@ import {
   zNewBookmarkListSchema,
 } from "@karakeep/shared/types/lists";
 import { ZCursor } from "@karakeep/shared/types/pagination";
+import { normalizeListIcon } from "@karakeep/shared/utils/listUtils";
 import { switchCase } from "@karakeep/shared/utils/switch";
 
 import { AuthedContext, Context } from "..";
@@ -293,7 +294,7 @@ export abstract class List {
       .values({
         name: input.name,
         description: input.description,
-        icon: input.icon,
+        icon: normalizeListIcon(input.icon),
         userId: ctx.user.id,
         parentId: input.parentId,
         type: input.type,
@@ -737,7 +738,8 @@ export abstract class List {
       .set({
         name: input.name,
         description: input.description,
-        icon: input.icon,
+        icon:
+          input.icon === undefined ? undefined : normalizeListIcon(input.icon),
         parentId: input.parentId,
         query: input.query,
         public: input.public,

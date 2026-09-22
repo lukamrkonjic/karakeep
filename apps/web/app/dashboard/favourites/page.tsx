@@ -15,7 +15,7 @@ export default async function FavouritesBookmarkPage() {
     <Bookmarks
       header={
         <div className="flex items-center justify-between">
-          <p className="text-2xl">⭐️ Favourites</p>
+          <p className="text-2xl">Favourites</p>
         </div>
       }
       query={{ favourited: true }}

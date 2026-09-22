@@ -6,6 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useShowArchived } from "@/components/utils/useShowArchived";
+import { useShowSublists } from "@/components/utils/useShowSublists";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   DoorOpen,
@@ -19,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
 import { EditListModal } from "../lists/EditListModal";
@@ -41,6 +43,10 @@ export function ListOptions({
 }) {
   const { t } = useTranslation();
   const { showArchived, onClickShowArchived } = useShowArchived();
+  const { showSublists, onClickShowSublists } = useShowSublists(list.id);
+  // Only worth offering on a list that has something nested under it.
+  const { data: allLists } = useBookmarkLists();
+  const hasSublists = !!allLists?.data.some((l) => l.parentId === list.id);
 
   const [deleteListDialogOpen, setDeleteListDialogOpen] = useState(false);
   const [leaveListDialogOpen, setLeaveListDialogOpen] = useState(false);
@@ -99,6 +105,20 @@ export function ListOptions({
       visible: isOwner,
       disabled: false,
       onClick: () => setMergeListModalOpen(true),
+    },
+    {
+      id: "toggle-sublists",
+      title: t("lists.show_sublist_items", {
+        defaultValue: "Show items from sub-lists",
+      }),
+      icon: showSublists ? (
+        <SquareCheck className="size-4" />
+      ) : (
+        <Square className="size-4" />
+      ),
+      visible: hasSublists && list.type === "manual",
+      disabled: false,
+      onClick: onClickShowSublists,
     },
     {
       id: "toggle-archived",

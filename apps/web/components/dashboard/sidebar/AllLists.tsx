@@ -19,7 +19,7 @@ import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, Settings } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import {
@@ -31,6 +31,7 @@ import {
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
+import { TailoredFeedSettings } from "../feed/TailoredFeedSettings";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
@@ -39,6 +40,7 @@ import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 function useDropTarget(listId: string, listName: string) {
   const api = useTRPC();
   const queryClient = useQueryClient();
+  const { data: allLists } = useBookmarkLists();
   const { mutateAsync: addToList } = useAddBookmarkToList();
   const { mutateAsync: removeFromList } = useRemoveBookmarkFromList();
   const [dropHighlight, setDropHighlight] = useState(false);
@@ -87,11 +89,28 @@ function useDropTarget(listId: string, listName: string) {
         const { lists: current } = await queryClient.fetchQuery(
           api.lists.getListsOfBookmark.queryOptions({ bookmarkId }),
         );
+        // Dragged out of a list, leave it — including from a sub-list of it,
+        // since a parent's page can show everything nested under it.
+        const parentOf = new Map(
+          (allLists?.data ?? []).map((l) => [l.id, l.parentId ?? null]),
+        );
+        const within = (id: string, rootId: string) => {
+          for (
+            let cur: string | null | undefined = id, hops = 0;
+            cur && hops < 50;
+            cur = parentOf.get(cur), hops++
+          ) {
+            if (cur === rootId) {
+              return true;
+            }
+          }
+          return false;
+        };
         const leaving = current.filter(
           (l) =>
             l.id !== listId &&
             (sourceListId
-              ? l.id === sourceListId
+              ? within(l.id, sourceListId)
               : l.type === "manual" && l.userRole !== "viewer"),
         );
         await addToList({ bookmarkId, listId });
@@ -113,7 +132,16 @@ function useDropTarget(listId: string, listName: string) {
         });
       }
     },
-    [api, queryClient, addToList, removeFromList, listId, listName, t],
+    [
+      api,
+      queryClient,
+      allLists,
+      addToList,
+      removeFromList,
+      listId,
+      listName,
+      t,
+    ],
   );
 
   return { dropHighlight, onDragOver, onDragEnter, onDragLeave, onDrop };
@@ -265,6 +293,33 @@ export default function AllLists({
         className="my-0.5"
         linkClassName="py-1.5 px-2"
         right={<InvitationNotificationBadge />}
+      />
+      <SidebarItem
+        logo={null}
+        name="Tailored feed"
+        path="/dashboard/feed"
+        className="group my-0.5"
+        linkClassName="py-1.5 px-2"
+        right={
+          <TailoredFeedSettings>
+            <Button
+              size="none"
+              variant="ghost"
+              title="Choose the feed's lists"
+              aria-label="Choose the feed's lists"
+              className="mr-2 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              <Settings className="size-4" />
+            </Button>
+          </TailoredFeedSettings>
+        }
+      />
+      <SidebarItem
+        logo={null}
+        name={t("common.tags")}
+        path="/dashboard/tags"
+        className="my-0.5"
+        linkClassName="py-1.5 px-2"
       />
       <SidebarItem
         logo={null}

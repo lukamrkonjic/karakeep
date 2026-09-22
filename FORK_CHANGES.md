@@ -102,6 +102,14 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 | `apps/web/lib/sidebarCollapse.ts` | Zustand store (with `persist` middleware) for whether the desktop sidebar is folded in — `{ collapsed, toggle }` |
 | `apps/web/components/shared/sidebar/SidebarCollapseWrapper.tsx` | Wraps the sidebar `<aside>`; collapses its width to 0 (overflow-hidden, animated) instead of unmounting it, so its scroll position/state survives a fold in/out |
 | `apps/web/components/shared/sidebar/SidebarCollapseToggle.tsx` | Small chevron beside the header logo that folds the sidebar in/out (replaced `KarakeepLogoToggle`, which made the logo itself the toggle — the logo is a link home again). Renders the server default until mounted, so the stored state can't hydrate a different arrow |
+| `apps/web/lib/tailoredFeed.ts` | Which lists the tailored feed draws from, in localStorage. Stored as EXCLUSIONS, so a list made later is in the feed until you take it out |
+| `apps/web/components/dashboard/feed/TailoredFeedSettings.tsx` | The feed's list picker (the cog beside the sidebar entry, and on the page): the sidebar's own tree with a tick per list, reusing `CollapsibleBookmarkLists`. A folder ticks/unticks everything under it and shows half-ticked when only some of it is in; `feedCandidates()` is the shared "your own manual lists" rule |
+| `apps/web/components/dashboard/feed/TailoredFeed.tsx`, `apps/web/app/dashboard/feed/page.tsx` | The page at /dashboard/feed: "N of M lists", the cog, and one grid of everything in the chosen lists (`listIds`) |
+| `apps/web/components/dashboard/bookmarks/ClientBookmarksGrid.tsx` | `UpdatableBookmarksGrid` for pages whose query only exists in the browser (the feed's list choice, the tag filter): fetches the first page client-side instead of on the server, and is keyed on the query so a new choice starts a fresh grid |
+| `apps/web/components/dashboard/tags/TagFilterView.tsx`, `TagsHome.tsx` | The tags page: find things by tag first (type to narrow the cloud, click tags, everything carrying ALL of them shows below, selection in `?with=`), with upstream's `AllTagsView` management one click away |
+| `apps/web/lib/sublists.ts`, `apps/web/components/utils/useShowSublists.ts` | The "…" menu's "Show items from sub-lists" setting. A cookie, not localStorage, so the server-rendered list page builds the right query straight away instead of flashing the parent's own items first |
+| `apps/web/components/dashboard/lists/NewListButton.tsx` | The All Lists page's "New list" button, as a client component. Radix's `asChild` trigger clones its child to put the trigger's props on it, and a child handed down from a SERVER component is still an unresolved reference while the server renders — so the trigger cloned nothing, the button was missing from the server's HTML, and appeared only on hydration (that page's long-standing hydration mismatch). Any `asChild` trigger whose child comes from a server component has the same bug |
+| `packages/db/drizzle/0095_clear_mangled_list_icons.sql` | Data migration: clears list icons that are only "?"/U+FFFD/blanks. 94 of Luka's 103 lists stored `??` — an emoji that crossed a non-Unicode code page, one "?" per UTF-16 half — and every client printed it in front of the list name (web, browser extension, API). Pairs with `normalizeListIcon()`, which stops new ones being written |
 
 ## 🟡 Modified upstream files — small, targeted edits (low conflict risk)
 
@@ -124,6 +132,19 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 | `apps/web/components/dashboard/header/ProfileOptions.tsx` | Tags and Highlights entries at the top of the profile menu (moved out of the sidebar) |
 | `apps/web/components/dashboard/preview/AssetContentSection.tsx`, `TextContentSection.tsx` | Their `<BookmarkVideo>` autoplays and gets the extracted poster frame |
 | `apps/web/components/dashboard/bookmarks/AssetCard.tsx`, `TextCard.tsx`, `MasonryMediaCard.tsx` (video tiles) | Pass `bookmarkId` to `<BookmarkVideo thumbnail>` so the tile links to the preview |
+| `packages/shared/types/bookmarks.ts` (getBookmarks input) | Added `listIds` (bookmarks in ANY of them) and `tagIds` (bookmarks carrying ALL of them). Internal only — this schema isn't part of the OpenAPI spec, so the REST surface is unchanged |
+| `packages/trpc/models/bookmarks.ts` (loadMulti) | Both filters as subquery conditions on the plain-bookmarks path (which already restricts to your own bookmarks). Empty `listIds` returns nothing rather than everything, and neither combines with `listId`/`tagId`/`rssFeedId` — those drive their own query strategies. Covered by a test in `bookmarks.test.ts` |
+| `packages/shared/utils/listUtils.ts` | `normalizeListIcon()` (the icon rule: an emoji or nothing) and `listNameFromPath()` no longer prints a leading space for a list with no icon |
+| `packages/trpc/models/lists.ts` | Normalises the icon on create and update, so a mangled one can never be stored again (an edit that doesn't touch the icon still leaves it alone) |
+| `apps/web/components/dashboard/lists/EditListModal.tsx` (icon default) | A new list starts with NO emoji (was `📁`, which is why lists seemed to need one); picking one still works |
+| `apps/web/components/dashboard/sidebar/AllLists.tsx` (entries) | "Tailored feed" (with the cog on hover) and "Tags" sit under "All Lists". Its `useDropTarget` now leaves the whole source folder: a bookmark dragged off a parent that is showing its sub-lists' items leaves the sub-list it actually sits in |
+| `apps/web/components/dashboard/header/ProfileOptions.tsx` | Tags went back to the sidebar; Highlights stays in the menu |
+| `apps/web/app/dashboard/lists/page.tsx` | Renders `<NewListButton />` instead of building the `EditListModal` trigger inline (see above) |
+| `apps/web/app/dashboard/lists/[listId]/page.tsx` | Reads the sub-lists cookie and asks for the list plus everything nested under it (`listIds`) when it's on |
+| `apps/web/components/dashboard/lists/ListOptions.tsx` | "Show items from sub-lists", beside "Show Archived", on manual lists that have children |
+| `apps/web/components/ui/dialog.tsx`, `app/dashboard/@modal/(.)preview/[bookmarkId]/page.tsx` | `DialogContent` takes an `overlayClassName`; the media preview dims the page to `bg-black/95` (other dialogs keep `/80`) |
+| `app/dashboard/{archive,favourites,lists}/page.tsx`, `components/dashboard/lists/AllListsView.tsx` | Dropped the hard-coded 🗄️/⭐️/📋 from the page headers and the Favourites/Archive rows (`icon` is optional now). Lists you make keep whatever emoji you give them |
+| `apps/web/components/dashboard/bookmarks/ManageListsModal.tsx`, `lists/DeleteListConfirmationDialog.tsx` | Build list labels through `listNameFromPath()` / skip the empty icon, instead of always `icon + " " + name` |
 | `apps/web/components/dashboard/lists/EditListModal.tsx` | Added an X button to clear a list's emoji icon (shows a `Smile` placeholder when empty) |
 | `packages/trpc/routers/lists.ts` (icon-clear) | `updateList` accepts `icon: null` to clear a list's icon — separate from the `stats` rewrite noted below |
 | `packages/db/schema.ts` | Added `LINK_VIDEO_THUMBNAIL = "linkVideoThumbnail"` to the `AssetTypes` enum (TS-level only; no DB CHECK constraint, no migration generated). Also added `bookmarkLists.position` (real migration, see below) |
@@ -196,6 +217,11 @@ workflow.**
 - [ ] Settings → Admin → Background Jobs → Asset Preprocessing → "Generate missing video thumbnails" — confirm it enqueues only videos actually missing a thumbnail (not already-thumbnailed ones)
 - [ ] Drag a sidebar list to reorder it — confirm the insertion line tracks the cursor and the new order persists after a refresh
 - [ ] Open a list with subfolders — confirm its combined count (header + sidebar) equals the sum of its subfolders' counts, and the subfolder tiles at the top of the page link to the right lists
+- [ ] All Lists page: no hydration error in the console (the "New list" button must be in the server's HTML, not added on hydration)
+- [ ] Tailored feed: the cog beside the sidebar entry opens the picker; unticking a folder unticks everything under it and half-ticks its parent; the feed's count and tiles follow
+- [ ] Tags page: typing narrows the cloud, picking two tags shows only what carries both, and the URL keeps the selection; "Manage tags" still reaches the old view
+- [ ] A list with sub-lists: "…" → "Show items from sub-lists" brings their items onto the parent's page and survives a reload; dragging one of those onto another list moves it out of the sub-list it was in
+- [ ] List icons: no "??" anywhere (sidebar, list picker, browser extension); a new list starts with no emoji and can still be given one
 - [ ] Click the header logo — it goes home; the chevron beside it folds/unfolds the sidebar and the state survives a refresh
 - [ ] Hover a masonry tile — the title, action icons and (on a video) the play mark appear. If nothing appears, Tailwind 3's `group-*`/`peer-*` variants are broken again: upstream's `2d58d906` (cherry-picked here ahead of a merge) pins `tailwindcss@3.4.1>postcss-selector-parser` to 6.1.4 because 6.1.3 silently drops them
 - [ ] Open an image, then a video — the modal wraps the media, the details scroll beside it, and a video autoplays exactly once (listen for doubled audio)

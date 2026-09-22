@@ -12,6 +12,7 @@ import {
   lt,
   lte,
   or,
+  sql,
   SQL,
 } from "drizzle-orm";
 import invariant from "tiny-invariant";
@@ -438,6 +439,10 @@ export class Bookmark extends BareBookmark {
     if (input.ids && input.ids.length == 0) {
       return { bookmarks: [], nextCursor: null };
     }
+    // No lists chosen (an emptied tailored feed) means nothing, not all.
+    if (input.listIds && input.listIds.length == 0) {
+      return { bookmarks: [], nextCursor: null };
+    }
     if (!input.limit) {
       // When loading by ids, callers expect all requested bookmarks back,
       // not a single default-sized page.
@@ -456,6 +461,15 @@ export class Bookmark extends BareBookmark {
         code: "BAD_REQUEST",
         message:
           "Cannot filter by multiple of listId, tagId, and rssFeedId simultaneously",
+      });
+    }
+    // Fork: the set filters narrow the plain bookmarks path, so they can't
+    // ride along with one of the single-filter paths below.
+    if (filterCount > 0 && (input.listIds || input.tagIds?.length)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "listIds and tagIds cannot be combined with listId, tagId or rssFeedId",
       });
     }
 
@@ -585,6 +599,30 @@ export class Bookmark extends BareBookmark {
             and(
               eq(bookmarks.userId, ctx.user.id),
               ...buildCommonFilters(),
+              // Fork: in ANY of these lists (each bookmark once).
+              input.listIds
+                ? inArray(
+                    bookmarks.id,
+                    ctx.db
+                      .select({ id: bookmarksInLists.bookmarkId })
+                      .from(bookmarksInLists)
+                      .where(inArray(bookmarksInLists.listId, input.listIds)),
+                  )
+                : undefined,
+              // Fork: carrying ALL of these tags.
+              input.tagIds?.length
+                ? inArray(
+                    bookmarks.id,
+                    ctx.db
+                      .select({ id: tagsOnBookmarks.bookmarkId })
+                      .from(tagsOnBookmarks)
+                      .where(inArray(tagsOnBookmarks.tagId, input.tagIds))
+                      .groupBy(tagsOnBookmarks.bookmarkId)
+                      .having(
+                        sql`count(distinct ${tagsOnBookmarks.tagId}) = ${new Set(input.tagIds).size}`,
+                      ),
+                  )
+                : undefined,
               buildCursorCondition(bookmarks.createdAt, bookmarks.id),
             ),
           )

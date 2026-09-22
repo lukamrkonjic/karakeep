@@ -396,6 +396,74 @@ describe("Bookmark Routes", () => {
     }
   });
 
+  // Fork: the filters behind the tailored feed, a list shown with its
+  // sub-lists, and the tag filter on the tags page.
+  test<CustomTestContext>("list bookmarks by many lists and by all tags", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].bookmarks;
+    const lists = apiCallers[0].lists;
+    const listA = await lists.create({ name: "A", type: "manual", icon: "" });
+    const listB = await lists.create({ name: "B", type: "manual", icon: "" });
+
+    const inA = await api.createBookmark({
+      url: "https://a.com",
+      type: BookmarkTypes.LINK,
+    });
+    const inB = await api.createBookmark({
+      url: "https://b.com",
+      type: BookmarkTypes.LINK,
+    });
+    const inBoth = await api.createBookmark({
+      url: "https://both.com",
+      type: BookmarkTypes.LINK,
+    });
+    const loose = await api.createBookmark({
+      url: "https://loose.com",
+      type: BookmarkTypes.LINK,
+    });
+    await lists.addToList({ listId: listA.id, bookmarkId: inA.id });
+    await lists.addToList({ listId: listB.id, bookmarkId: inB.id });
+    await lists.addToList({ listId: listA.id, bookmarkId: inBoth.id });
+    await lists.addToList({ listId: listB.id, bookmarkId: inBoth.id });
+
+    const ids = async (input: Parameters<typeof api.getBookmarks>[0]) =>
+      (await api.getBookmarks(input)).bookmarks.map((b) => b.id).sort();
+
+    // Union of the lists, each bookmark once, and never the loose one.
+    expect(await ids({ listIds: [listA.id, listB.id] })).toEqual(
+      [inA.id, inB.id, inBoth.id].sort(),
+    );
+    expect(await ids({ listIds: [listA.id] })).toEqual(
+      [inA.id, inBoth.id].sort(),
+    );
+    // No lists chosen means nothing, not everything.
+    expect(await ids({ listIds: [] })).toEqual([]);
+    expect(loose.id).toBeDefined();
+
+    const tag1 = await createTestTag(apiCallers[0], "tag1");
+    const tag2 = await createTestTag(apiCallers[0], "tag2");
+    await api.updateTags({
+      bookmarkId: inA.id,
+      attach: [{ tagId: tag1 }, { tagId: tag2 }],
+      detach: [],
+    });
+    await api.updateTags({
+      bookmarkId: inB.id,
+      attach: [{ tagId: tag1 }],
+      detach: [],
+    });
+
+    // ALL of the tags, not any of them.
+    expect(await ids({ tagIds: [tag1, tag2] })).toEqual([inA.id]);
+    expect(await ids({ tagIds: [tag1] })).toEqual([inA.id, inB.id].sort());
+
+    // The set filters don't combine with the single-filter paths.
+    await expect(
+      api.getBookmarks({ listIds: [listA.id], listId: listB.id }),
+    ).rejects.toThrow(/cannot be combined/);
+  });
+
   test<CustomTestContext>("update tags", async ({ apiCallers }) => {
     const api = apiCallers[0].bookmarks;
     const createdBookmark = await api.createBookmark({

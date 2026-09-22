@@ -28,7 +28,6 @@ import {
   Settings,
   Shield,
   Sun,
-  Tag,
   Twitter,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -105,13 +104,8 @@ export default function SidebarProfileOptions() {
           </div>
         </div>
         <Separator className="my-2" />
-        {/* Moved here from the sidebar, which now leads with the lists. */}
-        <DropdownMenuItem asChild>
-          <Link href="/dashboard/tags">
-            <Tag className="mr-2 size-4" />
-            {t("common.tags")}
-          </Link>
-        </DropdownMenuItem>
+        {/* Moved here from the sidebar, which now leads with the lists
+            (Tags went back there, under Tailored feed). */}
         <DropdownMenuItem asChild>
           <Link href="/dashboard/highlights">
             <Highlighter className="mr-2 size-4" />

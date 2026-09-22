@@ -291,6 +291,11 @@ export const zGetBookmarksRequestSchema = z.object({
   tagId: z.string().optional(),
   listId: z.string().optional(),
   rssFeedId: z.string().optional(),
+  // Fork: bookmarks in ANY of these lists (the tailored feed, a list shown
+  // with its sub-lists) and bookmarks carrying ALL of these tags (the tag
+  // filter). Neither combines with listId, tagId or rssFeedId.
+  listIds: z.array(z.string()).max(1000).optional(),
+  tagIds: z.array(z.string()).max(100).optional(),
   limit: z.number().int().min(1).max(MAX_NUM_BOOKMARKS_PER_PAGE).optional(),
   cursor: zCursorV2.nullish(),
   // TODO: This was done for backward comptability. At this point, all clients should be settings this to true.

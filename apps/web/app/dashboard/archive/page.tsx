@@ -14,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
 function header() {
   return (
     <div className="flex gap-2">
-      <p className="text-2xl">🗄️ Archive</p>
+      <p className="text-2xl">Archive</p>
       <InfoTooltip size={17} className="my-auto" variant="explain">
         <p>Archived bookmarks won&apos;t appear in the homepage</p>
       </InfoTooltip>

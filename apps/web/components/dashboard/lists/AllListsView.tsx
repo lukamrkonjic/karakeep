@@ -34,7 +34,7 @@ function ListItem({
   description,
 }: {
   name: string;
-  icon: string;
+  icon?: string;
   path: string;
   level?: number;
   list?: ZBookmarkList;
@@ -159,7 +159,6 @@ export default function AllListsView({
           <ListItem
             collapsible={false}
             name={t("lists.favourites")}
-            icon="⭐️"
             description="Things I keep coming back to."
             itemCount={favoritesCount}
             path={`/dashboard/favourites`}
@@ -168,7 +167,6 @@ export default function AllListsView({
           <ListItem
             collapsible={false}
             name={t("common.archive")}
-            icon="🗄️"
             description="Cold storage, out of the way."
             itemCount={archivedCount}
             path={`/dashboard/archive`}

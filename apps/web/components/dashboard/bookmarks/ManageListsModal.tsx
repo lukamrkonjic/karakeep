@@ -21,6 +21,7 @@ import {
   useRemoveBookmarkFromList,
 } from "@karakeep/shared-react/hooks/lists";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import { listNameFromPath } from "@karakeep/shared/utils/listUtils";
 
 import { BookmarkListSelector } from "../lists/BookmarkListSelector";
 import ArchiveBookmarkButton from "./action-buttons/ArchiveBookmarkButton";
@@ -114,11 +115,7 @@ export default function ManageListsModal({
                   key={list.id}
                   className="flex items-center justify-between rounded-lg border border-border bg-background px-2 py-1 text-foreground"
                 >
-                  <p>
-                    {path
-                      ? path.map((l) => `${l.icon} ${l.name}`).join(" / ")
-                      : list.name}
-                  </p>
+                  <p>{path ? listNameFromPath(path) : list.name}</p>
                   <ActionButton
                     type="button"
                     variant="ghost"

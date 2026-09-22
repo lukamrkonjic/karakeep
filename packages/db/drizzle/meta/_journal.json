@@ -666,6 +666,13 @@
       "when": 1782916466061,
       "tag": "0094_add_list_position",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1790098482435,
+      "tag": "0095_clear_mangled_list_icons",
+      "breakpoints": true
     }
   ]
 }

@@ -60,4 +60,15 @@ export function listsToTree(lists: ZBookmarkList[]) {
 }
 
 export const listNameFromPath = (path: ZBookmarkList[]) =>
-  path.map((p) => `${p.icon} ${p.name}`).join(" / ");
+  path.map((p) => (p.icon ? `${p.icon} ${p.name}` : p.name)).join(" / ");
+
+/**
+ * Fork: a list's icon is an emoji or nothing. An emoji that crossed a
+ * non-Unicode code page arrives as "??" (one "?" per UTF-16 half), sometimes
+ * as U+FFFD, and was being stored and shown as the icon. Those, and blanks,
+ * become "". Matches migration 0095, which cleaned the rows already stored.
+ */
+export function normalizeListIcon(icon: string): string {
+  const trimmed = icon.trim();
+  return /^[?�\s]*$/.test(trimmed) ? "" : trimmed;
+}
