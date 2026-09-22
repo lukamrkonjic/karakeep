@@ -12,10 +12,13 @@ export default function BookmarkActionBar({
   bookmark,
   className,
   favouritedClassName,
+  showExpand = true,
 }: {
   bookmark: ZBookmark;
   className?: string;
   favouritedClassName?: string;
+  /** Media tiles open the preview when clicked, so they leave this out. */
+  showExpand?: boolean;
 }) {
   return (
     <div className={cn("flex text-gray-500", className)}>
@@ -25,12 +28,14 @@ export default function BookmarkActionBar({
           favourited
         />
       )}
-      <Link
-        href={`/dashboard/preview/${bookmark.id}`}
-        className={cn(buttonVariants({ variant: "ghost" }), "px-2")}
-      >
-        <Maximize2 size={16} />
-      </Link>
+      {showExpand && (
+        <Link
+          href={`/dashboard/preview/${bookmark.id}`}
+          className={cn(buttonVariants({ variant: "ghost" }), "px-2")}
+        >
+          <Maximize2 size={16} />
+        </Link>
+      )}
       <BookmarkOptions bookmark={bookmark} />
     </div>
   );

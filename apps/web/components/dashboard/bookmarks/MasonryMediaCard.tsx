@@ -91,7 +91,11 @@ export function MasonryMediaCard({
           </span>
         )}
         <div className="pointer-events-auto ml-auto shrink-0">
-          <BookmarkActionBar bookmark={bookmark} className="text-white" />
+          <BookmarkActionBar
+            bookmark={bookmark}
+            className="text-white"
+            showExpand={false}
+          />
         </div>
       </div>
     </div>
