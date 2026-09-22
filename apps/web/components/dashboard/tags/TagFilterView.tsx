@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ClientBookmarksGrid from "@/components/dashboard/bookmarks/ClientBookmarksGrid";
+import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Spinner from "@/components/ui/spinner";
@@ -60,9 +61,20 @@ export default function TagFilterView({ onManage }: { onManage: () => void }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <span className="text-2xl">Tags</span>
-        <Button variant="outline" className="bg-background" onClick={onManage}>
-          Manage tags
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            className="bg-background"
+            onClick={onManage}
+          >
+            Manage tags
+          </Button>
+          <BookmarkPageOptions
+            variant="header"
+            label="Tags options"
+            pageKey="tags"
+          />
+        </div>
       </div>
 
       <Input
@@ -123,7 +135,10 @@ export default function TagFilterView({ onManage }: { onManage: () => void }) {
           <p className="text-sm text-muted-foreground">
             Tagged {pickedTags.map((t) => t.name).join(" + ")}
           </p>
-          <ClientBookmarksGrid query={{ tagIds: picked, archived: false }} />
+          <ClientBookmarksGrid
+            query={{ tagIds: picked, archived: false }}
+            sortKey="tags"
+          />
         </div>
       ) : (
         <p className="py-10 text-center text-muted-foreground">

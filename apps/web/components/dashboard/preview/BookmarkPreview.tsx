@@ -15,6 +15,7 @@ import {
 import { useSession } from "@/lib/auth/client";
 import useRelativeTime from "@/lib/hooks/relative-time";
 import { useTranslation } from "@/lib/i18n/client";
+import { usePreviewDetails } from "@/lib/previewDetails";
 import { useQuery } from "@tanstack/react-query";
 import {
   Building,
@@ -145,7 +146,9 @@ export default function BookmarkPreview({
   const api = useTRPC();
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>("content");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Fork: one remembered setting for every preview (lib/previewDetails.ts).
+  const sidebarCollapsed = usePreviewDetails((s) => s.hidden);
+  const toggleDetails = usePreviewDetails((s) => s.toggle);
   const { data: session } = useSession();
 
   const { data: bookmark } = useQuery(
@@ -274,7 +277,7 @@ export default function BookmarkPreview({
           <div className="flex min-h-0 flex-1">
             <div className="relative h-full flex-1 overflow-auto px-4 py-4">
               <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                onClick={toggleDetails}
                 className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 {sidebarCollapsed ? (

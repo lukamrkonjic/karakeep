@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Bookmarks from "@/components/dashboard/bookmarks/Bookmarks";
+import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import { api } from "@/server/api/client";
 import { TRPCError } from "@trpc/server";
 
@@ -22,8 +23,18 @@ export default async function FeedPage(props: {
   return (
     <Bookmarks
       query={{ rssFeedId: feed.id }}
+      sortKey={`rss:${feed.id}`}
       showEditorCard={false}
-      header={<div className="text-2xl">{feed.name}</div>}
+      header={
+        <div className="flex items-center justify-between">
+          <div className="text-2xl">{feed.name}</div>
+          <BookmarkPageOptions
+            variant="header"
+            label="Feed options"
+            pageKey={`rss:${feed.id}`}
+          />
+        </div>
+      }
     />
   );
 }

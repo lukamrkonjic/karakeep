@@ -35,13 +35,21 @@ const TICK_ICON = { on: SquareCheck, off: Square, mixed: SquareMinus };
  * The tailored feed's settings: every list as the sidebar's tree, each with a
  * tick. Ticking a folder takes in (or leaves out) everything inside it; open
  * it to leave out single sub-lists, and the folder shows half-ticked.
+ * Opened by its trigger (`children`), or controlled with `open`/`setOpen`
+ * (the feed's "…" menu, TailoredFeedOptions).
  */
 export function TailoredFeedSettings({
   children,
+  open: controlledOpen,
+  setOpen: setControlledOpen,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  open?: boolean;
+  setOpen?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlledOpen ?? ownOpen;
+  const setOpen = setControlledOpen ?? setOwnOpen;
   const { data: lists } = useBookmarkLists();
   const excluded = useTailoredFeed((s) => s.excluded);
   const setExcluded = useTailoredFeed((s) => s.setExcluded);
@@ -85,7 +93,7 @@ export function TailoredFeedSettings({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
         <DialogHeader>
           <DialogTitle>Tailored feed</DialogTitle>

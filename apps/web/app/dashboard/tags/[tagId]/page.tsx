@@ -55,6 +55,7 @@ export default async function TagPage(props: {
         tagId: tag.id,
         archived: !includeArchived ? false : undefined,
       }}
+      sortKey={`tag:${tag.id}`}
       showEditorCard={true}
     />
   );

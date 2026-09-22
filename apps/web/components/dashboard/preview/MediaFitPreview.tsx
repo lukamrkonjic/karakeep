@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
+import { usePreviewDetails } from "@/lib/previewDetails";
 import { cn } from "@/lib/utils";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
+
+import { ZoomableImage } from "./ZoomableImage";
 
 export interface PreviewMedia {
   kind: "image" | "video";
@@ -52,7 +52,9 @@ export function getPreviewMedia(bookmark: ZBookmark): PreviewMedia | null {
  * panel stays usable.
  *
  * The panel is absolutely positioned inside its column so it never adds
- * height: the media alone decides how tall the dialog is.
+ * height: the media alone decides how tall the dialog is. Hiding it is one
+ * remembered setting for every preview, and a picture zooms and pans
+ * (ZoomableImage).
  */
 export function MediaFitPreview({
   media,
@@ -61,51 +63,49 @@ export function MediaFitPreview({
   media: PreviewMedia;
   details: React.ReactNode;
 }) {
-  const [panelOpen, setPanelOpen] = useState(true);
+  // One remembered setting for every preview (lib/previewDetails.ts).
+  const panelOpen = !usePreviewDetails((s) => s.hidden);
+  const togglePanel = usePreviewDetails((s) => s.toggle);
   // Kept in step with the panel's w-[360px] below.
   const fit = cn(
     "block h-auto max-h-[92vh] w-auto",
     panelOpen ? "max-w-[calc(95vw-360px)]" : "max-w-[95vw]",
   );
+  const pane =
+    "relative flex min-h-[min(420px,92vh)] min-w-[320px] items-center justify-center bg-black";
+  const toggle = (
+    <button
+      type="button"
+      onClick={togglePanel}
+      aria-label={panelOpen ? "Hide details" : "Show details"}
+      title={panelOpen ? "Hide details" : "Show details"}
+      className="absolute right-3 top-3 z-10 rounded-md bg-black/40 p-1.5 text-white/80 transition-colors hover:bg-black/60 hover:text-white"
+    >
+      {panelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+    </button>
+  );
 
   return (
     <div className="flex max-h-[92vh]">
-      <div className="relative flex min-h-[min(420px,92vh)] min-w-[320px] items-center justify-center bg-black">
-        {media.kind === "image" ? (
-          <Link href={getAssetUrl(media.assetId)} target="_blank">
-            <Image
-              alt="asset"
-              src={getAssetUrl(media.assetId)}
-              width={0}
-              height={0}
-              sizes="95vw"
-              unoptimized
-              priority
-              className={fit}
-            />
-          </Link>
-        ) : (
+      {media.kind === "image" ? (
+        <ZoomableImage
+          src={getAssetUrl(media.assetId)}
+          className={pane}
+          imageClassName={fit}
+        >
+          {toggle}
+        </ZoomableImage>
+      ) : (
+        <div className={pane}>
           <BookmarkVideo
             assetId={media.assetId}
             thumbnailAssetId={media.posterAssetId}
             autoPlay
             className={fit}
           />
-        )}
-        <button
-          type="button"
-          onClick={() => setPanelOpen(!panelOpen)}
-          aria-label={panelOpen ? "Hide details" : "Show details"}
-          title={panelOpen ? "Hide details" : "Show details"}
-          className="absolute right-3 top-3 z-10 rounded-md bg-black/40 p-1.5 text-white/80 transition-colors hover:bg-black/60 hover:text-white"
-        >
-          {panelOpen ? (
-            <PanelRightClose size={18} />
-          ) : (
-            <PanelRightOpen size={18} />
-          )}
-        </button>
-      </div>
+          {toggle}
+        </div>
+      )}
       {panelOpen && (
         <div className="relative w-[360px] shrink-0 border-l bg-muted/40">
           <div className="absolute inset-0 overflow-y-auto p-5">{details}</div>

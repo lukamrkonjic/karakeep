@@ -65,6 +65,7 @@ import { AuthedContext } from "..";
 import { mapDBAssetTypeToUserType } from "../lib/attachments";
 import { getPreferredLinkPreview } from "../lib/linkPreview";
 import { Asset } from "./assets";
+import { loadInForkOrder } from "./bookmarkOrders";
 import { List } from "./lists";
 
 async function dummyDrizzleReturnType() {
@@ -480,6 +481,26 @@ export class Bookmark extends BareBookmark {
         input.ids = await list.getBookmarkIds();
         delete input.listId;
       }
+    }
+
+    // Fork: the random and recently-added orders (bookmarkOrders.ts). The
+    // page's bookmarks load through the usual paths below, by id — a manual
+    // list keeps its listId, so a shared list's access rules still apply.
+    if (input.sortBy) {
+      return loadInForkOrder(ctx, input, (ids) =>
+        Bookmark.loadMulti(ctx, {
+          ...input,
+          sortBy: undefined,
+          shuffleSeed: undefined,
+          cursor: null,
+          ids,
+          limit: ids.length,
+          listIds: undefined,
+          tagIds: undefined,
+          tagId: undefined,
+          rssFeedId: undefined,
+        }),
+      );
     }
 
     // Build cursor condition for pagination

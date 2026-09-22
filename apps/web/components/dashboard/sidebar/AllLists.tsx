@@ -19,7 +19,7 @@ import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus, Settings } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import {
@@ -31,10 +31,11 @@ import {
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
-import { TailoredFeedSettings } from "../feed/TailoredFeedSettings";
+import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
+import { AllListsOptions, BookmarkPageOptions } from "../PageOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
 function useDropTarget(listId: string, listName: string) {
@@ -197,9 +198,11 @@ function DroppableListSidebarItem({
           list={node.item}
         >
           <Button size="none" variant="ghost" className="relative">
+            {/* Right-aligned (not centred over the count, whose width
+                varies), so every row's "…" lines up — see PageOptions. */}
             <MoreHorizontal
               className={cn(
-                "absolute inset-0 m-auto size-4 opacity-0 transition-opacity duration-100 group-hover:opacity-100",
+                "absolute inset-y-0 right-2.5 my-auto size-4 opacity-0 transition-opacity duration-100 group-hover:opacity-100",
                 selectedListId == node.item.id ? "opacity-100" : "opacity-0",
               )}
             />
@@ -286,13 +289,19 @@ export default function AllLists({
           </Link>
         </EditListModal>
       </li>
+      {/* Fork: every entry has a "…" on hover, where a list's sits. */}
       <SidebarItem
         logo={null}
         name={t("lists.all_lists")}
         path={`/dashboard/lists`}
-        className="my-0.5"
+        className="group my-0.5"
         linkClassName="py-1.5 px-2"
-        right={<InvitationNotificationBadge />}
+        right={
+          <div className="flex items-center">
+            <InvitationNotificationBadge />
+            <AllListsOptions variant="sidebar" />
+          </div>
+        }
       />
       <SidebarItem
         logo={null}
@@ -300,33 +309,35 @@ export default function AllLists({
         path="/dashboard/feed"
         className="group my-0.5"
         linkClassName="py-1.5 px-2"
-        right={
-          <TailoredFeedSettings>
-            <Button
-              size="none"
-              variant="ghost"
-              title="Choose the feed's lists"
-              aria-label="Choose the feed's lists"
-              className="mr-2 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <Settings className="size-4" />
-            </Button>
-          </TailoredFeedSettings>
-        }
+        right={<TailoredFeedOptions variant="sidebar" />}
       />
       <SidebarItem
         logo={null}
         name={t("common.tags")}
         path="/dashboard/tags"
-        className="my-0.5"
+        className="group my-0.5"
         linkClassName="py-1.5 px-2"
+        right={
+          <BookmarkPageOptions
+            variant="sidebar"
+            label="Tags options"
+            pageKey="tags"
+          />
+        }
       />
       <SidebarItem
         logo={null}
         name={t("lists.favourites")}
         path={`/dashboard/favourites`}
-        className="my-0.5"
+        className="group my-0.5"
         linkClassName="py-1.5 px-2"
+        right={
+          <BookmarkPageOptions
+            variant="sidebar"
+            label="Favourites options"
+            pageKey="favourites"
+          />
+        }
       />
 
       {/* Owned Lists */}

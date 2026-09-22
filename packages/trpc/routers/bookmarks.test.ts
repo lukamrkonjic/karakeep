@@ -6,6 +6,7 @@ import {
   AssetTypes,
   bookmarkLinks,
   bookmarks,
+  bookmarksInLists,
   rssFeedImportsTable,
   tagsOnBookmarks,
   users,
@@ -462,6 +463,100 @@ describe("Bookmark Routes", () => {
     await expect(
       api.getBookmarks({ listIds: [listA.id], listId: listB.id }),
     ).rejects.toThrow(/cannot be combined/);
+  });
+
+  // Fork: the "…" menus' Random and Recently added orders.
+  test<CustomTestContext>("random and recently-added orders page through everything", async ({
+    apiCallers,
+    db,
+  }) => {
+    const api = apiCallers[0].bookmarks;
+    const lists = apiCallers[0].lists;
+    const list = await lists.create({ name: "L", type: "manual", icon: "" });
+    const made: string[] = [];
+    for (let i = 0; i < 23; i++) {
+      const b = await api.createBookmark({
+        text: `note ${i}`,
+        type: BookmarkTypes.TEXT,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+      });
+      await lists.addToList({ listId: list.id, bookmarkId: b.id });
+      made.push(b.id);
+    }
+
+    type Query = Parameters<typeof api.getBookmarks>[0];
+    const all = async (query: Query) => {
+      const seen: string[] = [];
+      let cursor: Query["cursor"] = null;
+      do {
+        const page = await api.getBookmarks({ ...query, cursor, limit: 5 });
+        seen.push(...page.bookmarks.map((b) => b.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+      return seen;
+    };
+
+    // Random: every bookmark exactly once across pages; the same seed, the
+    // same order; another seed, another order.
+    const shuffled = await all({
+      listId: list.id,
+      sortBy: "random",
+      shuffleSeed: 42,
+    });
+    expect(shuffled.length).toBe(23);
+    expect([...shuffled].sort()).toEqual([...made].sort());
+    expect(
+      await all({ listId: list.id, sortBy: "random", shuffleSeed: 42 }),
+    ).toEqual(shuffled);
+    expect(
+      await all({ listId: list.id, sortBy: "random", shuffleSeed: 7 }),
+    ).not.toEqual(shuffled);
+
+    // Taking a shown bookmark out mid-scroll neither repeats nor skips.
+    const first = await api.getBookmarks({
+      listId: list.id,
+      sortBy: "random",
+      shuffleSeed: 42,
+      limit: 5,
+    });
+    await lists.removeFromList({
+      listId: list.id,
+      bookmarkId: first.bookmarks[0].id,
+    });
+    const rest: string[] = [];
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await api.getBookmarks({
+        listId: list.id,
+        sortBy: "random",
+        shuffleSeed: 42,
+        limit: 5,
+        cursor,
+      });
+      rest.push(...page.bookmarks.map((b) => b.id));
+      cursor = page.nextCursor;
+    }
+    expect([...first.bookmarks.map((b) => b.id), ...rest]).toEqual(shuffled);
+
+    // Recently added: by when a bookmark joined the list, whatever its age.
+    // The oldest and the newest bookmark get the latest join dates (later
+    // than now, since every other one joined just now).
+    const kept = made.filter((id) => id !== first.bookmarks[0].id);
+    const [oldest, newest] = [kept[0], kept[kept.length - 1]];
+    await db
+      .update(bookmarksInLists)
+      .set({ addedAt: new Date(Date.now() + 2 * 86_400_000) })
+      .where(eq(bookmarksInLists.bookmarkId, oldest));
+    await db
+      .update(bookmarksInLists)
+      .set({ addedAt: new Date(Date.now() + 86_400_000) })
+      .where(eq(bookmarksInLists.bookmarkId, newest));
+    const added = await all({ listId: list.id, sortBy: "addedToList" });
+    expect(added.slice(0, 2)).toEqual([oldest, newest]);
+    expect(new Set(added).size).toBe(added.length);
+    // The same through the sub-lists / tailored feed path.
+    const viaMany = await all({ listIds: [list.id], sortBy: "addedToList" });
+    expect(viaMany.slice(0, 2)).toEqual([oldest, newest]);
   });
 
   test<CustomTestContext>("update tags", async ({ apiCallers }) => {

@@ -14,6 +14,8 @@ function SidebarItems({ items }: { items: TSidebarItem[] }) {
           logo={item.icon}
           name={item.name}
           path={item.path}
+          right={item.right}
+          className={item.right ? "group" : undefined}
         />
       ))}
     </ul>

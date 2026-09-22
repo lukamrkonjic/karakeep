@@ -11,6 +11,7 @@ import { useShowArchived } from "@/components/utils/useShowArchived";
 import { useTranslation } from "@/lib/i18n/client";
 import { Combine, Pencil, Square, SquareCheck, Trash2 } from "lucide-react";
 
+import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import DeleteTagConfirmationDialog from "./DeleteTagConfirmationDialog";
 import { MergeTagModal } from "./MergeTagModal";
 import { RenameTagModal } from "./RenameTagModal";
@@ -62,6 +63,8 @@ export function TagOptions({
           <Combine className="size-4" />
           <span>{t("actions.merge")}</span>
         </DropdownMenuItem>
+        {/* Fork: this tag page's order. */}
+        <BookmarkSortSubmenu pageKey={`tag:${tag.id}`} />
         <DropdownMenuItem className="flex gap-2" onClick={onClickShowArchived}>
           {showArchived ? (
             <SquareCheck className="size-4" />

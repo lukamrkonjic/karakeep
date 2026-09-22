@@ -14,12 +14,21 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 
 import BookmarksGrid from "./BookmarksGrid";
 
+type SortFields = "sortOrder" | "sortBy" | "shuffleSeed";
+
 export default function UpdatableBookmarksGrid({
   query,
+  sort,
   bookmarks: initialBookmarks,
   showEditorCard = false,
 }: {
-  query: Omit<ZGetBookmarksRequest, "sortOrder" | "includeContent">; // Sort order is handled by the store
+  query: Omit<ZGetBookmarksRequest, SortFields | "includeContent">;
+  /**
+   * Fork: the page's own sort (its "…" menu, lib/pageSort.ts). The initial
+   * bookmarks must have been loaded with it. Without one, the header's
+   * global sort toggle applies, as upstream.
+   */
+  sort?: Pick<ZGetBookmarksRequest, SortFields>;
   bookmarks: ZGetBookmarksResponse;
   showEditorCard?: boolean;
   itemsPerPage?: number;
@@ -31,7 +40,11 @@ export default function UpdatableBookmarksGrid({
     sortOrder = "desc";
   }
 
-  const finalQuery = { ...query, sortOrder, includeContent: false };
+  const finalQuery = {
+    ...query,
+    ...(sort ?? { sortOrder }),
+    includeContent: false,
+  };
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useInfiniteQuery(
@@ -49,9 +62,12 @@ export default function UpdatableBookmarksGrid({
       ),
     );
 
+  const followsGlobalToggle = sort === undefined;
   useEffect(() => {
-    refetch();
-  }, [sortOrder, refetch]);
+    if (followsGlobalToggle) {
+      refetch();
+    }
+  }, [sortOrder, refetch, followsGlobalToggle]);
 
   const grid = (
     <BookmarksGrid

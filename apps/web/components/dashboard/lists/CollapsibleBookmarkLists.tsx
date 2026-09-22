@@ -23,6 +23,16 @@ type RenderFunc = (params: {
 
 type IsOpenFunc = (list: ZBookmarkListTreeNode) => boolean;
 
+/** Orders lists that share a parent; `stats` is each list's item count. */
+export type CompareSiblings = (
+  a: ZBookmarkListTreeNode,
+  b: ZBookmarkListTreeNode,
+  stats?: Map<string, number>,
+) => number;
+
+/** Your own order (drag-to-reorder): higher position first. */
+const byPosition: CompareSiblings = (a, b) => b.item.position - a.item.position;
+
 /**
  * Thin horizontal insertion-line indicator, shown at the exact gap a
  * dragged list would land in. Uses the same accent (bg-primary) as the
@@ -169,6 +179,7 @@ function ListItem({
   listStats,
   indentOffset,
   reorderable,
+  compareSiblings,
 }: {
   node: ZBookmarkListTreeNode;
   render: RenderFunc;
@@ -178,6 +189,7 @@ function ListItem({
   indentOffset: number;
   className?: string;
   reorderable: boolean;
+  compareSiblings: CompareSiblings;
 }) {
   // Not the most efficient way to do this, but it works for now
   const isAnyChildOpen = (
@@ -196,7 +208,7 @@ function ListItem({
 
   const sortedChildren = node.children
     .slice()
-    .sort((a, b) => b.item.position - a.item.position);
+    .sort((a, b) => compareSiblings(a, b, listStats));
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={className}>
@@ -221,6 +233,7 @@ function ListItem({
               listStats={listStats}
               className={className}
               reorderable={reorderable}
+              compareSiblings={compareSiblings}
             />
           )}
         />
@@ -238,6 +251,7 @@ export function CollapsibleBookmarkLists({
   filter,
   indentOffset = 0,
   reorderable = false,
+  compareSiblings = byPosition,
 }: {
   initialData?: ZBookmarkList[];
   listsData?: {
@@ -253,6 +267,8 @@ export function CollapsibleBookmarkLists({
   indentOffset?: number;
   /** Enable drag-and-drop reordering among siblings. Owned lists only. */
   reorderable?: boolean;
+  /** Fork: how siblings are ordered; your own order (position) by default. */
+  compareSiblings?: CompareSiblings;
 }) {
   const api = useTRPC();
   // If listsData is provided, use it directly. Otherwise, fetch it.
@@ -275,7 +291,7 @@ export function CollapsibleBookmarkLists({
   const rootNodes = Object.values(data.root);
   const filteredRoots = (filter ? rootNodes.filter(filter) : rootNodes)
     .slice()
-    .sort((a, b) => b.item.position - a.item.position);
+    .sort((a, b) => compareSiblings(a, b, listStats?.stats));
 
   return (
     <div>
@@ -292,6 +308,7 @@ export function CollapsibleBookmarkLists({
             listStats={listStats?.stats}
             isOpenFunc={isOpenFunc ?? (() => false)}
             reorderable={reorderable}
+            compareSiblings={compareSiblings}
           />
         )}
       />

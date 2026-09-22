@@ -2,19 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ClientBookmarksGrid from "@/components/dashboard/bookmarks/ClientBookmarksGrid";
-import { Button } from "@/components/ui/button";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { useTailoredFeed } from "@/lib/tailoredFeed";
-import { Settings } from "lucide-react";
 
 import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 
-import { feedCandidates, TailoredFeedSettings } from "./TailoredFeedSettings";
+import { TailoredFeedOptions } from "./TailoredFeedOptions";
+import { feedCandidates } from "./TailoredFeedSettings";
 
 /**
  * Everything in the lists you picked for the feed (see TailoredFeedSettings),
- * newest first, as one grid. The choice lives in this browser only, so
- * nothing renders until it has been read.
+ * as one grid, in the order its "…" menu sets. The choice lives in this
+ * browser only, so nothing renders until it has been read.
  */
 export default function TailoredFeed() {
   const [mounted, setMounted] = useState(false);
@@ -46,18 +45,17 @@ export default function TailoredFeed() {
               : `${listIds.length} of ${candidates.length} lists`}
           </p>
         </div>
-        <TailoredFeedSettings>
-          <Button variant="ghost" size="icon" title="Choose lists">
-            <Settings className="size-5" />
-          </Button>
-        </TailoredFeedSettings>
+        <TailoredFeedOptions variant="header" />
       </div>
       {listIds.length === 0 ? (
         <p className="py-16 text-center text-muted-foreground">
-          No lists in your feed yet. Pick some with the cog.
+          No lists in your feed yet. Pick some with “…” → Choose lists.
         </p>
       ) : (
-        <ClientBookmarksGrid query={{ listIds, archived: false }} />
+        <ClientBookmarksGrid
+          query={{ listIds, archived: false }}
+          sortKey="feed"
+        />
       )}
     </div>
   );

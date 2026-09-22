@@ -61,7 +61,10 @@ export default async function ListPage(props: {
   // The "…" menu's sub-list toggle (a cookie, so this renders right the
   // first time): show everything nested under this list, not just its own.
   const archived = !includeArchived ? false : undefined;
-  let query: Omit<ZGetBookmarksRequest, "sortOrder" | "includeContent"> = {
+  let query: Omit<
+    ZGetBookmarksRequest,
+    "sortOrder" | "sortBy" | "shuffleSeed" | "includeContent"
+  > = {
     listId: list.id,
     archived,
   };
@@ -90,6 +93,7 @@ export default async function ListPage(props: {
     <BookmarkListContextProvider list={list}>
       <Bookmarks
         query={query}
+        sortKey={`list:${list.id}`}
         showEditorCard={list.type === "manual" && canEdit}
         header={
           <>

@@ -25,12 +25,21 @@ import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
 import { EditListModal } from "../lists/EditListModal";
+import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import DeleteListConfirmationDialog from "./DeleteListConfirmationDialog";
 import LeaveListConfirmationDialog from "./LeaveListConfirmationDialog";
 import { ListSubscriptionsModal } from "./ListSubscriptionsModal";
 import { ManageCollaboratorsModal } from "./ManageCollaboratorsModal";
 import { MergeListModal } from "./MergeListModal";
 import { ShareListModal } from "./ShareListModal";
+
+// The view toggles and the leave/delete actions come after "Sort".
+const AFTER_SORT = new Set([
+  "toggle-sublists",
+  "toggle-archived",
+  "leave-list",
+  "delete",
+]);
 
 export function ListOptions({
   list,
@@ -173,6 +182,18 @@ export function ListOptions({
     return null;
   }
 
+  const renderItem = (item: (typeof visibleItems)[number]) => (
+    <DropdownMenuItem
+      key={item.id}
+      className={item.className ?? "flex gap-2"}
+      disabled={item.disabled}
+      onClick={item.onClick}
+    >
+      {item.icon}
+      <span>{item.title}</span>
+    </DropdownMenuItem>
+  );
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
       <ShareListModal
@@ -220,17 +241,16 @@ export function ListOptions({
       />
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
-        {visibleItems.map((item) => (
-          <DropdownMenuItem
-            key={item.id}
-            className={item.className ?? "flex gap-2"}
-            disabled={item.disabled}
-            onClick={item.onClick}
-          >
-            {item.icon}
-            <span>{item.title}</span>
-          </DropdownMenuItem>
-        ))}
+        {visibleItems
+          .filter((item) => !AFTER_SORT.has(item.id))
+          .map(renderItem)}
+        {/* Fork: this list page's order ("Recently added" = when a
+            bookmark joined it; smart lists have no such date). */}
+        <BookmarkSortSubmenu
+          pageKey={`list:${list.id}`}
+          withRecentlyAdded={list.type === "manual"}
+        />
+        {visibleItems.filter((item) => AFTER_SORT.has(item.id)).map(renderItem)}
       </DropdownMenuContent>
     </DropdownMenu>
   );

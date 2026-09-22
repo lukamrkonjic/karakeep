@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
 import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
@@ -110,7 +111,18 @@ export default async function Dashboard({
             // Archive sits below the lists.
             <Sidebar
               extraSections={<AllLists initialData={lists.data} />}
-              footerItems={(t) => [archive(t)]}
+              footerItems={(t) => [
+                {
+                  ...archive(t),
+                  right: (
+                    <BookmarkPageOptions
+                      variant="sidebar"
+                      label="Archive options"
+                      pageKey="archive"
+                    />
+                  ),
+                },
+              ]}
             />
           }
           mobileSidebar={<MobileSidebar items={mobileSidebar} />}

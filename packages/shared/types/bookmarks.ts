@@ -303,6 +303,12 @@ export const zGetBookmarksRequestSchema = z.object({
   // servers.
   useCursorV2: z.boolean().optional(),
   sortOrder: zSortOrder.exclude(["relevance"]).optional().default("desc"),
+  // Fork: orders beyond newest/oldest, which take over from sortOrder —
+  // "random" (a shuffle; the same shuffleSeed gives the same order on every
+  // page) and "addedToList" (when each bookmark joined the list). See
+  // packages/trpc/models/bookmarkOrders.ts.
+  sortBy: z.enum(["random", "addedToList"]).optional(),
+  shuffleSeed: z.number().int().optional(),
   includeContent: z.boolean().optional().default(false),
 });
 export type ZGetBookmarksRequest = z.infer<typeof zGetBookmarksRequestSchema>;
