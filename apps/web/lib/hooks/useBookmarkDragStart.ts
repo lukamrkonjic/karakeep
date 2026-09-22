@@ -30,7 +30,8 @@ export function useBookmarkDragStart(bookmark: ZBookmark) {
       if (sourceListId) {
         e.dataTransfer.setData(BOOKMARK_DRAG_SOURCE_LIST_MIME, sourceListId);
       }
-      e.dataTransfer.effectAllowed = sourceListId ? "move" : "copy";
+      // Dropping onto a list always moves the bookmark (see AllLists.tsx).
+      e.dataTransfer.effectAllowed = "move";
 
       // Create a small pill element as the drag preview
       const pill = document.createElement("div");

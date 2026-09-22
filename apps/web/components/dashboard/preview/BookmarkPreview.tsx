@@ -27,7 +27,11 @@ import {
 } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
-import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
+import {
+  BookmarkTypes,
+  ZBookmark,
+  ZBookmarkTypeText,
+} from "@karakeep/shared/types/bookmarks";
 import {
   getBookmarkRefreshInterval,
   getBookmarkTitle,
@@ -35,13 +39,15 @@ import {
   isBookmarkStillCrawling,
 } from "@karakeep/shared/utils/bookmarkUtils";
 
+import { BookmarkMarkdownComponent } from "../bookmarks/BookmarkMarkdownComponent";
 import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
 import ActionBar from "./ActionBar";
 import { AssetContentSection } from "./AssetContentSection";
 import AttachmentBox from "./AttachmentBox";
-import { BookmarkListBadges } from "./BookmarkListBadges";
+import { BookmarkListChips } from "./BookmarkListChips";
 import HighlightsBox from "./HighlightsBox";
 import LinkContentSection from "./LinkContentSection";
+import { getPreviewMedia, MediaFitPreview } from "./MediaFitPreview";
 import { NoteEditor } from "./NoteEditor";
 import { TextContentSection } from "./TextContentSection";
 
@@ -128,10 +134,13 @@ function PublishedDate({ datePublished }: { datePublished: Date }) {
 export default function BookmarkPreview({
   bookmarkId,
   initialData,
+  variant = "page",
 }: {
   bookmarkId: string;
   initialData?: ZBookmark;
   onClose?: () => void;
+  /** "modal" sizes itself (the dialog wraps it); "page" fills its parent. */
+  variant?: "page" | "modal";
 }) {
   const api = useTRPC();
   const { t } = useTranslation();
@@ -158,8 +167,18 @@ export default function BookmarkPreview({
   );
 
   if (!bookmark) {
-    return <FullPageSpinner />;
+    return variant === "modal" ? (
+      <div className="h-[50vh] w-[50vw]">
+        <FullPageSpinner />
+      </div>
+    ) : (
+      <FullPageSpinner />
+    );
   }
+
+  // In the modal, a picture or a video gets a dialog that wraps it.
+  const media = variant === "modal" ? getPreviewMedia(bookmark) : null;
+  const box = variant === "modal" ? "h-[90vh] w-[90vw]" : "h-full w-full";
 
   // Check if the current user owns this bookmark
   const isOwner = session?.user?.id === bookmark.userId;
@@ -193,12 +212,9 @@ export default function BookmarkPreview({
   const detailsSection = (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="line-clamp-2 flex-1 text-ellipsis break-words text-lg font-medium">
-            {!title ? "Untitled" : title}
-          </p>
-          <BookmarkListBadges bookmarkId={bookmark.id} />
-        </div>
+        <p className="line-clamp-2 text-ellipsis break-words text-lg font-medium">
+          {!title ? "Untitled" : title}
+        </p>
         {sourceUrl && (
           <Link
             href={sourceUrl}
@@ -210,9 +226,18 @@ export default function BookmarkPreview({
           </Link>
         )}
       </div>
+      {/* A video note's text, which the media layout has no room for beside
+          the video. */}
+      {media && bookmark.content.type === BookmarkTypes.TEXT && (
+        <BookmarkMarkdownComponent>
+          {bookmark as ZBookmarkTypeText}
+        </BookmarkMarkdownComponent>
+      )}
       <Separator />
       <BookmarkMetadata bookmark={bookmark} />
       <SummarizeBookmarkArea bookmark={bookmark} readOnly={!isOwner} />
+      <Separator />
+      <BookmarkListChips bookmarkId={bookmark.id} readOnly={!isOwner} />
       <Separator />
       <div className="flex flex-col gap-1.5">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -238,30 +263,38 @@ export default function BookmarkPreview({
   return (
     <>
       {/* Render original layout for wide screens */}
-      <div className="hidden h-full flex-col overflow-hidden bg-background lg:flex">
-        <div className="flex min-h-0 flex-1">
-          <div className="relative h-full flex-1 overflow-auto px-4 py-4">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {sidebarCollapsed ? (
-                <PanelRightOpen size={20} />
-              ) : (
-                <PanelRightClose size={20} />
-              )}
-            </button>
-            {contentSection}
-          </div>
-          {!sidebarCollapsed && (
-            <div className="flex w-1/3 flex-col gap-3 overflow-auto border-l bg-muted/40 p-5">
-              {detailsSection}
-            </div>
-          )}
+      {media ? (
+        <div className="hidden lg:block">
+          <MediaFitPreview media={media} details={detailsSection} />
         </div>
-      </div>
+      ) : (
+        <div
+          className={`hidden ${box} flex-col overflow-hidden bg-background lg:flex`}
+        >
+          <div className="flex min-h-0 flex-1">
+            <div className="relative h-full flex-1 overflow-auto px-4 py-4">
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {sidebarCollapsed ? (
+                  <PanelRightOpen size={20} />
+                ) : (
+                  <PanelRightClose size={20} />
+                )}
+              </button>
+              {contentSection}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="flex w-1/3 flex-col gap-3 overflow-auto border-l bg-muted/40 p-5">
+                {detailsSection}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Render tabbed layout for narrow/vertical screens */}
-      <div className="flex h-full w-full flex-col overflow-hidden lg:hidden">
+      <div className={`flex ${box} flex-col overflow-hidden lg:hidden`}>
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}

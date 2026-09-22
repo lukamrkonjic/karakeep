@@ -19,6 +19,7 @@ import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
 import { useKeyboardNavigationStore } from "@/lib/store/useKeyboardNavigationStore";
 import {
   BookOpen,
+  Highlighter,
   Keyboard,
   LogOut,
   Moon,
@@ -27,6 +28,7 @@ import {
   Settings,
   Shield,
   Sun,
+  Tag,
   Twitter,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -102,6 +104,20 @@ export default function SidebarProfileOptions() {
             <p className="text-sm text-gray-400">{session.user.email}</p>
           </div>
         </div>
+        <Separator className="my-2" />
+        {/* Moved here from the sidebar, which now leads with the lists. */}
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/tags">
+            <Tag className="mr-2 size-4" />
+            {t("common.tags")}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/highlights">
+            <Highlighter className="mr-2 size-4" />
+            {t("common.highlights")}
+          </Link>
+        </DropdownMenuItem>
         <Separator className="my-2" />
         <DropdownMenuItem asChild>
           <Link href="/settings">

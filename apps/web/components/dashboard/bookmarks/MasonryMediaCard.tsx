@@ -75,6 +75,7 @@ export function MasonryMediaCard({
             assetId={media.assetId}
             thumbnailAssetId={media.thumbnailAssetId}
             thumbnail
+            bookmarkId={bookmark.id}
             className="w-full"
           />
         )}

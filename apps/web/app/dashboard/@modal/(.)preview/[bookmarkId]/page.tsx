@@ -33,13 +33,16 @@ export default function BookmarkPreviewPage(props: {
           <DialogTitle>Preview</DialogTitle>
         </DialogHeader>
       </VisuallyHidden>
+      {/* Sized by its content: BookmarkPreview's "modal" variant wraps a
+          picture or video, and gives everything else a 90% box. */}
       <DialogContent
-        className="h-[90%] max-w-[90%] overflow-hidden rounded-xl p-0"
+        className="w-auto max-w-[95vw] gap-0 overflow-hidden rounded-xl p-0"
         hideCloseBtn={true}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <BookmarkPreview
           bookmarkId={params.bookmarkId}
+          variant="modal"
           onClose={() => setOpenWithRouter(false)}
         />
       </DialogContent>

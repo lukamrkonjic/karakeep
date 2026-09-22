@@ -72,6 +72,7 @@ function AssetImage({
           assetId={bookmarkedAsset.assetId}
           thumbnailAssetId={thumbnailAssetId}
           thumbnail
+          bookmarkId={bookmark.id}
           className={cn("size-full", className, "object-contain")}
         />
       );

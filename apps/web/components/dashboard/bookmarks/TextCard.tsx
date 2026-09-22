@@ -80,6 +80,7 @@ export default function TextCard({
               assetId={video.id}
               thumbnailAssetId={videoThumbnail?.id}
               thumbnail
+              bookmarkId={bookmark.id}
               className={cn("size-full", className, "object-contain")}
             />
           ) : null;

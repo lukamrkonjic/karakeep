@@ -18,6 +18,7 @@ import {
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
@@ -27,6 +28,7 @@ import {
   useBookmarkLists,
   useRemoveBookmarkFromList,
 } from "@karakeep/shared-react/hooks/lists";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
@@ -35,6 +37,8 @@ import { ListOptions } from "../lists/ListOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
 function useDropTarget(listId: string, listName: string) {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
   const { mutateAsync: addToList } = useAddBookmarkToList();
   const { mutateAsync: removeFromList } = useRemoveBookmarkFromList();
   const [dropHighlight, setDropHighlight] = useState(false);
@@ -44,14 +48,8 @@ function useDropTarget(listId: string, listName: string) {
   const onDragOver = useCallback((e: React.DragEvent) => {
     if (e.dataTransfer.types.includes(BOOKMARK_DRAG_MIME)) {
       e.preventDefault();
-      // Show a "move" cursor when the drag carries a source list (see
-      // useBookmarkDragStart) — dropping will remove it from there too —
-      // and a "copy" cursor otherwise (e.g. dragging from the home feed).
-      e.dataTransfer.dropEffect = e.dataTransfer.types.includes(
-        BOOKMARK_DRAG_SOURCE_LIST_MIME,
-      )
-        ? "move"
-        : "copy";
+      // Every drop is a move (see onDrop).
+      e.dataTransfer.dropEffect = "move";
     }
   }, []);
 
@@ -82,20 +80,29 @@ function useDropTarget(listId: string, listName: string) {
         e.dataTransfer.getData(BOOKMARK_DRAG_SOURCE_LIST_MIME) || undefined;
       if (sourceListId === listId) return; // dropped back onto its own list
       try {
+        // A drop always MOVES, never copies: out of the list it was dragged
+        // from, or, from a view that is not a list (home, search, a tag),
+        // out of every list it is in. The preview's List chips are the one
+        // place to put a bookmark in several lists at once.
+        const { lists: current } = await queryClient.fetchQuery(
+          api.lists.getListsOfBookmark.queryOptions({ bookmarkId }),
+        );
+        const leaving = current.filter(
+          (l) =>
+            l.id !== listId &&
+            (sourceListId
+              ? l.id === sourceListId
+              : l.type === "manual" && l.userRole !== "viewer"),
+        );
         await addToList({ bookmarkId, listId });
-        if (sourceListId) {
-          await removeFromList({ bookmarkId, listId: sourceListId });
+        for (const from of leaving) {
+          await removeFromList({ bookmarkId, listId: from.id });
         }
         toast({
-          description: sourceListId
-            ? t("lists.move_to_list_success", {
-                list: listName,
-                defaultValue: `Moved to "${listName}"`,
-              })
-            : t("lists.add_to_list_success", {
-                list: listName,
-                defaultValue: `Added to "${listName}"`,
-              }),
+          description: t("lists.move_to_list_success", {
+            list: listName,
+            defaultValue: `Moved to "${listName}"`,
+          }),
         });
       } catch {
         toast({
@@ -106,7 +113,7 @@ function useDropTarget(listId: string, listName: string) {
         });
       }
     },
-    [addToList, removeFromList, listId, listName, t],
+    [api, queryClient, addToList, removeFromList, listId, listName, t],
   );
 
   return { dropHighlight, onDragOver, onDragEnter, onDragLeave, onDrop };

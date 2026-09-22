@@ -9,8 +9,9 @@ export const BOOKMARK_DRAG_MIME = "application/x-karakeep-bookmark";
  * out of. Only set when actively browsing a manual list (see
  * useBookmarkDragStart) — smart lists are computed from a query and can't
  * have a bookmark removed from them. A drop target present with this MIME
- * removes the bookmark from that list after adding it to the target,
- * turning the drag into a true "move" instead of just adding to a list.
+ * removes the bookmark from that list after adding it to the target; without
+ * it (dragged from home, search, a tag) the drop removes it from every list
+ * it was in. Either way a drop moves, it never copies.
  */
 export const BOOKMARK_DRAG_SOURCE_LIST_MIME =
   "application/x-karakeep-bookmark-source-list";

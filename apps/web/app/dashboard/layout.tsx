@@ -54,6 +54,14 @@ export default async function Dashboard({
     throw lists.error;
   }
 
+  const archive = (t: TFunction) => ({
+    name: t("common.archive"),
+    icon: <Archive size={18} />,
+    path: "/dashboard/archive",
+  });
+
+  // The mobile menu has no header logo to go home by and no room for the
+  // profile menu's extras, so it keeps every destination.
   const items = (t: TFunction) =>
     [
       {
@@ -80,11 +88,7 @@ export default async function Dashboard({
         icon: <Highlighter size={18} />,
         path: "/dashboard/highlights",
       },
-      {
-        name: t("common.archive"),
-        icon: <Archive size={18} />,
-        path: "/dashboard/archive",
-      },
+      archive(t),
     ].flat();
 
   const mobileSidebar = (t: TFunction) => [
@@ -101,9 +105,12 @@ export default async function Dashboard({
       <ReaderSettingsProvider>
         <SidebarLayout
           sidebar={
+            // Desktop: the lists lead. Home is the header logo, search is the
+            // header bar, Tags and Highlights are in the profile menu, and
+            // Archive sits below the lists.
             <Sidebar
-              items={items}
               extraSections={<AllLists initialData={lists.data} />}
+              footerItems={(t) => [archive(t)]}
             />
           }
           mobileSidebar={<MobileSidebar items={mobileSidebar} />}

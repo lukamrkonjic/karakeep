@@ -110,10 +110,15 @@ function VideoContentSection({ bookmark }: { bookmark: ZBookmark }) {
   if (bookmark.content.type != BookmarkTypes.ASSET) {
     throw new Error("Invalid content type");
   }
+  const thumbnail = bookmark.assets.find(
+    (a) => a.assetType === "videoThumbnail",
+  );
   return (
     <div className="flex h-full w-full items-center justify-center bg-black">
       <BookmarkVideo
         assetId={bookmark.content.assetId}
+        thumbnailAssetId={thumbnail?.id}
+        autoPlay
         className="max-h-full w-full object-contain"
       />
     </div>

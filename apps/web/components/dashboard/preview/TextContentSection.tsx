@@ -15,6 +15,9 @@ export function TextContentSection({ bookmark }: { bookmark: ZBookmark }) {
     (asset) => asset.assetType == "bannerImage",
   );
   const video = bookmark.assets.find((asset) => asset.assetType == "video");
+  const videoThumbnail = bookmark.assets.find(
+    (asset) => asset.assetType == "videoThumbnail",
+  );
 
   return (
     <ScrollArea className="h-full">
@@ -22,6 +25,8 @@ export function TextContentSection({ bookmark }: { bookmark: ZBookmark }) {
         <div className="flex w-full justify-center bg-black">
           <BookmarkVideo
             assetId={video.id}
+            thumbnailAssetId={videoThumbnail?.id}
+            autoPlay
             className="max-h-[75vh] w-full object-contain"
           />
         </div>
