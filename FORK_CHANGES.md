@@ -54,7 +54,9 @@ git fetch upstream
    pnpm --filter @karakeep/db exec drizzle-kit generate
    ```
 5. Push → wait for **Build Fork Image** to go green → deploy the new tag on
-   the NAS (Container Manager → YAML → bump the image tag → Build).
+   the NAS: `.claude/skills/update-karakeep/SKILL.md` has every command (SSH,
+   bump the tag in `compose.yaml`, `docker compose pull web`, `up -d`),
+   rollback, and the fixes for errors seen so far.
 
 ### Note for checkouts on Windows
 
@@ -86,6 +88,7 @@ The same applies to the husky pre-commit hook, which runs the OpenAPI check;
 |---|---|
 | `desktop/` (whole directory) | **Magpie**, an Electron collector browser, plus the Karakeep Drop tray app it grew out of. Lives outside the pnpm workspace with its own `package.json` and lockfile — see `desktop/README.md` for why — so upstream never touches it and the server's Docker build never installs it. Talks to the server only through the public REST API, so it needs no backend change. |
 | `.github/workflows/fork-build.yml` | Builds and pushes `ghcr.io/<you>/karakeep:latest` + `:<short-sha>` on every push to `main`, using the built-in `GITHUB_TOKEN` (no secrets needed) |
+| `.claude/skills/update-karakeep/SKILL.md` | The NAS update guide, as a Claude Code skill (`/update-karakeep`): build → SSH → bump the tag in `compose.yaml` → `pull web` → `up -d`, plus stop/start, rollback, and the errors seen so far (wrong folder, `compose.yaml` not `docker-compose.yml`, the dead `gcr.io` Chrome image). Upstream's own `skills/SKILL.md` is a different thing — how to use the Karakeep CLI |
 | `apps/web/components/dashboard/bookmarks/BookmarkVideo.tsx` | Video attachments. In the feed a video never plays: the tile is its poster (zero network activity), a play mark shows on hover, and a click opens the preview modal. In the modal it autoplays — only the copy actually on screen, since the preview renders its wide and narrow layouts side by side and a CSS-hidden `<video autoplay>` still plays (doubled audio) |
 | `apps/web/components/dashboard/bookmarks/MasonryMediaCard.tsx` | Eagle/Pinterest-style borderless, media-only masonry tile with hover-dim + white action icons |
 | `apps/web/components/dashboard/bookmarks/NewBookmarkDialog.tsx` | The "+" button/dialog that replaced the inline "NEW ITEM" editor card |
