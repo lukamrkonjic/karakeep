@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useSidebarCollapse } from "@/lib/sidebarCollapse";
+import { useSidebarCollapsed } from "@/lib/sidebarCollapse";
 
 /**
  * Wraps the (server-rendered) sidebar so SidebarCollapseToggle's state can
@@ -14,7 +14,7 @@ export default function SidebarCollapseWrapper({
 }: {
   children: React.ReactNode;
 }) {
-  const collapsed = useSidebarCollapse((s) => s.collapsed);
+  const collapsed = useSidebarCollapsed();
 
   return (
     <div

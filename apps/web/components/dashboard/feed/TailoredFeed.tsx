@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import ClientBookmarksGrid from "@/components/dashboard/bookmarks/ClientBookmarksGrid";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
-import { useTailoredFeed } from "@/lib/tailoredFeed";
+import { useTailoredFeedExcluded } from "@/lib/tailoredFeed";
 
 import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 
@@ -12,13 +12,11 @@ import { feedCandidates } from "./TailoredFeedSettings";
 
 /**
  * Everything in the lists you picked for the feed (see TailoredFeedSettings),
- * as one grid, in the order its "…" menu sets. The choice lives in this
- * browser only, so nothing renders until it has been read.
+ * as one grid, in the order its "…" menu sets. The choice is the
+ * account's, so every device shows the same feed.
  */
 export default function TailoredFeed() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const excluded = useTailoredFeed((s) => s.excluded);
+  const excluded = useTailoredFeedExcluded();
   const { data: lists } = useBookmarkLists();
 
   const candidates = useMemo(
@@ -30,7 +28,7 @@ export default function TailoredFeed() {
     return candidates.filter((l) => !out.has(l.id)).map((l) => l.id);
   }, [candidates, excluded]);
 
-  if (!mounted || !lists) {
+  if (!lists) {
     return <FullPageSpinner />;
   }
 

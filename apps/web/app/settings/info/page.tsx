@@ -6,6 +6,7 @@ import { SettingsPage } from "@/components/settings/SettingsPage";
 import UserAvatar from "@/components/settings/UserAvatar";
 import UserDetails from "@/components/settings/UserDetails";
 import UserOptions from "@/components/settings/UserOptions";
+import VideoSettings from "@/components/settings/VideoSettings";
 import { useTranslation } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,6 +26,7 @@ export default async function InfoPage() {
       <UserDetails />
       <ChangePassword />
       <UserOptions />
+      <VideoSettings />
       <ReaderSettings />
       <DeleteAccount />
     </SettingsPage>

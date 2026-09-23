@@ -9,13 +9,7 @@ import {
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { usePageSorts, useSetPageSort } from "@/lib/hooks/usePageSort";
-import {
-  BOOKMARK_SORT_LABELS,
-  bookmarkSortOf,
-  LIST_SORT_LABELS,
-  LIST_SORTS,
-  listSortOf,
-} from "@/lib/pageSort";
+import { BOOKMARK_SORT_LABELS, bookmarkSortOf } from "@/lib/pageSort";
 import type { BookmarkSort } from "@/lib/pageSort";
 import { ArrowUpDown } from "lucide-react";
 
@@ -76,21 +70,7 @@ export function BookmarkSortSubmenu({
       current={current}
       options={options}
       labels={BOOKMARK_SORT_LABELS}
-      onPick={(sort) => setSort(pageKey, sort === "newest" ? null : sort)}
-    />
-  );
-}
-
-/** How the All Lists page orders the lists. */
-export function ListSortSubmenu() {
-  const setSort = useSetPageSort();
-  const current = listSortOf(usePageSorts());
-  return (
-    <SortSubmenu
-      current={current}
-      options={LIST_SORTS}
-      labels={LIST_SORT_LABELS}
-      onPick={(sort) => setSort("lists", sort === "custom" ? null : sort)}
+      onPick={(sort) => void setSort(pageKey, sort === "newest" ? null : sort)}
     />
   );
 }

@@ -7,6 +7,10 @@ import "@karakeep/tailwind-config/globals.css";
 import type { Viewport } from "next";
 import React from "react";
 import Providers from "@/lib/providers";
+import {
+  getUiPreferences,
+  withAccountPreferences,
+} from "@/lib/uiPreferences.server";
 import { getUserLocalSettings } from "@/lib/userLocalSettings/userLocalSettings";
 import { getServerAuthSession } from "@/server/auth";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -63,7 +67,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getServerAuthSession();
-  const userSettings = await getUserLocalSettings();
+  // Fork: the account's preferences (UI state that used to be per browser)
+  // seed the page, and win over upstream's per-browser view options.
+  const uiPreferences = await getUiPreferences();
+  const userSettings = withAccountPreferences(
+    await getUserLocalSettings(),
+    uiPreferences,
+  );
   const isRTL = userSettings.lang === "ar";
   return (
     <html
@@ -76,7 +86,8 @@ export default async function RootLayout({
           <Providers
             session={session}
             clientConfig={clientConfig}
-            userLocalSettings={await getUserLocalSettings()}
+            userLocalSettings={userSettings}
+            uiPreferences={uiPreferences}
           >
             {children}
             <ReactQueryDevtools initialIsOpen={false} />

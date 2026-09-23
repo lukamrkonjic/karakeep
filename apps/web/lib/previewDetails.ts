@@ -1,23 +1,25 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+"use client";
 
-interface PreviewDetailsState {
-  hidden: boolean;
-  toggle: () => void;
-}
+import { useCallback } from "react";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 
 /**
- * Fork: whether an opened bookmark shows its details panel — one setting for
- * every preview, kept in localStorage. Hide it on one picture and the next
- * opens without it too, until it's shown again. (zustand renders the default
- * during hydration, so a server-rendered preview doesn't mismatch.)
+ * Fork: whether an opened bookmark hides its details panel — one setting for
+ * every preview, kept in the account (lib/uiPreferences.tsx). Hide it on one
+ * picture and the next opens without it too, on every device, until it's
+ * shown again.
  */
-export const usePreviewDetails = create<PreviewDetailsState>()(
-  persist(
-    (set, get) => ({
-      hidden: false,
-      toggle: () => set({ hidden: !get().hidden }),
-    }),
-    { name: "karakeep-preview-details-hidden" },
-  ),
-);
+export function usePreviewDetailsHidden(): boolean {
+  return usePreference("previewDetailsHidden") ?? false;
+}
+
+export function useTogglePreviewDetails() {
+  const updatePreferences = useUpdatePreferences();
+  return useCallback(
+    () =>
+      void updatePreferences((prefs) => ({
+        previewDetailsHidden: !prefs.previewDetailsHidden,
+      })),
+    [updatePreferences],
+  );
+}

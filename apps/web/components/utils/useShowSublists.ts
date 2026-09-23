@@ -1,49 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  parseSublists,
-  serializeSublists,
-  SUBLISTS_COOKIE,
-} from "@/lib/sublists";
-
-function readCookie(): string {
-  if (typeof document === "undefined") {
-    return "";
-  }
-  return (
-    document.cookie
-      .split("; ")
-      .find((c) => c.startsWith(`${SUBLISTS_COOKIE}=`))
-      ?.slice(SUBLISTS_COOKIE.length + 1) ?? ""
-  );
-}
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 
 /**
  * Whether this list shows the items of everything nested under it, and a
- * toggle for it (see the list page, which reads the same cookie on the
- * server). Reads after mount so the server's markup is never contradicted.
+ * toggle for it. Kept in the account's preferences, which the list page
+ * reads on the server too, so it renders right the first time.
  */
 export function useShowSublists(listId: string) {
   const router = useRouter();
-  const [showSublists, setShowSublists] = useState(false);
-  useEffect(() => {
-    setShowSublists(parseSublists(readCookie()).has(listId));
-  }, [listId]);
+  const updatePreferences = useUpdatePreferences();
+  const showSublists = usePreference("sublists")?.includes(listId) ?? false;
 
-  const onClickShowSublists = useCallback(() => {
-    const ids = parseSublists(readCookie());
-    if (ids.has(listId)) {
-      ids.delete(listId);
-    } else {
-      ids.add(listId);
-    }
-    // A year, path-wide, so it holds for every list page in this browser.
-    document.cookie = `${SUBLISTS_COOKIE}=${serializeSublists(ids)}; path=/; max-age=31536000; samesite=lax`;
-    setShowSublists(ids.has(listId));
+  const onClickShowSublists = useCallback(async () => {
+    await updatePreferences(
+      (prefs) => {
+        const ids = new Set(prefs.sublists);
+        if (ids.has(listId)) {
+          ids.delete(listId);
+        } else {
+          ids.add(listId);
+        }
+        return { sublists: [...ids] };
+      },
+      { immediate: true },
+    );
     router.refresh();
-  }, [listId, router]);
+  }, [listId, router, updatePreferences]);
 
   return { showSublists, onClickShowSublists };
 }

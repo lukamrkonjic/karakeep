@@ -1,25 +1,24 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+"use client";
 
-interface TailoredFeedState {
-  /**
-   * Lists left out of the tailored feed. Stored as exclusions rather than a
-   * selection so a list created later is in the feed until you take it out.
-   */
-  excluded: string[];
-  setExcluded: (ids: string[]) => void;
-}
+import { useCallback } from "react";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
+
+const NONE: string[] = [];
 
 /**
- * Which lists the tailored feed (/dashboard/feed) draws from. Persisted to
- * localStorage — per browser, like the sidebar's collapsed state.
+ * Which lists the tailored feed (/dashboard/feed) draws from, as the lists
+ * left out rather than a selection, so a list created later is in the feed
+ * until you take it out. Kept in the account (lib/uiPreferences.tsx).
  */
-export const useTailoredFeed = create<TailoredFeedState>()(
-  persist(
-    (set) => ({
-      excluded: [],
-      setExcluded: (excluded) => set({ excluded }),
-    }),
-    { name: "karakeep-tailored-feed" },
-  ),
-);
+export function useTailoredFeedExcluded(): string[] {
+  return usePreference("tailoredFeedExcluded") ?? NONE;
+}
+
+export function useSetTailoredFeedExcluded() {
+  const updatePreferences = useUpdatePreferences();
+  return useCallback(
+    (excluded: string[]) =>
+      void updatePreferences({ tailoredFeedExcluded: excluded }),
+    [updatePreferences],
+  );
+}

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Bookmarks from "@/components/dashboard/bookmarks/Bookmarks";
 import ListHeader from "@/components/dashboard/lists/ListHeader";
 import ListSubfolders from "@/components/dashboard/lists/ListSubfolders";
-import { parseSublists, SUBLISTS_COOKIE } from "@/lib/sublists";
+import { getUiPreferences } from "@/lib/uiPreferences.server";
 import { api } from "@/server/api/client";
 import { TRPCError } from "@trpc/server";
 
@@ -58,8 +57,8 @@ export default async function ListPage(props: {
   // Only show editor card if user is owner or editor (not viewer)
   const canEdit = list.userRole === "owner" || list.userRole === "editor";
 
-  // The "…" menu's sub-list toggle (a cookie, so this renders right the
-  // first time): show everything nested under this list, not just its own.
+  // The "…" menu's sub-list toggle (an account preference, so this renders
+  // right the first time): show everything nested under this list, too.
   const archived = !includeArchived ? false : undefined;
   let query: Omit<
     ZGetBookmarksRequest,
@@ -68,9 +67,8 @@ export default async function ListPage(props: {
     listId: list.id,
     archived,
   };
-  const showSublists = parseSublists(
-    (await cookies()).get(SUBLISTS_COOKIE)?.value,
-  ).has(list.id);
+  const showSublists =
+    (await getUiPreferences()).sublists?.includes(list.id) ?? false;
   if (showSublists && list.type === "manual") {
     const { lists } = await api.lists.list();
     const children = new Map<string, string[]>();

@@ -33,7 +33,7 @@ export default function DeleteListConfirmationDialog({
       });
       setOpen(false);
       if (currentPath.includes(list.id)) {
-        router.push("/dashboard/lists");
+        router.push("/dashboard/bookmarks");
       }
     },
     onError: () => {

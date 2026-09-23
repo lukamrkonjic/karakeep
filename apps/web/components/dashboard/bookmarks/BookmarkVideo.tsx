@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePreference } from "@/lib/uiPreferences";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
 
@@ -15,13 +16,14 @@ import { GatedImage } from "./GatedImage";
  * Kept as a standalone component to minimise the upstream-merge surface: the
  * card/preview files only need a one-line call to render a video.
  *
- * - In the feed (`thumbnail`) a video never plays. The tile is its poster and
- *   a click opens the bookmark's preview modal, where it plays (`autoPlay`);
- *   the play mark only shows on hover. No <video> is mounted per tile either:
- *   many uploads (screen/meeting recordings especially) aren't "faststart",
- *   so even `preload="metadata"` reads deep into the file for a trailing moov
- *   atom, and doing that for every tile scrolling into view made the feed
- *   slow.
+ * - In the feed (`thumbnail`) the tile is its poster and a click opens the
+ *   bookmark's preview modal, where it plays (`autoPlay`). No <video> is
+ *   mounted per tile: many uploads (screen/meeting recordings especially)
+ *   aren't "faststart", so even `preload="metadata"` reads deep into the file
+ *   for a trailing moov atom, and doing that for every tile scrolling into
+ *   view made the feed slow. Fork: hovering the card plays the video there
+ *   (Settings → "Play videos on hover", muted or with sound) — one player,
+ *   mounted while the pointer is on the card and dropped when it leaves.
  * - `thumbnailAssetId` (see assetPreprocessingWorker's extracted poster
  *   frame) is the tile's picture, at the video's own aspect ratio like any
  *   other image tile, and the player's `poster`, which gives it that shape
@@ -52,6 +54,55 @@ export function BookmarkVideo({
   autoPlay?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLElement>(null);
+  const hoverRef = useRef<HTMLVideoElement>(null);
+  const playOnHover = usePreference("hoverVideoAutoplay") ?? true;
+  const withSound = usePreference("hoverVideoSound") ?? false;
+  const [hovering, setHovering] = useState(false);
+  const [hoverPlaying, setHoverPlaying] = useState(false);
+
+  // The whole card counts as hovering (its title and buttons sit on top of
+  // the video, outside this element), where there is a card.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!thumbnail || !playOnHover || !frame) {
+      return;
+    }
+    const host = frame.closest<HTMLElement>("[data-bookmark-index]") ?? frame;
+    const enter = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") {
+        setHovering(true);
+      }
+    };
+    const leave = () => {
+      setHovering(false);
+      setHoverPlaying(false);
+    };
+    host.addEventListener("pointerenter", enter);
+    host.addEventListener("pointerleave", leave);
+    return () => {
+      host.removeEventListener("pointerenter", enter);
+      host.removeEventListener("pointerleave", leave);
+      leave();
+    };
+  }, [thumbnail, playOnHover]);
+
+  useEffect(() => {
+    const video = hoverRef.current;
+    if (!hovering || !video) {
+      return;
+    }
+    video.muted = !withSound;
+    video.play().catch(() => {
+      // Browsers only allow sound once the page has had a click: until then
+      // it plays silently.
+      if (!video.muted) {
+        video.muted = true;
+        void video.play().catch(() => undefined);
+      }
+    });
+  }, [hovering, withSound]);
+
   useEffect(() => {
     const video = videoRef.current;
     // Only the copy that is on screen. The preview renders its wide and
@@ -72,7 +123,25 @@ export function BookmarkVideo({
           // inert when the caller already constrains height.
           <div className="aspect-video w-full bg-black" />
         )}
-        <div className="absolute inset-0 flex items-center justify-center text-white opacity-0 transition-opacity duration-200 group-hover/video:opacity-100">
+        {hovering && playOnHover && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption -- a silent hover preview
+          <video
+            ref={hoverRef}
+            src={getAssetUrl(assetId)}
+            className="pointer-events-none absolute inset-0 size-full object-contain"
+            loop
+            playsInline
+            preload="auto"
+            onPlaying={() => setHoverPlaying(true)}
+          />
+        )}
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-center text-white opacity-0 transition-opacity duration-200",
+            // The play mark until a hover preview is actually playing.
+            !hoverPlaying && "group-hover/video:opacity-100",
+          )}
+        >
           <span className="flex size-14 items-center justify-center rounded-full bg-black/50">
             <Play className="ml-1 size-6 fill-current" />
           </span>
@@ -82,6 +151,7 @@ export function BookmarkVideo({
     const frame = cn("group/video relative block w-full", className);
     return bookmarkId ? (
       <Link
+        ref={frameRef as React.Ref<HTMLAnchorElement>}
         href={`/dashboard/preview/${bookmarkId}`}
         className={frame}
         draggable={false}
@@ -90,7 +160,9 @@ export function BookmarkVideo({
         {poster}
       </Link>
     ) : (
-      <div className={frame}>{poster}</div>
+      <div ref={frameRef as React.Ref<HTMLDivElement>} className={frame}>
+        {poster}
+      </div>
     );
   }
 

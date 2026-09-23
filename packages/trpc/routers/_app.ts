@@ -10,6 +10,7 @@ import { highlightsAppRouter } from "./highlights";
 import { importSessionsRouter } from "./importSessions";
 import { invitesAppRouter } from "./invites";
 import { listSubscriptionsAppRouter } from "./listSubscriptions";
+import { uiPreferencesAppRouter } from "./uiPreferences";
 import { listsAppRouter } from "./lists";
 import { promptsAppRouter } from "./prompts";
 import { publicBookmarks } from "./publicBookmarks";
@@ -38,6 +39,7 @@ export const appRouter = router({
   publicBookmarks: publicBookmarks,
   subscriptions: subscriptionsRouter,
   listSubscriptions: listSubscriptionsAppRouter,
+  uiPreferences: uiPreferencesAppRouter,
   config: configAppRouter,
 });
 // export type definition of API

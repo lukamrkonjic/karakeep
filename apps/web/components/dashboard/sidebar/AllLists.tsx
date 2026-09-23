@@ -35,7 +35,7 @@ import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
-import { AllListsOptions, BookmarkPageOptions } from "../PageOptions";
+import { BookmarkPageOptions } from "../PageOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
 function useDropTarget(listId: string, listName: string) {
@@ -289,17 +289,22 @@ export default function AllLists({
           </Link>
         </EditListModal>
       </li>
-      {/* Fork: every entry has a "…" on hover, where a list's sits. */}
+      {/* Fork: every entry has a "…" on hover, where a list's sits. Home
+          took the All Lists page's place (list invitations show there). */}
       <SidebarItem
         logo={null}
-        name={t("lists.all_lists")}
-        path={`/dashboard/lists`}
+        name={t("common.home")}
+        path="/dashboard/bookmarks"
         className="group my-0.5"
         linkClassName="py-1.5 px-2"
         right={
           <div className="flex items-center">
             <InvitationNotificationBadge />
-            <AllListsOptions variant="sidebar" />
+            <BookmarkPageOptions
+              variant="sidebar"
+              label="Home options"
+              pageKey="home"
+            />
           </div>
         }
       />

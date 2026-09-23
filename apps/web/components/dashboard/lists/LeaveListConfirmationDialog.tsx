@@ -38,9 +38,9 @@ export default function LeaveListConfirmationDialog({
         setOpen(false);
         // Invalidate the lists cache
         queryClient.invalidateQueries(api.lists.list.pathFilter());
-        // If currently viewing this list, redirect to lists page
+        // If currently viewing this list, redirect home
         if (currentPath.includes(list.id)) {
-          router.push("/dashboard/lists");
+          router.push("/dashboard/bookmarks");
         }
       },
       onError: (error) => {

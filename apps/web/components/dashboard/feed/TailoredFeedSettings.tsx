@@ -13,7 +13,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { isEmojiIcon } from "@/lib/emoji";
-import { useTailoredFeed } from "@/lib/tailoredFeed";
+import {
+  useSetTailoredFeedExcluded,
+  useTailoredFeedExcluded,
+} from "@/lib/tailoredFeed";
 import { cn } from "@/lib/utils";
 import { Square, SquareCheck, SquareMinus } from "lucide-react";
 
@@ -51,8 +54,8 @@ export function TailoredFeedSettings({
   const open = controlledOpen ?? ownOpen;
   const setOpen = setControlledOpen ?? setOwnOpen;
   const { data: lists } = useBookmarkLists();
-  const excluded = useTailoredFeed((s) => s.excluded);
-  const setExcluded = useTailoredFeed((s) => s.setExcluded);
+  const excluded = useTailoredFeedExcluded();
+  const setExcluded = useSetTailoredFeedExcluded();
 
   const candidates = useMemo(
     () => feedCandidates(lists?.data ?? []),

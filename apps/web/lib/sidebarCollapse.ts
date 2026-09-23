@@ -1,22 +1,24 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+"use client";
 
-interface SidebarCollapseState {
-  collapsed: boolean;
-  toggle: () => void;
-}
+import { useCallback } from "react";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 
 /**
- * Whether the desktop sidebar is folded in. Persisted to localStorage so it
- * survives a refresh — see SidebarCollapseToggle (the header arrow button)
- * and SidebarCollapseWrapper (the div that actually hides/shows the aside).
+ * Whether the desktop sidebar is folded in. Kept in the account
+ * (lib/uiPreferences.tsx) — see SidebarCollapseToggle (the header arrow
+ * button) and SidebarCollapseWrapper (the div that hides/shows the aside).
  */
-export const useSidebarCollapse = create<SidebarCollapseState>()(
-  persist(
-    (set, get) => ({
-      collapsed: false,
-      toggle: () => set({ collapsed: !get().collapsed }),
-    }),
-    { name: "karakeep-sidebar-collapsed" },
-  ),
-);
+export function useSidebarCollapsed(): boolean {
+  return usePreference("sidebarCollapsed") ?? false;
+}
+
+export function useToggleSidebarCollapsed() {
+  const updatePreferences = useUpdatePreferences();
+  return useCallback(
+    () =>
+      void updatePreferences((prefs) => ({
+        sidebarCollapsed: !prefs.sidebarCollapsed,
+      })),
+    [updatePreferences],
+  );
+}

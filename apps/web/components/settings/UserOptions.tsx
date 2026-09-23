@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { useClientConfig } from "@/lib/clientConfig";
 import { useTranslation } from "@/lib/i18n/client";
+import { useUpdatePreferences } from "@/lib/uiPreferences";
 import { useInterfaceLang } from "@/lib/userLocalSettings/bookmarksLayout";
 import { updateInterfaceLang } from "@/lib/userLocalSettings/userLocalSettings";
 import { useUserSettings } from "@/lib/userSettings";
@@ -32,10 +33,14 @@ import { SettingsSection } from "./SettingsPage";
 
 const LanguageSelect = () => {
   const lang = useInterfaceLang();
+  const updatePreferences = useUpdatePreferences();
   return (
     <Select
       value={lang}
       onValueChange={async (val) => {
+        // Fork: the account's language first (the page re-renders in it),
+        // then this browser's, for the signed-out pages.
+        await updatePreferences({ lang: val }, { immediate: true });
         await updateInterfaceLang(val);
       }}
     >

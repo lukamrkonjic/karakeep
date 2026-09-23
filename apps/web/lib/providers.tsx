@@ -1,16 +1,22 @@
 "use client";
 
 import type { UserLocalSettings } from "@/lib/userLocalSettings/types";
-import React, { useState } from "react";
-import { ThemeProvider } from "@/components/theme-provider";
+import React, { useEffect, useState } from "react";
+import {
+  ThemePreferenceSync,
+  ThemeProvider,
+} from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Session, SessionProvider } from "@/lib/auth/client";
+import { LegacyPreferencesImport } from "@/lib/legacyPreferences";
+import { UiPreferencesProvider, usePreference } from "@/lib/uiPreferences";
 import { UserLocalSettingsCtx } from "@/lib/userLocalSettings/bookmarksLayout";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
 import superjson from "superjson";
 
 import type { ClientConfig } from "@karakeep/shared/config";
+import type { ZUiPreferences } from "@karakeep/shared/types/uiPreferences";
 import type { AppRouter } from "@karakeep/trpc/routers/_app";
 import { ClientConfigProvider } from "@karakeep/shared-react/providers/client-config-provider";
 import {
@@ -18,6 +24,7 @@ import {
   TRPCProvider,
 } from "@karakeep/shared-react/trpc";
 
+import { i18n } from "./i18n/client";
 import CustomI18nextProvider from "./i18n/provider";
 
 function makeQueryClient() {
@@ -53,11 +60,13 @@ export default function Providers({
   session,
   clientConfig,
   userLocalSettings,
+  uiPreferences,
 }: {
   children: React.ReactNode;
   session: Session | null;
   clientConfig: ClientConfig;
   userLocalSettings: UserLocalSettings;
+  uiPreferences: ZUiPreferences;
 }) {
   const queryClient = getQueryClient();
 
@@ -85,22 +94,51 @@ export default function Providers({
         <SessionProvider session={session}>
           <QueryClientProvider client={queryClient}>
             <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-              <CustomI18nextProvider lang={userLocalSettings.lang}>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="system"
-                  enableSystem
-                  disableTransitionOnChange
-                >
-                  <TooltipProvider delayDuration={0}>
-                    {children}
-                  </TooltipProvider>
-                </ThemeProvider>
-              </CustomI18nextProvider>
+              <UiPreferencesProvider
+                initial={uiPreferences}
+                signedIn={session !== null}
+              >
+                <PreferredLanguage fallback={userLocalSettings.lang}>
+                  <ThemeProvider
+                    attribute="class"
+                    defaultTheme={uiPreferences.theme ?? "system"}
+                    enableSystem
+                    disableTransitionOnChange
+                  >
+                    <ThemePreferenceSync />
+                    {session && <LegacyPreferencesImport />}
+                    <TooltipProvider delayDuration={0}>
+                      {children}
+                    </TooltipProvider>
+                  </ThemeProvider>
+                </PreferredLanguage>
+              </UiPreferencesProvider>
             </TRPCProvider>
           </QueryClientProvider>
         </SessionProvider>
       </UserLocalSettingsCtx.Provider>
     </ClientConfigProvider>
   );
+}
+
+/**
+ * Fork: the account's language, the moment it's picked. The switch happens
+ * in an effect: i18next tells every translated component at once, which it
+ * mustn't do mid-render (CustomI18nextProvider switches during render).
+ */
+function PreferredLanguage({
+  fallback,
+  children,
+}: {
+  fallback: string;
+  children: React.ReactNode;
+}) {
+  const wanted = usePreference("lang") ?? fallback;
+  const [lang, setLang] = useState(wanted);
+  useEffect(() => {
+    if (wanted !== lang) {
+      void i18n.changeLanguage(wanted).then(() => setLang(wanted));
+    }
+  }, [wanted, lang]);
+  return <CustomI18nextProvider lang={lang}>{children}</CustomI18nextProvider>;
 }

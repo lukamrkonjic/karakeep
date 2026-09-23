@@ -15,7 +15,10 @@ import {
 import { useSession } from "@/lib/auth/client";
 import useRelativeTime from "@/lib/hooks/relative-time";
 import { useTranslation } from "@/lib/i18n/client";
-import { usePreviewDetails } from "@/lib/previewDetails";
+import {
+  usePreviewDetailsHidden,
+  useTogglePreviewDetails,
+} from "@/lib/previewDetails";
 import { useQuery } from "@tanstack/react-query";
 import {
   Building,
@@ -111,6 +114,43 @@ function BookmarkMetadata({ bookmark }: { bookmark: ZBookmark }) {
   );
 }
 
+/** "https://www.example.com/a/b/?x" → "example.com/a/b" */
+function shortUrl(url: string): string {
+  try {
+    const { hostname, pathname } = new URL(url);
+    return `${hostname.replace(/^www\./, "")}${pathname}`.replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Fork: where the bookmark came from — the page, or where a picture or video
+ * was saved from — as its own section under the title, like the others.
+ */
+function SourceSection({ url }: { url: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {t("common.source")}
+      </p>
+      <Link
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        title={url}
+        className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ExternalLink className="size-4 shrink-0" />
+        <span className="truncate underline-offset-4 hover:underline">
+          {shortUrl(url)}
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 function PublishedDate({ datePublished }: { datePublished: Date }) {
   const { i18n } = useTranslation();
   const { fromNow, localCreatedAt } = useRelativeTime(
@@ -135,6 +175,7 @@ function PublishedDate({ datePublished }: { datePublished: Date }) {
 export default function BookmarkPreview({
   bookmarkId,
   initialData,
+  onClose,
   variant = "page",
 }: {
   bookmarkId: string;
@@ -147,8 +188,8 @@ export default function BookmarkPreview({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>("content");
   // Fork: one remembered setting for every preview (lib/previewDetails.ts).
-  const sidebarCollapsed = usePreviewDetails((s) => s.hidden);
-  const toggleDetails = usePreviewDetails((s) => s.toggle);
+  const sidebarCollapsed = usePreviewDetailsHidden();
+  const toggleDetails = useTogglePreviewDetails();
   const { data: session } = useSession();
 
   const { data: bookmark } = useQuery(
@@ -214,21 +255,16 @@ export default function BookmarkPreview({
 
   const detailsSection = (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <p className="line-clamp-2 text-ellipsis break-words text-lg font-medium">
-          {!title ? "Untitled" : title}
-        </p>
-        {sourceUrl && (
-          <Link
-            href={sourceUrl}
-            target="_blank"
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ExternalLink className="size-3" />
-            <span>{t("preview.view_original")}</span>
-          </Link>
-        )}
-      </div>
+      {/* Fork: one line, cut short; the full title is its tooltip. */}
+      <p title={title ?? undefined} className="truncate text-lg font-medium">
+        {!title ? "Untitled" : title}
+      </p>
+      {sourceUrl && (
+        <>
+          <Separator />
+          <SourceSection url={sourceUrl} />
+        </>
+      )}
       {/* A video note's text, which the media layout has no room for beside
           the video. */}
       {media && bookmark.content.type === BookmarkTypes.TEXT && (
@@ -268,7 +304,11 @@ export default function BookmarkPreview({
       {/* Render original layout for wide screens */}
       {media ? (
         <div className="hidden lg:block">
-          <MediaFitPreview media={media} details={detailsSection} />
+          <MediaFitPreview
+            media={media}
+            details={detailsSection}
+            onClose={onClose}
+          />
         </div>
       ) : (
         <div

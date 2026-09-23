@@ -1,9 +1,12 @@
 "use client";
 
 import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
-import { usePreviewDetails } from "@/lib/previewDetails";
+import {
+  usePreviewDetailsHidden,
+  useTogglePreviewDetails,
+} from "@/lib/previewDetails";
 import { cn } from "@/lib/utils";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ExternalLink, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
@@ -54,18 +57,22 @@ export function getPreviewMedia(bookmark: ZBookmark): PreviewMedia | null {
  * The panel is absolutely positioned inside its column so it never adds
  * height: the media alone decides how tall the dialog is. Hiding it is one
  * remembered setting for every preview, and a picture zooms and pans
- * (ZoomableImage).
+ * (ZoomableImage). Clicking a picture closes the preview (`onClose`); its
+ * open button, beside the details toggle, opens the file in a new tab. A
+ * video keeps clicks for its player.
  */
 export function MediaFitPreview({
   media,
   details,
+  onClose,
 }: {
   media: PreviewMedia;
   details: React.ReactNode;
+  onClose?: () => void;
 }) {
   // One remembered setting for every preview (lib/previewDetails.ts).
-  const panelOpen = !usePreviewDetails((s) => s.hidden);
-  const togglePanel = usePreviewDetails((s) => s.toggle);
+  const panelOpen = !usePreviewDetailsHidden();
+  const togglePanel = useTogglePreviewDetails();
   // Kept in step with the panel's w-[360px] below.
   const fit = cn(
     "block h-auto max-h-[92vh] w-auto",
@@ -73,27 +80,52 @@ export function MediaFitPreview({
   );
   const pane =
     "relative flex min-h-[min(420px,92vh)] min-w-[320px] items-center justify-center bg-black";
-  const toggle = (
-    <button
-      type="button"
-      onClick={togglePanel}
-      aria-label={panelOpen ? "Hide details" : "Show details"}
-      title={panelOpen ? "Hide details" : "Show details"}
-      className="absolute right-3 top-3 z-10 rounded-md bg-black/40 p-1.5 text-white/80 transition-colors hover:bg-black/60 hover:text-white"
+  const button =
+    "rounded-md bg-black/40 p-1.5 text-white/80 transition-colors hover:bg-black/60 hover:text-white";
+  const src = getAssetUrl(media.assetId);
+  const controls = (
+    <div
+      data-pane-controls
+      className="absolute right-3 top-3 z-10 flex items-center gap-1"
     >
-      {panelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-    </button>
+      {media.kind === "image" && (
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open image"
+          title="Open image"
+          className={button}
+        >
+          <ExternalLink size={18} />
+        </a>
+      )}
+      <button
+        type="button"
+        onClick={togglePanel}
+        aria-label={panelOpen ? "Hide details" : "Show details"}
+        title={panelOpen ? "Hide details" : "Show details"}
+        className={button}
+      >
+        {panelOpen ? (
+          <PanelRightClose size={18} />
+        ) : (
+          <PanelRightOpen size={18} />
+        )}
+      </button>
+    </div>
   );
 
   return (
     <div className="flex max-h-[92vh]">
       {media.kind === "image" ? (
         <ZoomableImage
-          src={getAssetUrl(media.assetId)}
+          src={src}
           className={pane}
           imageClassName={fit}
+          onClick={onClose}
         >
-          {toggle}
+          {controls}
         </ZoomableImage>
       ) : (
         <div className={pane}>
@@ -103,7 +135,7 @@ export function MediaFitPreview({
             autoPlay
             className={fit}
           />
-          {toggle}
+          {controls}
         </div>
       )}
       {panelOpen && (

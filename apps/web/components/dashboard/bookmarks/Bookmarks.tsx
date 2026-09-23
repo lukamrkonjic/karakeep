@@ -1,13 +1,11 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import {
   bookmarkSortOf,
   bookmarkSortQuery,
   newShuffleSeed,
-  PAGE_SORT_COOKIE,
-  parsePageSorts,
 } from "@/lib/pageSort";
+import { getUiPreferences } from "@/lib/uiPreferences.server";
 import { api } from "@/server/api/client";
 import { getServerAuthSession } from "@/server/auth";
 
@@ -28,8 +26,8 @@ export default async function Bookmarks({
   >;
   /**
    * Fork: which page this is, for its "…" menu's Sort (lib/pageSort.ts). The
-   * choice comes from a cookie, so the first page is already in that order;
-   * Random gets a new shuffle on every load.
+   * choice is an account preference, so the first page is already in that
+   * order; Random gets a new shuffle on every load.
    */
   sortKey: string;
   header?: React.ReactNode;
@@ -42,10 +40,7 @@ export default async function Bookmarks({
   }
 
   const sort = bookmarkSortQuery(
-    bookmarkSortOf(
-      parsePageSorts((await cookies()).get(PAGE_SORT_COOKIE)?.value),
-      sortKey,
-    ),
+    bookmarkSortOf((await getUiPreferences()).pageSorts, sortKey),
     newShuffleSeed(),
   );
   const bookmarks = await api.bookmarks.getBookmarks({

@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MoreHorizontal } from "lucide-react";
 
-import { BookmarkSortSubmenu, ListSortSubmenu } from "./sort/SortSubmenu";
+import { BookmarkSortSubmenu } from "./sort/SortSubmenu";
 
 export interface PageOptionsItem {
   id: string;
@@ -101,21 +101,6 @@ export function BookmarkPageOptions({
       variant={variant}
       label={label}
       sort={<BookmarkSortSubmenu pageKey={pageKey} />}
-    />
-  );
-}
-
-/** The All Lists page's "…": how its lists are ordered. */
-export function AllListsOptions({
-  variant,
-}: {
-  variant: "sidebar" | "header";
-}) {
-  return (
-    <PageOptions
-      variant={variant}
-      label="All Lists options"
-      sort={<ListSortSubmenu />}
     />
   );
 }

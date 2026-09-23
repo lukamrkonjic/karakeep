@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
+import MobileListsMenu from "@/components/shared/sidebar/MobileListsMenu";
 import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
 import SidebarLayout from "@/components/shared/sidebar/SidebarLayout";
@@ -10,14 +11,7 @@ import { api } from "@/server/api/client";
 import { getServerAuthSession } from "@/server/auth";
 import { TRPCError } from "@trpc/server";
 import { TFunction } from "i18next";
-import {
-  Archive,
-  ClipboardList,
-  Highlighter,
-  Home,
-  Search,
-  Tag,
-} from "lucide-react";
+import { Archive, Highlighter, Home, Search, Tag } from "lucide-react";
 
 import { PluginManager, PluginType } from "@karakeep/shared/plugins";
 import { tryCatch } from "@karakeep/shared/tryCatch";
@@ -92,23 +86,14 @@ export default async function Dashboard({
       archive(t),
     ].flat();
 
-  const mobileSidebar = (t: TFunction) => [
-    ...items(t),
-    {
-      name: t("lists.all_lists"),
-      icon: <ClipboardList size={18} />,
-      path: "/dashboard/lists",
-    },
-  ];
-
   return (
     <UserSettingsContextProvider userSettings={userSettings.data}>
       <ReaderSettingsProvider>
         <SidebarLayout
           sidebar={
-            // Desktop: the lists lead. Home is the header logo, search is the
-            // header bar, Tags and Highlights are in the profile menu, and
-            // Archive sits below the lists.
+            // Desktop: the lists lead, under Home (also the header logo).
+            // Search is the header bar, Highlights is in the profile menu,
+            // and Archive sits below the lists.
             <Sidebar
               extraSections={<AllLists initialData={lists.data} />}
               footerItems={(t) => [
@@ -125,7 +110,13 @@ export default async function Dashboard({
               ]}
             />
           }
-          mobileSidebar={<MobileSidebar items={mobileSidebar} />}
+          mobileSidebar={
+            // Fork: no All Lists page; the lists open in a panel instead.
+            <MobileSidebar
+              items={items}
+              extra={<MobileListsMenu initialData={lists.data} />}
+            />
+          }
           modal={modal}
         >
           {children}

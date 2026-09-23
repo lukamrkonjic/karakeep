@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  createElement,
-  useEffect,
-  useOptimistic,
-  useState,
-  useTransition,
-} from "react";
+import { createElement } from "react";
 import { ButtonWithTooltip } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,19 +13,12 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/lib/i18n/client";
+import { useUpdatePreferences } from "@/lib/uiPreferences";
 import {
   useBookmarkDisplaySettings,
   useBookmarkLayout,
   useGridColumns,
 } from "@/lib/userLocalSettings/bookmarksLayout";
-import {
-  updateBookmarksLayout,
-  updateGridColumns,
-  updateImageFit,
-  updateShowNotes,
-  updateShowTags,
-  updateShowTitle,
-} from "@/lib/userLocalSettings/userLocalSettings";
 import {
   Check,
   Heading,
@@ -59,71 +46,31 @@ export default function ViewOptions() {
   const { t } = useTranslation();
   const layout = useBookmarkLayout();
   const gridColumns = useGridColumns();
-  const actualDisplaySettings = useBookmarkDisplaySettings();
-  const [tempColumns, setTempColumns] = useState(gridColumns);
-  const [, startTransition] = useTransition();
+  const displaySettings = useBookmarkDisplaySettings();
+  // Fork: saved to the account, applied at once — the grid follows the
+  // columns slider while it's dragged.
+  const updatePreferences = useUpdatePreferences();
 
-  // Optimistic state for all toggles
-  const [optimisticDisplaySettings, setOptimisticDisplaySettings] =
-    useOptimistic(actualDisplaySettings);
+  const showColumnSlider = layout === "grid" || layout === "masonry";
 
-  const [optimisticLayout, setOptimisticLayout] = useOptimistic(layout);
-
-  const [optimisticImageFit, setOptimisticImageFit] = useOptimistic(
-    actualDisplaySettings.imageFit,
-  );
-
-  const showColumnSlider =
-    optimisticLayout === "grid" || optimisticLayout === "masonry";
-
-  // Update temp value when actual value changes
-  useEffect(() => {
-    setTempColumns(gridColumns);
-  }, [gridColumns]);
-
-  // Handlers with optimistic updates
   const handleLayoutChange = (newLayout: LayoutType) => {
-    startTransition(async () => {
-      setOptimisticLayout(newLayout);
-      await updateBookmarksLayout(newLayout);
-    });
+    void updatePreferences({ bookmarkGridLayout: newLayout });
   };
 
   const handleShowNotesChange = (checked: boolean) => {
-    startTransition(async () => {
-      setOptimisticDisplaySettings({
-        ...optimisticDisplaySettings,
-        showNotes: checked,
-      });
-      await updateShowNotes(checked);
-    });
+    void updatePreferences({ showNotes: checked });
   };
 
   const handleShowTagsChange = (checked: boolean) => {
-    startTransition(async () => {
-      setOptimisticDisplaySettings({
-        ...optimisticDisplaySettings,
-        showTags: checked,
-      });
-      await updateShowTags(checked);
-    });
+    void updatePreferences({ showTags: checked });
   };
 
   const handleShowTitleChange = (checked: boolean) => {
-    startTransition(async () => {
-      setOptimisticDisplaySettings({
-        ...optimisticDisplaySettings,
-        showTitle: checked,
-      });
-      await updateShowTitle(checked);
-    });
+    void updatePreferences({ showTitle: checked });
   };
 
   const handleImageFitChange = (fit: "cover" | "contain") => {
-    startTransition(async () => {
-      setOptimisticImageFit(fit);
-      await updateImageFit(fit);
-    });
+    void updatePreferences({ imageFit: fit });
   };
 
   return (
@@ -154,7 +101,7 @@ export default function ViewOptions() {
               {createElement(iconMap[key as LayoutType], { size: 18 })}
               <span>{t(`layouts.${key}`)}</span>
             </div>
-            {optimisticLayout === key && <Check className="ml-2 size-4" />}
+            {layout === key && <Check className="ml-2 size-4" />}
           </DropdownMenuItem>
         ))}
 
@@ -167,13 +114,14 @@ export default function ViewOptions() {
                   {t("view_options.columns")}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {tempColumns}
+                  {gridColumns}
                 </span>
               </div>
               <Slider
-                value={[tempColumns]}
-                onValueChange={([value]) => setTempColumns(value)}
-                onValueCommit={([value]) => updateGridColumns(value)}
+                value={[gridColumns]}
+                onValueChange={([value]) =>
+                  void updatePreferences({ gridColumns: value })
+                }
                 min={1}
                 max={6}
                 step={1}
@@ -203,7 +151,7 @@ export default function ViewOptions() {
             </Label>
             <Switch
               id="show-notes"
-              checked={optimisticDisplaySettings.showNotes}
+              checked={displaySettings.showNotes}
               onCheckedChange={handleShowNotesChange}
             />
           </div>
@@ -218,7 +166,7 @@ export default function ViewOptions() {
             </Label>
             <Switch
               id="show-tags"
-              checked={optimisticDisplaySettings.showTags}
+              checked={displaySettings.showTags}
               onCheckedChange={handleShowTagsChange}
             />
           </div>
@@ -233,7 +181,7 @@ export default function ViewOptions() {
             </Label>
             <Switch
               id="show-title"
-              checked={optimisticDisplaySettings.showTitle}
+              checked={displaySettings.showTitle}
               onCheckedChange={handleShowTitleChange}
             />
           </div>
@@ -256,7 +204,7 @@ export default function ViewOptions() {
               <Image size={16} />
               <span>{t("view_options.image_fit_cover")}</span>
             </div>
-            {optimisticImageFit === "cover" && (
+            {displaySettings.imageFit === "cover" && (
               <Check className="ml-2 size-4" />
             )}
           </DropdownMenuItem>
@@ -271,7 +219,7 @@ export default function ViewOptions() {
               <Image size={16} />
               <span>{t("view_options.image_fit_contain")}</span>
             </div>
-            {optimisticImageFit === "contain" && (
+            {displaySettings.imageFit === "contain" && (
               <Check className="ml-2 size-4" />
             )}
           </DropdownMenuItem>

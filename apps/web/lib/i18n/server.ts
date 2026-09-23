@@ -1,3 +1,7 @@
+import {
+  getUiPreferences,
+  withAccountPreferences,
+} from "@/lib/uiPreferences.server";
 import { getUserLocalSettings } from "@/lib/userLocalSettings/userLocalSettings";
 import { createInstance, FlatNamespace, KeyPrefix } from "i18next";
 import resourcesToBackend from "i18next-resources-to-backend";
@@ -24,7 +28,11 @@ export async function useTranslation<
   Ns extends FlatNamespace,
   KPrefix extends KeyPrefix<FallbackNs<Ns>> = undefined,
 >(ns?: Ns, options: { keyPrefix?: KPrefix } = {}) {
-  const lng = (await getUserLocalSettings()).lang;
+  // Fork: the account's language wins over this browser's.
+  const lng = withAccountPreferences(
+    await getUserLocalSettings(),
+    await getUiPreferences(),
+  ).lang;
   const i18nextInstance = await initI18next(
     lng,
     Array.isArray(ns) ? (ns as string[]) : (ns as string),

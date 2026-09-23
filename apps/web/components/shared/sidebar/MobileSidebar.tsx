@@ -6,8 +6,11 @@ import { TSidebarItem } from "./TSidebarItem";
 
 export default async function MobileSidebar({
   items,
+  extra,
 }: {
   items: (t: TFunction) => TSidebarItem[];
+  /** Fork: entries that aren't plain links (the lists panel). */
+  extra?: React.ReactNode;
 }) {
   // oxlint-disable-next-line rules-of-hooks
   const { t } = await useTranslation();
@@ -21,6 +24,7 @@ export default async function MobileSidebar({
             path={item.path}
           />
         ))}
+        {extra}
       </ul>
     </aside>
   );

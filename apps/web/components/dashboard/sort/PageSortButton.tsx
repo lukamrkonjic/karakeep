@@ -36,7 +36,7 @@ export function PageSortButton({ pageKey }: { pageKey: string }) {
         <DropdownMenuRadioGroup
           value={current}
           onValueChange={(sort) =>
-            setSort(pageKey, sort === "newest" ? null : sort)
+            void setSort(pageKey, sort === "newest" ? null : sort)
           }
         >
           {(["newest", "oldest", "random"] as const).map((sort) => (

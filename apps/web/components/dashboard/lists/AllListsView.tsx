@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { CollapsibleTriggerChevron } from "@/components/ui/collapsible";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
-import type { ListSort } from "@/lib/pageSort";
 import { MoreHorizontal } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
@@ -15,7 +14,6 @@ import {
   useBookmarkLists,
 } from "@karakeep/shared-react/hooks/lists";
 
-import type { CompareSiblings } from "./CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "./CollapsibleBookmarkLists";
 import { ListOptions } from "./ListOptions";
 import {
@@ -128,56 +126,16 @@ function Section({
   );
 }
 
-/** A stable pseudo-random rank per list for one shuffle (FNV-1a + fmix32). */
-function shuffleRank(id: string, seed: number): number {
-  let h = 2166136261 ^ seed;
-  for (let i = 0; i < id.length; i++) {
-    h = Math.imul(h ^ id.charCodeAt(i), 16777619);
-  }
-  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  return (h ^ (h >>> 16)) >>> 0;
-}
-
-/** Fork: the page's "…" Sort, applied at every level of the tree. */
-function listOrder(sort: ListSort, seed: number): CompareSiblings | undefined {
-  const byName: CompareSiblings = (a, b) =>
-    a.item.name.localeCompare(b.item.name, undefined, {
-      sensitivity: "base",
-      numeric: true,
-    });
-  switch (sort) {
-    case "name":
-      return byName;
-    case "size":
-      return (a, b, stats) =>
-        (stats?.get(b.item.id) ?? 0) - (stats?.get(a.item.id) ?? 0) ||
-        byName(a, b);
-    case "random":
-      return (a, b) =>
-        shuffleRank(a.item.id, seed) - shuffleRank(b.item.id, seed);
-    default:
-      return undefined; // your own order
-  }
-}
-
 export default function AllListsView({
   initialData,
   favoritesCount,
   archivedCount,
-  sort = "custom",
-  seed = 0,
 }: {
   initialData: ZBookmarkList[];
   favoritesCount?: number;
   archivedCount?: number;
-  /** Fork: how the lists are ordered (the page's "…" menu), and the shuffle
-   *  for "random" — both from the server, so the page loads in that order. */
-  sort?: ListSort;
-  seed?: number;
 }) {
   const { t } = useTranslation();
-  const compareSiblings = useMemo(() => listOrder(sort, seed), [sort, seed]);
 
   // Fetch live lists data
   const { data: listsData } = useBookmarkLists(undefined, {
@@ -223,7 +181,6 @@ export default function AllListsView({
             className="border-b last:border-b-0"
             listsData={lists}
             filter={(node) => node.item.userRole === "owner"}
-            compareSiblings={compareSiblings}
             render={({ node, level, open, numBookmarks }) => (
               <ListItem
                 name={node.item.name}
@@ -247,7 +204,6 @@ export default function AllListsView({
             className="border-b last:border-b-0"
             listsData={lists}
             filter={(node) => node.item.userRole !== "owner"}
-            compareSiblings={compareSiblings}
             render={({ node, level, open, numBookmarks }) => (
               <ListItem
                 name={node.item.name}

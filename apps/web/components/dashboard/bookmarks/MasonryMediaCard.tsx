@@ -12,6 +12,7 @@ import BookmarkActionBar from "./BookmarkActionBar";
 import { BulkEditSelectionOverlay } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
 import { GatedImage } from "./GatedImage";
+import { ImagePeek } from "./ImagePeek";
 
 /**
  * Eagle.cool-style masonry tile: shows ONLY the media (image/video) at its
@@ -83,10 +84,14 @@ export function MasonryMediaCard({
 
       {/* Title + actions, revealed on hover at the top so they don't collide
           with a video's native controls along the bottom. Icons are forced
-          white since they always sit on the dimmed media above. */}
+          white since they always sit on the dimmed media above. A long title
+          stays on one line, cut short (the full one is its tooltip). */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         {title && (
-          <span className="pointer-events-auto line-clamp-2 text-sm font-medium text-white drop-shadow">
+          <span
+            title={title}
+            className="pointer-events-auto min-w-0 truncate text-sm font-medium text-white drop-shadow"
+          >
             {title}
           </span>
         )}
@@ -98,6 +103,14 @@ export function MasonryMediaCard({
           />
         </div>
       </div>
+
+      {media.type === "image" && !isBulkEditEnabled && (
+        <ImagePeek
+          assetId={media.assetId}
+          bookmarkId={bookmark.id}
+          alt={title ?? "bookmark"}
+        />
+      )}
     </div>
   );
 }

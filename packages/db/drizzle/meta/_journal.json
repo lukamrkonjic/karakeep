@@ -680,6 +680,13 @@
       "when": 1790104968919,
       "tag": "0096_list_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "6",
+      "when": 1790185092878,
+      "tag": "0097_ui_preferences",
+      "breakpoints": true
     }
   ]
 }

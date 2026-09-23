@@ -96,6 +96,11 @@ export const users = sqliteTable("user", {
     .notNull()
     .default(12),
 
+  // Fork: the web app's UI preferences as JSON — view options, sorts, the
+  // tailored feed's lists, … (packages/shared/types/uiPreferences.ts), kept
+  // per account so every device shows the same.
+  uiPreferences: text("uiPreferences"),
+
   // Reader view settings (nullable = opt-in, null means use client default)
   readerFontSize: integer("readerFontSize"),
   readerLineHeight: real("readerLineHeight"),

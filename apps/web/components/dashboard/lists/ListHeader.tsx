@@ -56,7 +56,7 @@ export default function ListHeader({
   if (error) {
     // This is usually exercised during list deletions.
     if (error.data?.code == "NOT_FOUND") {
-      router.push("/dashboard/lists");
+      router.push("/dashboard/bookmarks");
     }
   }
 

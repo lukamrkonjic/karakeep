@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { usePageSorts } from "@/lib/hooks/usePageSort";
 import {
@@ -35,10 +35,6 @@ export default function ClientBookmarksGrid({
   sortKey: string;
 }) {
   const api = useTRPC();
-  // The sort is read from a cookie, which hydration doesn't see yet: wait
-  // for it rather than load newest-first and then reload.
-  const [ready, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
   const [seed] = useState(newShuffleSeed);
   const sortChoice = bookmarkSortOf(usePageSorts(), sortKey);
   const sort = useMemo(
@@ -47,10 +43,7 @@ export default function ClientBookmarksGrid({
   );
 
   const { data } = useQuery(
-    api.bookmarks.getBookmarks.queryOptions(
-      { ...query, ...sort },
-      { enabled: ready },
-    ),
+    api.bookmarks.getBookmarks.queryOptions({ ...query, ...sort }),
   );
 
   if (!data) {

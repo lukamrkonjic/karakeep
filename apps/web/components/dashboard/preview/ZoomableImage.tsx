@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Minus, Plus, RotateCcw } from "lucide-react";
 
@@ -17,6 +16,18 @@ interface View {
   y: number;
 }
 const HOME: View = { scale: 1, x: 0, y: 0 };
+
+/**
+ * Whether an event is on the pane's buttons rather than the picture — their
+ * whole group (`data-pane-controls`), as a disabled button lets clicks through
+ * to the group behind it.
+ */
+function onControl(target: EventTarget): boolean {
+  return (
+    target instanceof Element &&
+    target.closest("button, a, [data-pane-controls]") !== null
+  );
+}
 
 function ControlButton({
   label,
@@ -46,8 +57,8 @@ function ControlButton({
 /**
  * Fork: the preview's picture, zoomable. Scroll (or pinch) over it to zoom in
  * where the pointer is, drag to look around once zoomed in, and the buttons
- * bottom right step in, out, and back. At its normal size a click still
- * opens the original in a new tab.
+ * bottom right step in, out, and back. At its normal size a click on it is
+ * `onClick` (the modal closes).
  *
  * Renders the black pane the picture sits in (`className`), so scrolling
  * anywhere on it zooms; `children` are overlaid on the pane.
@@ -56,11 +67,14 @@ export function ZoomableImage({
   src,
   className,
   imageClassName,
+  onClick,
   children,
 }: {
   src: string;
   className?: string;
   imageClassName?: string;
+  /** A click on the pane at the normal size, not on one of its buttons. */
+  onClick?: () => void;
   children?: React.ReactNode;
 }) {
   const paneRef = useRef<HTMLDivElement>(null);
@@ -145,19 +159,18 @@ export function ZoomableImage({
     <div
       ref={paneRef}
       className={cn("overflow-hidden", className)}
+      // Pointer conveniences only (zoom, pan, click to close — Esc closes
+      // too); the buttons on it are the pane's accessible parts.
+      role="presentation"
       onPointerDown={(e) => {
+        moved.current = false;
         // Capturing the pointer would take the click away from a button
-        // on the pane (these controls, the details toggle).
-        if (
-          !zoomed ||
-          e.button !== 0 ||
-          (e.target as HTMLElement).closest("button")
-        ) {
+        // on the pane (these controls, the open and details buttons).
+        if (!zoomed || e.button !== 0 || onControl(e.target)) {
           return;
         }
         e.currentTarget.setPointerCapture(e.pointerId);
         drag.current = { x: e.clientX, y: e.clientY };
-        moved.current = false;
         setAnimate(false);
         setDragging(true);
       }}
@@ -182,17 +195,14 @@ export function ZoomableImage({
         drag.current = null;
         setDragging(false);
       }}
+      // Zoomed in, a click is for looking around, not for leaving.
+      onClick={(e) => {
+        if (!zoomed && !moved.current && !onControl(e.target)) {
+          onClick?.();
+        }
+      }}
     >
-      <Link
-        href={src}
-        target="_blank"
-        draggable={false}
-        // Zoomed in, a click is for looking around, not for leaving.
-        onClick={(e) => {
-          if (zoomed || moved.current) {
-            e.preventDefault();
-          }
-        }}
+      <div
         className={cn(zoomed && (dragging ? "cursor-grabbing" : "cursor-grab"))}
       >
         <Image
@@ -211,9 +221,12 @@ export function ZoomableImage({
             transition: animate ? "transform 150ms ease-out" : undefined,
           }}
         />
-      </Link>
+      </div>
       {children}
-      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1">
+      <div
+        data-pane-controls
+        className="absolute bottom-3 right-3 z-10 flex items-center gap-1"
+      >
         <ControlButton
           label="Zoom out"
           disabled={!zoomed}
