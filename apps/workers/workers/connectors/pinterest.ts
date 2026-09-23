@@ -15,9 +15,10 @@ import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
  * "Invalid Resource Request".
  *
  * Only each pin's own media is taken (`images.orig`, or an mp4 from
- * `videos.video_list`), so the page's avatars, favicons, logos and "more like
- * this" thumbnails never enter the picture. A feed also carries "story"
- * modules (related interests and the like); those are skipped.
+ * `videos.video_list` — or, for an idea pin, from its first page), so the
+ * page's avatars, favicons, logos and "more like this" thumbnails never enter
+ * the picture. A feed also carries "story" modules (related interests and the
+ * like); those are skipped.
  */
 
 export interface SubscriptionMedia {
@@ -57,7 +58,7 @@ const PAGE_DELAY_MS = 250;
 interface PinImage {
   url?: unknown;
 }
-interface Pin {
+export interface Pin {
   id?: string;
   /** "pin" for a real pin; a board feed also carries "story" modules. */
   type?: string;
@@ -69,10 +70,27 @@ interface Pin {
   title?: unknown;
   description?: unknown;
   images?: Record<string, PinImage | undefined> | null;
-  videos?: {
-    video_list?: Record<string, { url?: unknown; width?: number }>;
+  videos?: { video_list?: VideoList } | null;
+  /**
+   * An idea pin ("story pin"): its video is on its pages, not in `videos`
+   * (which is null), and the feed lists only its HLS playlist.
+   */
+  story_pin_data?: {
+    pages?: StoryPage[] | null;
+    pages_preview?: StoryPage[] | null;
   } | null;
 }
+
+type VideoList = Record<string, { url?: unknown; width?: number } | undefined>;
+
+interface StoryPage {
+  blocks?: { video?: { video_list?: VideoList } | null }[] | null;
+}
+
+// An idea pin's video is also served as plain mp4s next to its playlist
+// (`/videos/iht/hls/…/<id>.m3u8` → `/videos/iht/expMp4/…/<id>_720w.mp4`), in
+// these widths; 720 is the largest there is.
+const IDEA_PIN_MP4_WIDTHS = [720, 540, 360];
 
 /**
  * Every Set-Cookie of a response. fetchWithProxy hands back node-fetch's
@@ -162,7 +180,53 @@ function mediaUrl(value: unknown): string | null {
   }
 }
 
-function itemOf(pin: Pin): SubscriptionItem | null {
+/**
+ * A video's mp4s, widest first. A list's HLS playlists (.m3u8) can't be
+ * stored; an idea pin's list is often nothing else, so its mp4s are worked
+ * out from the playlist's address (the worker falls through to the next one,
+ * and finally the cover, if one isn't there).
+ */
+function videoUrls(list: VideoList | undefined): string[] {
+  const entries = Object.values(list ?? {}).flatMap((v) => {
+    const url = mediaUrl(v?.url);
+    return url ? [{ url, width: v?.width ?? 0 }] : [];
+  });
+  const mp4s = entries
+    .filter((v) => new URL(v.url).pathname.endsWith(".mp4"))
+    .sort((a, b) => b.width - a.width)
+    .map((v) => v.url);
+  if (mp4s.length > 0) {
+    return mp4s;
+  }
+  const playlist = entries.find((v) =>
+    /\/videos\/iht\/hls\/.+\.m3u8$/.test(new URL(v.url).pathname),
+  );
+  if (!playlist) {
+    return [];
+  }
+  return IDEA_PIN_MP4_WIDTHS.map((width) =>
+    playlist.url
+      .replace("/videos/iht/hls/", "/videos/iht/expMp4/")
+      .replace(/\.m3u8$/, `_${width}w.mp4`),
+  );
+}
+
+/** An idea pin's video: the first one on its pages. */
+function ideaPinVideo(pin: Pin): VideoList | undefined {
+  const story = pin.story_pin_data;
+  for (const pages of [story?.pages, story?.pages_preview]) {
+    for (const page of pages ?? []) {
+      for (const block of page.blocks ?? []) {
+        if (block.video?.video_list) {
+          return block.video.video_list;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+export function itemOf(pin: Pin): SubscriptionItem | null {
   if (!pin.id || (pin.type && pin.type !== "pin")) {
     return null;
   }
@@ -170,15 +234,9 @@ function itemOf(pin: Pin): SubscriptionItem | null {
 
   // Every variant of a video has the same size, and the HLS playlists
   // (.m3u8) come first — which can't be stored. The mp4 is the one to take.
-  const mp4s = Object.values(pin.videos?.video_list ?? {})
-    .map((v) => ({ url: mediaUrl(v.url), width: v.width ?? 0 }))
-    .filter(
-      (v): v is { url: string; width: number } =>
-        !!v.url && new URL(v.url).pathname.endsWith(".mp4"),
-    )
-    .sort((a, b) => b.width - a.width);
-  for (const v of mp4s) {
-    media.push({ kind: "video", url: v.url });
+  const videos = videoUrls(pin.videos?.video_list);
+  for (const url of videos.length > 0 ? videos : videoUrls(ideaPinVideo(pin))) {
+    media.push({ kind: "video", url });
   }
   // The picture itself (a video's cover, if the video can't be had).
   const orig = mediaUrl(pin.images?.orig?.url);
