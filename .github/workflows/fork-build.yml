@@ -47,6 +47,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/karakeep:latest
             ghcr.io/${{ github.repository_owner }}/karakeep:${{ steps.sha.outputs.short }}
-          build-args: SERVER_VERSION=fork
+          # Shown as the server version (Settings → Admin): which build runs,
+          # now that the NAS follows :latest.
+          build-args: SERVER_VERSION=fork-${{ steps.sha.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
