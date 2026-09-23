@@ -27,6 +27,8 @@ export const zUiPreferencesSchema = z.object({
   sublists: z.array(z.string()).max(5000).optional(),
   previewDetailsHidden: z.boolean().optional(),
   sidebarCollapsed: z.boolean().optional(),
+  // The sidebar's lists that are unfolded (Collapse all / Expand all).
+  sidebarOpenLists: z.array(z.string()).max(5000).optional(),
   // Feed videos: play on hover, and whether with sound.
   hoverVideoAutoplay: z.boolean().optional(),
   hoverVideoSound: z.boolean().optional(),

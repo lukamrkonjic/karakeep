@@ -24,6 +24,16 @@ type RenderFunc = (params: {
 type IsOpenFunc = (list: ZBookmarkListTreeNode) => boolean;
 
 /**
+ * Fork: which rows are unfolded, kept by the caller (the sidebar remembers
+ * it and folds/unfolds everything at once). Without it, every row keeps its
+ * own state, as upstream.
+ */
+export interface OpenState {
+  isOpen: (listId: string) => boolean;
+  setOpen: (listId: string, open: boolean) => void;
+}
+
+/**
  * Thin horizontal insertion-line indicator, shown at the exact gap a
  * dragged list would land in. Uses the same accent (bg-primary) as the
  * ring-primary drop highlight used when dragging bookmarks onto a list
@@ -169,6 +179,7 @@ function ListItem({
   listStats,
   indentOffset,
   reorderable,
+  openState,
 }: {
   node: ZBookmarkListTreeNode;
   render: RenderFunc;
@@ -178,6 +189,7 @@ function ListItem({
   indentOffset: number;
   className?: string;
   reorderable: boolean;
+  openState?: OpenState;
 }) {
   // Not the most efficient way to do this, but it works for now
   const isAnyChildOpen = (
@@ -189,10 +201,16 @@ function ListItem({
     }
     return node.children.some((l) => isAnyChildOpen(l, isOpenFunc));
   };
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
   useEffect(() => {
-    setOpen((curr) => curr || isAnyChildOpen(node, isOpenFunc));
-  }, [node, isOpenFunc]);
+    if (!openState) {
+      setOwnOpen((curr) => curr || isAnyChildOpen(node, isOpenFunc));
+    }
+  }, [node, isOpenFunc, openState]);
+  const open = openState ? openState.isOpen(node.item.id) : ownOpen;
+  const setOpen = openState
+    ? (value: boolean) => openState.setOpen(node.item.id, value)
+    : setOwnOpen;
 
   const sortedChildren = node.children
     .slice()
@@ -221,6 +239,7 @@ function ListItem({
               listStats={listStats}
               className={className}
               reorderable={reorderable}
+              openState={openState}
             />
           )}
         />
@@ -238,6 +257,7 @@ export function CollapsibleBookmarkLists({
   filter,
   indentOffset = 0,
   reorderable = false,
+  openState,
 }: {
   initialData?: ZBookmarkList[];
   listsData?: {
@@ -253,6 +273,7 @@ export function CollapsibleBookmarkLists({
   indentOffset?: number;
   /** Enable drag-and-drop reordering among siblings. Owned lists only. */
   reorderable?: boolean;
+  openState?: OpenState;
 }) {
   const api = useTRPC();
   // If listsData is provided, use it directly. Otherwise, fetch it.
@@ -292,6 +313,7 @@ export function CollapsibleBookmarkLists({
             listStats={listStats?.stats}
             isOpenFunc={isOpenFunc ?? (() => false)}
             reorderable={reorderable}
+            openState={openState}
           />
         )}
       />

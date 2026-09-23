@@ -56,7 +56,9 @@ export function ImagePeek({
       {open &&
         createPortal(
           // Never in the way: the pointer stays on the magnifier underneath.
-          <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-8 duration-150 animate-in fade-in-0">
+          // As dark as the preview's backdrop, with the picture at its own
+          // size (capped like the preview's), never blown up to the window.
+          <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/95 duration-150 animate-in fade-in-0">
             <Image
               src={getAssetUrl(assetId)}
               alt={alt}
@@ -64,7 +66,7 @@ export function ImagePeek({
               height={0}
               sizes="100vw"
               unoptimized
-              className="size-full object-contain drop-shadow-2xl duration-150 animate-in zoom-in-95"
+              className="h-auto max-h-[92vh] w-auto max-w-[95vw] duration-150 animate-in zoom-in-95"
             />
           </div>,
           document.body,

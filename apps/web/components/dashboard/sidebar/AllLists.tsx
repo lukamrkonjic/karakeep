@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SidebarItem from "@/components/shared/sidebar/SidebarItem";
 import { Button } from "@/components/ui/button";
@@ -17,9 +16,15 @@ import {
 } from "@/lib/bookmark-drag";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus } from "lucide-react";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  MoreHorizontal,
+  Plus,
+} from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import {
@@ -32,6 +37,7 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
 import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
+import type { OpenState } from "../lists/CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
@@ -237,10 +243,6 @@ export default function AllLists({
 }) {
   const { t } = useTranslation();
   const pathName = usePathname();
-  const isNodeOpen = useCallback(
-    (node: ZBookmarkListTreeNode) => pathName.includes(node.item.id),
-    [pathName],
-  );
 
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
 
@@ -274,21 +276,72 @@ export default function AllLists({
     }
   }, [isViewingSharedList, sharedListsOpen]);
 
+  // Fork: which lists are unfolded is kept in the account (every device
+  // shows the tree as you left it), so "Collapse all"/"Expand all" can set
+  // it in one go.
+  const updatePreferences = useUpdatePreferences();
+  const openIds = usePreference("sidebarOpenLists");
+  const openSet = useMemo(() => new Set(openIds), [openIds]);
+  const openState = useMemo<OpenState>(
+    () => ({
+      isOpen: (id) => openSet.has(id),
+      setOpen: (id, open) =>
+        void updatePreferences((prefs) => {
+          const next = new Set(prefs.sidebarOpenLists);
+          if (open) {
+            next.add(id);
+          } else {
+            next.delete(id);
+          }
+          return { sidebarOpenLists: [...next] };
+        }),
+    }),
+    [openSet, updatePreferences],
+  );
+  // Lists with something to unfold.
+  const foldable = useMemo(
+    () => [
+      ...new Set(lists.data.flatMap((l) => (l.parentId ? [l.parentId] : []))),
+    ],
+    [lists.data],
+  );
+  const anyOpen =
+    foldable.some((id) => openSet.has(id)) ||
+    (hasSharedLists && sharedListsOpen);
+  const foldAll = () => {
+    void updatePreferences({ sidebarOpenLists: anyOpen ? [] : foldable });
+    setSharedListsOpen(!anyOpen);
+  };
+
+  // Opening a list (from anywhere) unfolds the way to it, once per visit, so
+  // it can still be folded away while it's open.
+  const unfoldedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const current = lists.data.find((l) => pathName.includes(l.id));
+    if (!current || unfoldedFor.current === current.id) {
+      return;
+    }
+    unfoldedFor.current = current.id;
+    const parentOf = new Map(lists.data.map((l) => [l.id, l.parentId]));
+    const path = [current.id];
+    for (
+      let at = current.parentId;
+      at && path.length < 50;
+      at = parentOf.get(at) ?? null
+    ) {
+      path.push(at);
+    }
+    if (path.some((id) => !openSet.has(id))) {
+      void updatePreferences((prefs) => ({
+        sidebarOpenLists: [
+          ...new Set([...(prefs.sidebarOpenLists ?? []), ...path]),
+        ],
+      }));
+    }
+  }, [pathName, lists.data, openSet, updatePreferences]);
+
   return (
     <ul className="sidebar-scrollbar max-h-full gap-y-2 overflow-auto text-sm">
-      <li className="flex justify-between pb-3">
-        <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
-          Lists
-        </p>
-        <EditListModal>
-          <Link href="#">
-            <Plus
-              className="mr-2 size-4 text-muted-foreground"
-              strokeWidth={1.5}
-            />
-          </Link>
-        </EditListModal>
-      </li>
       {/* Fork: every entry has a "…" on hover, where a list's sits. Home
           took the All Lists page's place (list invitations show there). */}
       <SidebarItem
@@ -345,11 +398,45 @@ export default function AllLists({
         }
       />
 
+      {/* Fork: the pages above, the lists below their own heading. */}
+      <li className="flex items-center justify-between pb-2 pt-6">
+        <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
+          Lists
+        </p>
+        <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
+          {(foldable.length > 0 || hasSharedLists) && (
+            <button
+              type="button"
+              onClick={foldAll}
+              title={anyOpen ? "Collapse all" : "Expand all"}
+              aria-label={anyOpen ? "Collapse all" : "Expand all"}
+              className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {anyOpen ? (
+                <ChevronsDownUp className="size-4" strokeWidth={1.5} />
+              ) : (
+                <ChevronsUpDown className="size-4" strokeWidth={1.5} />
+              )}
+            </button>
+          )}
+          <EditListModal>
+            <button
+              type="button"
+              title="New list"
+              aria-label="New list"
+              className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Plus className="size-4" strokeWidth={1.5} />
+            </button>
+          </EditListModal>
+        </div>
+      </li>
+
       {/* Owned Lists */}
       <CollapsibleBookmarkLists
         listsData={lists}
         filter={(node) => node.item.userRole === "owner"}
-        isOpenFunc={isNodeOpen}
+        openState={openState}
         reorderable
         render={({ node, level, open, numBookmarks }) => (
           <DroppableListSidebarItem
@@ -383,7 +470,7 @@ export default function AllLists({
             <CollapsibleBookmarkLists
               listsData={lists}
               filter={(node) => node.item.userRole !== "owner"}
-              isOpenFunc={isNodeOpen}
+              openState={openState}
               indentOffset={1}
               render={({ node, level, open, numBookmarks }) => (
                 <DroppableListSidebarItem
