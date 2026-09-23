@@ -8,9 +8,12 @@ import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
 export function NoteEditor({
   bookmark,
   disabled,
+  placeholder = "Write some notes ...",
 }: {
   bookmark: ZBookmark;
   disabled?: boolean;
+  /** Fork: the details panel calls the note "Description". */
+  placeholder?: string;
 }) {
   const demoMode = !!useClientConfig().demoMode;
 
@@ -30,10 +33,10 @@ export function NoteEditor({
 
   return (
     <Textarea
-      className="min-h-[5rem] w-full resize-y overflow-auto rounded-md bg-background p-2.5 text-sm text-foreground placeholder:text-muted-foreground"
+      className="min-h-[5rem] w-full resize-y overflow-auto rounded-md border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground"
       defaultValue={bookmark.note ?? ""}
       disabled={demoMode || disabled}
-      placeholder="Write some notes ..."
+      placeholder={placeholder}
       onBlur={(e) => {
         if (e.currentTarget.value == bookmark.note) {
           return;

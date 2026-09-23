@@ -48,9 +48,10 @@ export function ImagePeek({
         onPointerEnter={show}
         onPointerLeave={hide}
         onClick={hide}
-        className="absolute bottom-2 right-2 z-20 hidden size-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity duration-200 hover:bg-black/70 group-hover:opacity-100 [@media(hover:hover)]:flex"
+        // A bare white icon on the dimmed tile, like the "…" above it.
+        className="absolute bottom-2 right-2 z-20 hidden p-1.5 text-white opacity-0 drop-shadow transition-opacity duration-200 hover:text-white/80 group-hover:opacity-100 [@media(hover:hover)]:flex"
       >
-        <Search className="size-4" />
+        <Search className="size-5" />
       </Link>
       {open &&
         createPortal(

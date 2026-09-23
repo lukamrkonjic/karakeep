@@ -39,7 +39,12 @@ export function MasonryMediaCard({
   className?: string;
   bookmarkIndex?: number;
 }) {
-  const title = getBookmarkTitle(bookmark);
+  // Fork: a note carrying a video is named by the video's file, like a
+  // picture by its own.
+  const title =
+    getBookmarkTitle(bookmark) ??
+    bookmark.assets.find((a) => a.id === media.assetId)?.fileName ??
+    null;
   const { isBulkEditEnabled } = useBulkActionsStore();
   const handleDragStart = useBookmarkDragStart(bookmark);
 

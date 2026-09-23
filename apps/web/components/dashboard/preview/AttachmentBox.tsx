@@ -2,24 +2,11 @@ import Link from "next/link";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import FilePickerButton from "@/components/ui/file-picker-button";
 import { toast } from "@/components/ui/sonner";
-import { ASSET_TYPE_TO_ICON } from "@/lib/attachments";
 import useUpload from "@/lib/hooks/upload-file";
 import { useTranslation } from "@/lib/i18n/client";
-import {
-  ChevronsDownUp,
-  Download,
-  ImagePlus,
-  Paperclip,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 
 import {
   useAttachBookmarkAsset,
@@ -37,9 +24,17 @@ import {
 export default function AttachmentBox({
   bookmark,
   readOnly = false,
+  mainAssetId,
 }: {
   bookmark: ZBookmark;
   readOnly?: boolean;
+  /**
+   * Fork: the file the bookmark IS (a picture, video or PDF) — left out: it's
+   * not attached to itself, and the panel's Download button has it. Such a
+   * bookmark offers no "+ Add file" either (that's for articles and notes),
+   * so its section only shows when something else is attached.
+   */
+  mainAssetId?: string;
 }) {
   const { t } = useTranslation();
   const { mutate: attachAsset, isPending: isAttaching } =
@@ -99,80 +94,31 @@ export default function AttachmentBox({
   // Video thumbnails are generated internally (see assetPreprocessingWorker)
   // and aren't something the user attaches/manages directly.
   const visibleAssets = bookmark.assets
-    .filter((a) => a.assetType !== "videoThumbnail")
+    .filter((a) => a.assetType !== "videoThumbnail" && a.id !== mainAssetId)
     .sort((a, b) => a.assetType.localeCompare(b.assetType));
 
   const hasAssets = visibleAssets.length > 0;
 
+  // Fork: a plain section like the panel's others (no collapsing, no icons
+  // in the heading); adding a file or a banner is a labelled + under the
+  // files, like the + under Lists.
+  const canAddBanner =
+    !bookmark.assets.some((asset) => asset.assetType == "bannerImage") &&
+    bookmark.content.type != BookmarkTypes.ASSET;
+  const addButton =
+    "flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+
+  const canAdd = !readOnly && !mainAssetId;
+  if (!hasAssets && !canAdd) {
+    return null;
+  }
+
   return (
-    <Collapsible defaultOpen={true}>
-      <div className="flex w-full items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-foreground">
         {t("common.attachments")}
-        <div className="flex items-center gap-1">
-          {!readOnly && (
-            <>
-              {!bookmark.assets.some(
-                (asset) => asset.assetType == "bannerImage",
-              ) &&
-                bookmark.content.type != BookmarkTypes.ASSET && (
-                  <FilePickerButton
-                    title="Attach a Banner"
-                    loading={isAttaching}
-                    accept=".jpg,.JPG,.jpeg,.png,.webp"
-                    multiple={false}
-                    variant="none"
-                    size="none"
-                    className="rounded-md p-1 hover:text-foreground"
-                    onFileSelect={(file) =>
-                      uploadAsset(file, {
-                        onSuccess: (resp) => {
-                          attachAsset({
-                            bookmarkId: bookmark.id,
-                            asset: {
-                              id: resp.assetId,
-                              assetType: "bannerImage",
-                            },
-                          });
-                        },
-                      })
-                    }
-                  >
-                    <ImagePlus className="size-3.5" strokeWidth={1.5} />
-                  </FilePickerButton>
-                )}
-              <FilePickerButton
-                title="Upload File"
-                loading={isAttaching}
-                multiple={false}
-                variant="none"
-                size="none"
-                className="rounded-md p-1 hover:text-foreground"
-                onFileSelect={(file) =>
-                  uploadAsset(file, {
-                    onSuccess: (resp) => {
-                      attachAsset({
-                        bookmarkId: bookmark.id,
-                        asset: {
-                          id: resp.assetId,
-                          assetType: "userUploaded",
-                        },
-                      });
-                    },
-                  })
-                }
-              >
-                <Paperclip className="size-3.5" strokeWidth={1.5} />
-              </FilePickerButton>
-            </>
-          )}
-          {hasAssets && (
-            <CollapsibleTrigger>
-              <ChevronsDownUp className="size-4" />
-            </CollapsibleTrigger>
-          )}
-        </div>
-      </div>
-      <CollapsibleContent className="flex flex-col gap-1 py-3 text-sm">
+      </p>
+      <div className="flex flex-col gap-1 text-sm">
         {visibleAssets.map((asset) => (
           <div key={asset.id} className="flex items-center justify-between">
             <Link
@@ -181,7 +127,6 @@ export default function AttachmentBox({
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
               prefetch={false}
             >
-              {ASSET_TYPE_TO_ICON[asset.assetType]}
               <p>
                 {asset.assetType === "userUploaded" && asset.fileName
                   ? asset.fileName
@@ -262,15 +207,62 @@ export default function AttachmentBox({
             </div>
           </div>
         ))}
-        {!hasAssets && readOnly && (
-          <p className="py-1 text-xs text-muted-foreground">No attachments</p>
-        )}
-        {!hasAssets && !readOnly && (
-          <p className="py-1 text-xs text-muted-foreground">
-            No attachments yet
-          </p>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+      {canAdd && (
+        <div className="-ml-2 flex items-center gap-1">
+          <FilePickerButton
+            title="Attach a file"
+            loading={isAttaching}
+            multiple={false}
+            variant="none"
+            size="none"
+            className={addButton}
+            onFileSelect={(file) =>
+              uploadAsset(file, {
+                onSuccess: (resp) => {
+                  attachAsset({
+                    bookmarkId: bookmark.id,
+                    asset: {
+                      id: resp.assetId,
+                      assetType: "userUploaded",
+                    },
+                  });
+                },
+              })
+            }
+          >
+            <Plus className="size-3.5" />
+            Add file
+          </FilePickerButton>
+          {canAddBanner && (
+            <FilePickerButton
+              title="Attach a banner image"
+              loading={isAttaching}
+              accept=".jpg,.JPG,.jpeg,.png,.webp"
+              multiple={false}
+              variant="none"
+              size="none"
+              className={addButton}
+              onFileSelect={(file) =>
+                uploadAsset(file, {
+                  onSuccess: (resp) => {
+                    attachAsset({
+                      bookmarkId: bookmark.id,
+                      asset: {
+                        id: resp.assetId,
+                        assetType: "bannerImage",
+                      },
+                    });
+                  },
+                })
+              }
+            >
+              <Plus className="size-3.5" />
+              Add banner
+            </FilePickerButton>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

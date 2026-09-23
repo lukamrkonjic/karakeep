@@ -19,7 +19,8 @@ import { toast } from "@/components/ui/sonner";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Folder, Plus, X } from "lucide-react";
 
 import {
   useAddBookmarkToList,
@@ -30,9 +31,9 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 import { listNameFromPath } from "@karakeep/shared/utils/listUtils";
 
 /**
- * The preview's "List" section: a chip for every list the bookmark is in,
- * each with an x on hover that takes it out of that list, and a + that puts
- * it in another. This is the one place a bookmark goes into several lists —
+ * The preview's "Lists" section (Eagle's "Folders"): a chip for every list
+ * the bookmark is in, each with an x that takes it out of that list, and a +
+ * that puts it in another. This is the one place a bookmark goes into several lists —
  * dropping it on a sidebar list moves it (see AllLists.tsx). In no list at
  * all it is simply unsorted.
  */
@@ -68,9 +69,9 @@ export function BookmarkListChips({
   });
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {t("common.list", { defaultValue: "List" })}
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-foreground">
+        {t("common.lists", { defaultValue: "Lists" })}
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {lists.map((list) => {
@@ -79,14 +80,21 @@ export function BookmarkListChips({
           return (
             <span
               key={list.id}
-              className="group/chip flex max-w-full items-center rounded-full bg-muted text-xs text-foreground"
+              className="flex max-w-full items-center rounded-md border border-input bg-background text-xs text-foreground"
             >
               <Link
                 href={`/dashboard/lists/${list.id}`}
                 title={path ? listNameFromPath(path) : list.name}
-                className="flex min-w-0 items-center gap-1 py-1 pl-2.5 pr-2.5 hover:text-muted-foreground group-hover/chip:pr-1"
+                className={cn(
+                  "flex min-w-0 items-center gap-1.5 py-1.5 pl-2 hover:text-muted-foreground",
+                  canRemove ? "pr-1" : "pr-2.5",
+                )}
               >
-                {isEmojiIcon(list.icon) && <span>{list.icon}</span>}
+                {isEmojiIcon(list.icon) ? (
+                  <span>{list.icon}</span>
+                ) : (
+                  <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
                 <span className="truncate">{list.name}</span>
               </Link>
               {canRemove && (
@@ -97,8 +105,7 @@ export function BookmarkListChips({
                   }
                   aria-label={`Remove from ${list.name}`}
                   title={`Remove from ${list.name}`}
-                  // Folded away until you hover the chip (or tab to it).
-                  className="mr-1 hidden rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground focus-visible:flex group-hover/chip:flex"
+                  className="mr-1 flex rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <X className="size-3" />
                 </button>
@@ -118,7 +125,7 @@ export function BookmarkListChips({
                 type="button"
                 aria-label="Add to a list"
                 title="Add to a list"
-                className="flex size-6 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <Plus className="size-3.5" />
               </button>

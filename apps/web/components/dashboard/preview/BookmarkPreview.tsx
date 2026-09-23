@@ -4,31 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { BookmarkTagsEditor } from "@/components/dashboard/bookmarks/BookmarkTagsEditor";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipPortal,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useSession } from "@/lib/auth/client";
-import useRelativeTime from "@/lib/hooks/relative-time";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   usePreviewDetailsHidden,
   useTogglePreviewDetails,
 } from "@/lib/previewDetails";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Building,
-  CalendarDays,
-  ExternalLink,
-  Globe,
-  PanelRightClose,
-  PanelRightOpen,
-  User,
-} from "lucide-react";
+import { Globe, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import {
@@ -36,23 +20,25 @@ import {
   ZBookmark,
   ZBookmarkTypeText,
 } from "@karakeep/shared/types/bookmarks";
+import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 import {
   getBookmarkRefreshInterval,
-  getBookmarkTitle,
   getSourceUrl,
   isBookmarkStillCrawling,
 } from "@karakeep/shared/utils/bookmarkUtils";
 
 import { BookmarkMarkdownComponent } from "../bookmarks/BookmarkMarkdownComponent";
 import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
-import ActionBar from "./ActionBar";
 import { AssetContentSection } from "./AssetContentSection";
 import AttachmentBox from "./AttachmentBox";
 import { BookmarkListChips } from "./BookmarkListChips";
+import { BookmarkNameInput } from "./BookmarkNameInput";
+import { BookmarkProperties } from "./BookmarkProperties";
 import HighlightsBox from "./HighlightsBox";
 import LinkContentSection from "./LinkContentSection";
 import { getPreviewMedia, MediaFitPreview } from "./MediaFitPreview";
 import { NoteEditor } from "./NoteEditor";
+import { PreviewActions } from "./PreviewActions";
 import { TextContentSection } from "./TextContentSection";
 
 function ContentLoading() {
@@ -63,53 +49,6 @@ function ContentLoading() {
       <p className="text-sm text-muted-foreground">
         {t("preview.crawling_in_progress")}
       </p>
-    </div>
-  );
-}
-
-function CreationTime({ createdAt }: { createdAt: Date }) {
-  const { i18n } = useTranslation();
-  const { fromNow, localCreatedAt } = useRelativeTime(createdAt, i18n.language);
-  return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <span className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <CalendarDays size={16} /> {fromNow}
-        </span>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent>{localCreatedAt}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
-  );
-}
-
-function BookmarkMetadata({ bookmark }: { bookmark: ZBookmark }) {
-  let { author, publisher, datePublished } =
-    bookmark.content.type !== BookmarkTypes.LINK
-      ? {
-          author: null,
-          publisher: null,
-          datePublished: null,
-        }
-      : bookmark.content;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <CreationTime createdAt={bookmark.createdAt} />
-      {author && (
-        <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <User size={16} />
-          <span>By {author}</span>
-        </div>
-      )}
-      {publisher && (
-        <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <Building size={16} />
-          <span>{publisher}</span>
-        </div>
-      )}
-      {datePublished && <PublishedDate datePublished={datePublished} />}
     </div>
   );
 }
@@ -125,50 +64,40 @@ function shortUrl(url: string): string {
 }
 
 /**
- * Fork: where the bookmark came from — the page, or where a picture or video
- * was saved from — as its own section under the title, like the others.
+ * Fork: what a downloaded file is called — the name you gave the bookmark,
+ * with the file's own extension; unnamed, the file's own name.
  */
-function SourceSection({ url }: { url: string }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {t("common.source")}
-      </p>
-      <Link
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        title={url}
-        className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ExternalLink className="size-4 shrink-0" />
-        <span className="truncate underline-offset-4 hover:underline">
-          {shortUrl(url)}
-        </span>
-      </Link>
-    </div>
-  );
+function downloadName(bookmark: ZBookmark): string | undefined {
+  const fileName =
+    bookmark.content.type === BookmarkTypes.ASSET
+      ? (bookmark.content.fileName ?? undefined)
+      : undefined;
+  const title = bookmark.title?.trim();
+  if (!title) {
+    return fileName;
+  }
+  const extension = fileName?.match(/\.[a-z0-9]{1,5}$/i)?.[0] ?? "";
+  return title.toLowerCase().endsWith(extension.toLowerCase())
+    ? title
+    : `${title}${extension}`;
 }
 
-function PublishedDate({ datePublished }: { datePublished: Date }) {
-  const { i18n } = useTranslation();
-  const { fromNow, localCreatedAt } = useRelativeTime(
-    datePublished,
-    i18n.language,
-  );
+/**
+ * Fork: where the bookmark came from — the page, or where a picture or video
+ * was saved from — as a field like Eagle's URL one, opening it in a new tab.
+ */
+function SourceField({ url }: { url: string }) {
   return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <div className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <CalendarDays size={16} />
-          <span>Published {fromNow}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent>{localCreatedAt}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
+    <Link
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      title={url}
+      className="flex h-10 w-full min-w-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <span className="min-w-0 flex-1 truncate">{shortUrl(url)}</span>
+      <Globe className="size-4 shrink-0" />
+    </Link>
   );
 }
 
@@ -221,7 +150,8 @@ export default function BookmarkPreview({
   }
 
   // In the modal, a picture or a video gets a dialog that wraps it.
-  const media = variant === "modal" ? getPreviewMedia(bookmark) : null;
+  const previewMedia = getPreviewMedia(bookmark);
+  const media = variant === "modal" ? previewMedia : null;
   const box = variant === "modal" ? "h-[90vh] w-[90vw]" : "h-full w-full";
 
   // Check if the current user owns this bookmark
@@ -244,7 +174,18 @@ export default function BookmarkPreview({
   }
 
   const sourceUrl = getSourceUrl(bookmark);
-  const title = getBookmarkTitle(bookmark);
+  // Fork: the file the bookmark is (a picture, video or PDF, or a note's
+  // video) — downloaded from the footer rather than listed as an attachment.
+  const mainAssetId =
+    bookmark.content.type === BookmarkTypes.ASSET
+      ? bookmark.content.assetId
+      : previewMedia?.assetId;
+  const download = mainAssetId
+    ? {
+        href: getAssetUrl(mainAssetId),
+        fileName: downloadName(bookmark),
+      }
+    : undefined;
 
   // Common content for both layouts
   const contentSection = isBookmarkStillCrawling(bookmark) ? (
@@ -253,49 +194,51 @@ export default function BookmarkPreview({
     content
   );
 
+  // Fork: laid out like Eagle's inspector — the name, description, tags and
+  // source as fields, then Lists and Properties; Archive/Delete sit at the
+  // bottom of the panel (min-h-full + mt-auto) under a divider.
   const detailsSection = (
-    <div className="flex flex-col gap-5">
-      {/* Fork: one line, cut short; the full title is its tooltip. */}
-      <p title={title ?? undefined} className="truncate text-lg font-medium">
-        {!title ? "Untitled" : title}
-      </p>
-      {sourceUrl && (
-        <>
-          <Separator />
-          <SourceSection url={sourceUrl} />
-        </>
-      )}
-      {/* A video note's text, which the media layout has no room for beside
-          the video. */}
-      {media && bookmark.content.type === BookmarkTypes.TEXT && (
-        <BookmarkMarkdownComponent>
-          {bookmark as ZBookmarkTypeText}
-        </BookmarkMarkdownComponent>
-      )}
-      <Separator />
-      <BookmarkMetadata bookmark={bookmark} />
-      <SummarizeBookmarkArea bookmark={bookmark} readOnly={!isOwner} />
-      <Separator />
-      <BookmarkListChips bookmarkId={bookmark.id} readOnly={!isOwner} />
-      <Separator />
-      <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t("common.tags")}
-        </p>
+    <div className="flex min-h-full flex-col gap-6">
+      <div className="flex flex-col gap-2.5">
+        <BookmarkNameInput bookmark={bookmark} readOnly={!isOwner} />
+        {/* A video note's text, which the media layout has no room for
+            beside the video. */}
+        {media && bookmark.content.type === BookmarkTypes.TEXT && (
+          // Small and muted: it reads as the video's caption.
+          <div className="[&_.prose]:text-sm [&_.prose]:text-muted-foreground">
+            <BookmarkMarkdownComponent>
+              {bookmark as ZBookmarkTypeText}
+            </BookmarkMarkdownComponent>
+          </div>
+        )}
+        <NoteEditor
+          bookmark={bookmark}
+          disabled={!isOwner}
+          placeholder="Description..."
+        />
         <BookmarkTagsEditor bookmark={bookmark} disabled={!isOwner} />
+        {sourceUrl && <SourceField url={sourceUrl} />}
+        <SummarizeBookmarkArea bookmark={bookmark} readOnly={!isOwner} />
       </div>
-      <Separator />
-      <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t("common.note")}
-        </p>
-        <NoteEditor bookmark={bookmark} disabled={!isOwner} />
-      </div>
-      <Separator />
-      <AttachmentBox bookmark={bookmark} readOnly={!isOwner} />
+      <BookmarkListChips bookmarkId={bookmark.id} readOnly={!isOwner} />
+      <BookmarkProperties
+        bookmark={bookmark}
+        media={previewMedia}
+        readOnly={!isOwner}
+      />
+      <AttachmentBox
+        bookmark={bookmark}
+        readOnly={!isOwner}
+        mainAssetId={mainAssetId}
+      />
       <HighlightsBox bookmarkId={bookmark.id} readOnly={!isOwner} />
-      <Separator />
-      {isOwner && <ActionBar bookmark={bookmark} />}
+      <div className="mt-auto">
+        <PreviewActions
+          bookmark={bookmark}
+          canEdit={isOwner}
+          download={download}
+        />
+      </div>
     </div>
   );
 
