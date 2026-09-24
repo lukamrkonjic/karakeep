@@ -34,7 +34,7 @@ export default async function SignInForm() {
       <Card className="w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>Sign in to your Karakeep account</CardDescription>
+          <CardDescription>Sign in to your vrana account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {serverConfig.demoMode && (
@@ -55,9 +55,11 @@ export default async function SignInForm() {
           {providerValues && providerValues.length > 0 && (
             <>
               <div className="flex w-full items-center">
-                <div className="flex-1 grow border-t border-gray-200"></div>
-                <span className="bg-white px-3 text-sm text-gray-500">Or</span>
-                <div className="flex-1 grow border-t border-gray-200"></div>
+                <div className="flex-1 grow border-t border-border"></div>
+                <span className="bg-card px-3 text-sm text-muted-foreground">
+                  Or
+                </span>
+                <div className="flex-1 grow border-t border-border"></div>
               </div>
               <div className="space-y-2">
                 {providerValues.map((provider) => (

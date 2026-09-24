@@ -4,12 +4,12 @@ import { useEffect } from "react";
 import { useClientConfig } from "@/lib/clientConfig";
 import { useTheme } from "next-themes";
 
-// The theme's --background (tooling/tailwind): light 0 0% 100%, dark
-// 240 6% 9%.
-const BACKGROUND = { light: "#ffffff", dark: "#161618" };
+// The theme's --background (tooling/tailwind): light 45 33% 97.6%, dark
+// 40 7% 9%.
+const BACKGROUND = { light: "#fbfaf7", dark: "#191715" };
 
 /**
- * Fork: glue for Karakeep installed on a phone's home screen. Registers the
+ * Fork: glue for vrana installed on a phone's home screen. Registers the
  * service worker (public/service-worker.js) in production — https only, which browsers
  * require — once per server version, and paints the status bar (theme-color)
  * in the app's own theme, which may not be the phone's.

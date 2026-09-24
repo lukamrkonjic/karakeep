@@ -102,7 +102,7 @@ export default function SignUpForm({ redirectUrl }: SignUpFormProps) {
           Create Your Account
         </CardTitle>
         <CardDescription>
-          Join Karakeep to start organizing your bookmarks
+          Join vrana to start organizing your bookmarks
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -319,11 +319,11 @@ export default function SignUpForm({ redirectUrl }: SignUpFormProps) {
         </Form>
 
         <div className="text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link
               href="/signin"
-              className="font-medium text-blue-600 hover:text-blue-500"
+              className="font-medium text-primary hover:text-primary/80"
             >
               Sign in
             </Link>

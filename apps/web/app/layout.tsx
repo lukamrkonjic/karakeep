@@ -25,8 +25,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Karakeep",
-  applicationName: "Karakeep",
+  title: "vrana",
+  applicationName: "vrana",
   description:
     "The Bookmark Everything app. Hoard links, notes, and images and they will get automatically tagged AI.",
   icons: {
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "Karakeep",
+    title: "vrana",
     // Fork: a status bar that is always readable (white text over the
     // light theme's white header would not be); theme-color tints it where
     // iOS follows that.
@@ -70,8 +70,8 @@ export const viewport: Viewport = {
   // own theme setting).
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#161618" },
+    { media: "(prefers-color-scheme: light)", color: "#fbfaf7" },
+    { media: "(prefers-color-scheme: dark)", color: "#191715" },
   ],
 };
 

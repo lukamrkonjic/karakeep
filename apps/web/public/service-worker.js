@@ -1,4 +1,4 @@
-// Fork: Karakeep's service worker, for the app installed on a phone's home
+// Fork: vrana's service worker, for the app installed on a phone's home
 // screen. It keeps the app's own static files (their names carry a hash, so a
 // cached one is never out of date) to start faster, and shows offline.html
 // when the server can't be reached. It never caches bookmarks, pictures or
@@ -26,7 +26,9 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith("karakeep-") && key !== STATIC_CACHE)
+            .filter(
+              (key) => key.startsWith("karakeep-") && key !== STATIC_CACHE,
+            )
             .map((key) => caches.delete(key)),
         ),
       )

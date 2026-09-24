@@ -3,7 +3,7 @@ import TailoredFeed from "@/components/dashboard/feed/TailoredFeed";
 import { api } from "@/server/api/client";
 
 export const metadata: Metadata = {
-  title: "Tailored feed | Karakeep",
+  title: "Tailored feed | vrana",
 };
 
 export default async function TailoredFeedPage() {

@@ -51,7 +51,7 @@ export function InstagramConnection() {
   return (
     <SettingsSection
       title="Instagram"
-      description="Lets lists subscribe to your Instagram saved collections. Instagram has no way to sign apps in to those, so Karakeep uses your browser's session instead."
+      description="Lets lists subscribe to your Instagram saved collections. Instagram has no way to sign apps in to those, so vrana uses your browser's session instead."
     >
       <div className="flex flex-col gap-4 text-sm">
         {connection?.connected ? (

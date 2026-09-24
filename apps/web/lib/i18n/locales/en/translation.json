@@ -966,7 +966,7 @@
     "feeds": "Feeds",
     "no_suggestions": "No suggestions",
     "mode_label": "Search mode",
-    "mode_label_description": "Choose how Karakeep finds matching bookmarks.",
+    "mode_label_description": "Choose how vrana finds matching bookmarks.",
     "mode_keyword": "Keyword",
     "mode_keyword_description": "Match exact words in titles, content, URLs, and notes. Almost instant.",
     "mode_hybrid": "Hybrid",
@@ -1121,7 +1121,7 @@
   },
   "wrapped": {
     "title": "Your {{year}} Wrapped",
-    "subtitle": "A Year in Karakeep",
+    "subtitle": "A Year in vrana",
     "banner": {
       "title": "Your 2025 Wrapped is ready!",
       "description": "See your year in bookmarks",
@@ -1162,7 +1162,7 @@
         "assets": "Assets"
       }
     },
-    "footer": "Made with Karakeep",
+    "footer": "Made with vrana",
     "share": "Share",
     "download": "Download",
     "close": "Close",

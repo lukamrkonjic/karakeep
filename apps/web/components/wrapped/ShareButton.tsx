@@ -45,8 +45,8 @@ export function ShareButton({
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: "My 2025 Karakeep Wrapped",
-            text: "Check out my 2025 Karakeep Wrapped!",
+            title: "My 2025 vrana Wrapped",
+            text: "Check out my 2025 vrana Wrapped!",
           });
           return;
         }

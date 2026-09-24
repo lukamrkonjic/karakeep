@@ -3,68 +3,73 @@
 @tailwind utilities;
 
 @layer base {
-  /* Light theme — Pinterest-inspired: clean white surfaces, red accent. */
+  /* Light theme — vrana: warm paper beige surfaces (never white), klein
+     blue accent, ink and hairlines tinted to the beige. The beige and the
+     blue are the app icon's (#fbfaf7, #286ff0). */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 9%;
+    --background: 45 33% 97.6%;
+    --foreground: 36 9% 10%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card: 45 33% 97.6%;
+    --card-foreground: 36 9% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --popover: 45 33% 97.6%;
+    --popover-foreground: 36 9% 10%;
 
-    --primary: 349 100% 45%;
+    --primary: 218.7 87% 54.9%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 40 20% 94%;
+    --secondary-foreground: 36 9% 10%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 40%;
+    --muted: 40 22% 95%;
+    --muted-foreground: 36 6% 40%;
 
-    --accent: 0 0% 93%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 40 18% 91.5%;
+    --accent-foreground: 36 9% 10%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 349 100% 45%;
+    --border: 40 16% 89%;
+    --input: 40 16% 89%;
+    --ring: 218.7 87% 54.9%;
 
     --radius: 0.5rem;
   }
 
-  /* Dark theme — neutral charcoal graphite with a purple accent. */
+  /* Dark theme — the same family at night: warm charcoal surfaces that get
+     lighter as they rise (card over background), the beige as the text
+     (dimmed, so it doesn't glare), and the blue lighter and less saturated
+     — a saturated blue vibrates on a dark ground — with dark ink on it. */
   .dark {
-    --background: 240 6% 9%;
-    --foreground: 0 0% 98%;
+    --background: 40 7% 9%;
+    --foreground: 42 22% 92%;
 
-    --card: 240 5% 15%;
-    --card-foreground: 0 0% 98%;
+    --card: 40 6% 14%;
+    --card-foreground: 42 22% 92%;
 
-    --popover: 240 6% 11%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 40 7% 11%;
+    --popover-foreground: 42 22% 92%;
 
-    --primary: 255 80% 62%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 219 64% 66%;
+    --primary-foreground: 219 45% 13%;
 
-    --secondary: 240 5% 18%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 40 5% 17.5%;
+    --secondary-foreground: 42 22% 92%;
 
-    --muted: 240 5% 13%;
-    --muted-foreground: 240 5% 65%;
+    --muted: 40 6% 12.5%;
+    --muted-foreground: 40 6% 64%;
 
-    --accent: 240 5% 20%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 40 5% 20%;
+    --accent-foreground: 42 22% 92%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 42 22% 96%;
 
-    --border: 240 5% 20%;
-    --input: 240 5% 20%;
-    --ring: 255 80% 62%;
+    --border: 40 5% 20%;
+    --input: 40 5% 20%;
+    --ring: 219 64% 66%;
   }
 }
 

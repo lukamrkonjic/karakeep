@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
@@ -12,6 +13,7 @@ import BookmarkActionBar from "./BookmarkActionBar";
 import { BulkEditSelectionOverlay } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
 import { GatedImage } from "./GatedImage";
+import { HoverListChips } from "./HoverListChips";
 import { ImagePeek } from "./ImagePeek";
 
 /**
@@ -49,6 +51,9 @@ export function MasonryMediaCard({
   // Fork: always draggable with a mouse (a selected tile drags the whole
   // selection); never by touch, where a long press opens its actions.
   const drag = useBookmarkDrag(bookmark);
+  // Fork: the lists it's in show along the bottom while a mouse rests on it
+  // (fetched only then — see HoverListChips).
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
@@ -62,6 +67,8 @@ export function MasonryMediaCard({
       // grip icon on a borderless media-only tile. Drag it onto a sidebar
       // list to add it there (see AllLists.tsx's useDropTarget).
       {...drag}
+      onPointerEnter={(e) => setHovered(e.pointerType === "mouse")}
+      onPointerLeave={() => setHovered(false)}
     >
       <BulkEditSelectionOverlay bookmark={bookmark} />
 
@@ -109,6 +116,13 @@ export function MasonryMediaCard({
           />
         </div>
       </div>
+
+      {hovered && !isBulkEditEnabled && (
+        <HoverListChips
+          bookmarkId={bookmark.id}
+          clearRight={media.type === "image"}
+        />
+      )}
 
       {media.type === "image" && !isBulkEditEnabled && (
         <ImagePeek

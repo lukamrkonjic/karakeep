@@ -2,12 +2,12 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Karakeep",
-    short_name: "Karakeep",
+    name: "vrana",
+    short_name: "vrana",
     description:
       "The Bookmark Everything app. Hoard links, notes, and images and they will get automatically tagged AI.",
-    background_color: "#ffffff",
-    theme_color: "#ffffff",
+    background_color: "#fbfaf7",
+    theme_color: "#fbfaf7",
     // Fork: the installed app opens on Home (not / and its redirects); the
     // id keeps an app installed from start_url "/" the same app.
     id: "/",
@@ -52,21 +52,7 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "maskable",
       },
     ],
-    screenshots: [
-      {
-        src: "/screenshots/desktop.png",
-        sizes: "3840x2307",
-        type: "image/png",
-        form_factor: "wide",
-        label: "Karakeep desktop bookmark library",
-      },
-      {
-        src: "/screenshots/mobile.png",
-        sizes: "692x1498",
-        type: "image/png",
-        form_factor: "narrow",
-        label: "Karakeep mobile bookmark library",
-      },
-    ],
+    // Fork: no install screenshots — upstream's showed Karakeep's old look
+    // and branding (public/screenshots/ is left as upstream has it).
   };
 }

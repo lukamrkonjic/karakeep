@@ -98,7 +98,7 @@ export function setBookmarkDragImage(
     return;
   }
   ctx.scale(dpr, dpr);
-  const card_bg = themeColor("--card", "#ffffff");
+  const card_bg = themeColor("--card", "#fbfaf7");
   const border = themeColor("--border", "#e4e4e7");
 
   // Cards stacked behind, turned a little, when several are dragged.
@@ -180,7 +180,7 @@ export function setBookmarkDragImage(
     const bx = PAD + w - bw / 2 - 2;
     const by = PAD - 6;
     roundRect(ctx, bx - bw / 2, by, bw, 22, 11);
-    ctx.fillStyle = themeColor("--primary", "#e11d48");
+    ctx.fillStyle = themeColor("--primary", "#286ff0");
     ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
     ctx.shadowBlur = 4;
     ctx.fill();

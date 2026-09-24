@@ -6,25 +6,27 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)" />
-    <title>Karakeep</title>
+    <meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#191715" media="(prefers-color-scheme: dark)" />
+    <title>vrana</title>
     <!-- Fork: what the installed app shows when the server can't be reached
          (public/service-worker.js). No external files: it has to work offline. -->
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #ffffff;
-        --fg: #0a0a0a;
-        --muted: #71717a;
-        --button: #f4f4f5;
+        --bg: #fbfaf7;
+        --fg: #1c1a17;
+        --muted: #6c6760;
+        --button: #f3f1ed;
+        --primary: #286ff0;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #161618;
-          --fg: #fafafa;
-          --muted: #a1a1aa;
-          --button: #27272a;
+          --bg: #191715;
+          --fg: #efece6;
+          --muted: #a9a59e;
+          --button: #2f2d2a;
+          --primary: #7198e0;
         }
       }
       body {
@@ -40,6 +42,16 @@
       main {
         padding: 24px;
         max-width: 420px;
+      }
+      .mark {
+        display: block;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 16px;
+        color: var(--primary);
+      }
+      .mark .crow {
+        color: var(--bg);
       }
       h1 {
         font-size: 22px;
@@ -63,9 +75,16 @@
   </head>
   <body>
     <main>
-      <h1>Karakeep can't be reached</h1>
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14.4" fill="currentColor" />
+        <g class="crow" transform="translate(8.236 6.723) scale(0.7454)">
+          <path fill="currentColor" fill-rule="evenodd" d="M 62 25.2 C 58.6 19 53.6 15.2 46.4 13.6 C 43.4 10.2 37.6 9.6 33.4 12.2 C 27.6 15.8 24.4 22.6 21.4 29.4 C 18.6 35.6 14.4 40.8 10 45.6 L 1.8 52.6 L 5.6 56.8 L 20.2 48.8 C 30.6 48.8 40.6 45.4 44.8 37.2 C 45.8 35 46.2 32.6 46.4 30.6 C 47.6 29.2 47.6 27.6 47 26.2 C 51.8 25.2 56.8 24.9 62 25.2 Z M 42.4 17.2 a 1.6 1.6 0 1 0 0.01 0 Z" />
+          <path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M 28.6 48.6 L 29.4 56 M 34.2 47.4 L 35.2 56" />
+        </g>
+      </svg>
+      <h1>vrana can't be reached</h1>
       <p>
-        You're offline, or your Karakeep server isn't answering. Check the
+        You're offline, or your vrana server isn't answering. Check the
         connection, then try again.
       </p>
       <button type="button" onclick="location.reload()">Try again</button>
