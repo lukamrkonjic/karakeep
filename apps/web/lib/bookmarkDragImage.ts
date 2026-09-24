@@ -45,6 +45,21 @@ function pictureIn(
   return [...images, ...videos].sort((a, b) => area(b) - area(a))[0] ?? null;
 }
 
+/**
+ * The address of the picture a card shows (a video's poster when that's
+ * what's showing), for a thumbnail elsewhere — the delete dialog's.
+ */
+export function pictureUrlOf(card: HTMLElement): string | null {
+  const picture = pictureIn(card);
+  if (!picture) {
+    return null;
+  }
+  if (picture instanceof HTMLVideoElement) {
+    return picture.poster || null;
+  }
+  return picture.currentSrc || picture.src || null;
+}
+
 function themeColor(variable: string, fallback: string) {
   const value = getComputedStyle(document.documentElement)
     .getPropertyValue(variable)

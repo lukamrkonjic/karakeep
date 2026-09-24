@@ -123,7 +123,7 @@ function DroppableListSidebarItem({
       linkClassName="py-1.5 px-2"
       style={{ marginLeft: `${level * 1}rem` }}
       dropHighlight={drop.over !== null}
-      dropHint={drop.over === "add" ? "+ Add" : "Move"}
+      dropHint={drop.hint}
       onDragOver={drop.onDragOver}
       onDragEnter={drop.onDragEnter}
       onDragLeave={drop.onDragLeave}
@@ -264,6 +264,7 @@ export default function AllLists({
                 variant="sidebar"
                 label="Home options"
                 pageKey="home"
+                path="/dashboard/bookmarks"
               />
             </div>
           }
@@ -287,6 +288,7 @@ export default function AllLists({
               variant="sidebar"
               label="Tags options"
               pageKey="tags"
+              path="/dashboard/tags"
             />
           }
         />
@@ -301,6 +303,7 @@ export default function AllLists({
               variant="sidebar"
               label="Favourites options"
               pageKey="favourites"
+              path="/dashboard/favourites"
             />
           }
         />

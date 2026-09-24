@@ -586,7 +586,11 @@ function useBookmarkGlobalHotkeys({
 
   useHotkeys(
     "escape",
-    () => {
+    (e) => {
+      // Fork: an Esc that closed a dialog or a menu was that one's.
+      if (e.defaultPrevented) {
+        return;
+      }
       if (bulkActionsStore.isBulkEditEnabled) {
         bulkActionsStore.setIsBulkEditEnabled(false);
       } else {

@@ -3,8 +3,14 @@ import KeyboardShortcutsDialog from "@/components/dashboard/KeyboardShortcutsDia
 import NoBookmarksBanner from "@/components/dashboard/bookmarks/NoBookmarksBanner";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
+import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useLongPress } from "@/lib/hooks/useLongPress";
+import {
+  selectRangeTo,
+  startSelection,
+  toggleSelection,
+} from "@/lib/selection";
 import { useCardSheetStore } from "@/lib/store/useCardSheetStore";
 import { useBookmarkKeyboardNavigation } from "@/lib/hooks/useBookmarkKeyboardNavigation";
 import { useTranslation } from "@/lib/i18n/client";
@@ -28,6 +34,7 @@ import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { useBookmarkListContext } from "@karakeep/shared-react/hooks/bookmark-list-context";
 
 import BookmarkCard from "./BookmarkCard";
+import { GridSelection } from "./GridSelection";
 import UnknownCard from "./UnknownCard";
 
 function StyledBookmarkCard({
@@ -68,13 +75,57 @@ const BookmarkGridItem = memo(function BookmarkGridItem({
   const isFocused = useKeyboardNavigationStore(
     (state) => state.isNavigating && state.focusedIndex === index,
   );
-  // Fork: a long press opens the card's actions (BookmarkOptions' sheet).
+  // Fork: a long press by touch opens the card's actions (BookmarkOptions'
+  // sheet); with a mouse it starts selecting, with this card picked. A
+  // Ctrl/⌘-click picks or unpicks a card, a Shift-click everything since the
+  // last one picked (lib/selection.ts) — your own bookmarks only, as the
+  // selection's round boxes.
   const openActions = useCardSheetStore((state) => state.open);
-  const longPress = useLongPress(() => openActions(bookmark.id));
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const canSelect = bookmark.userId === userId;
+  const longPress = useLongPress(
+    () => openActions(bookmark.id),
+    undefined,
+    canSelect
+      ? () => {
+          if (!useBulkActionsStore.getState().isBulkEditEnabled) {
+            startSelection(bookmark.id);
+          }
+        }
+      : undefined,
+  );
+  const onClickCapture = (e: React.MouseEvent) => {
+    longPress.onClickCapture(e);
+    if (e.isPropagationStopped() || !canSelect) {
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      selectRangeTo(bookmark.id, (b) => b.userId === userId);
+    } else if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelection(bookmark.id);
+    }
+  };
 
   return (
     <ErrorBoundary fallback={<UnknownCard bookmark={bookmark} />}>
-      <div className="contents" {...longPress}>
+      <div
+        className="contents"
+        role="presentation"
+        {...longPress}
+        onClickCapture={onClickCapture}
+        // A Shift-click picks a range; it mustn't also select the text
+        // between.
+        onMouseDown={(e) => {
+          if (e.shiftKey && canSelect) {
+            e.preventDefault();
+          }
+        }}
+      >
         <StyledBookmarkCard
           className={cn(
             isFocused &&
@@ -270,6 +321,7 @@ export default function BookmarksGrid({
   ));
   return (
     <>
+      <GridSelection />
       {bookmarkLayoutSwitch(layout, {
         // Fork: an 8px gutter on a phone (it has 2–4 columns now).
         masonry: (

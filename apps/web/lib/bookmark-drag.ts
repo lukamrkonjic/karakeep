@@ -17,6 +17,18 @@ export const BOOKMARK_DRAG_MIME = "application/x-karakeep-bookmark";
 export const BOOKMARK_DRAG_SOURCE_LIST_MIME =
   "application/x-karakeep-bookmark-source-list";
 
+// Fork: how many bookmarks the drag in progress carries — a drop target
+// can't read the drag's data before the drop, and says "Move 3".
+let draggedCount = 0;
+
+export function setDraggedBookmarkCount(count: number) {
+  draggedCount = count;
+}
+
+export function draggedBookmarkCount() {
+  return draggedCount;
+}
+
 /** Whether this drag event carries bookmarks. */
 export function isBookmarkDrag(e: React.DragEvent): boolean {
   return e.dataTransfer.types.includes(BOOKMARK_DRAG_MIME);

@@ -3,23 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import {
-  ActionButton,
-  ActionButtonWithTooltip,
-} from "@/components/ui/action-button";
+import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
+import { pictureUrlOf } from "@/lib/bookmarkDragImage";
+import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkBulkMutations } from "@/lib/hooks/useBookmarkBulkActions";
 import type { UpdateBookmarkProps } from "@/lib/hooks/useBookmarkBulkActions";
 import { useTranslation } from "@/lib/i18n/client";
+import { selectAllLoaded, setSelection } from "@/lib/selection";
 import {
   CheckCheck,
   FileDown,
+  FileText,
   Hash,
   Link,
-  List,
   ListMinus,
+  ListPlus,
+  MoreHorizontal,
   RotateCw,
   Trash2,
   X,
@@ -36,6 +45,11 @@ export default function BulkBookmarksAction() {
     useState(false);
   const [manageListsModal, setManageListsModalOpen] = useState(false);
   const [bulkTagModal, setBulkTagModalOpen] = useState(false);
+  // Fork: the pictures of what's about to be deleted, for the dialog.
+  const [deletePreview, setDeletePreview] = useState<{
+    urls: (string | null)[];
+    more: number;
+  }>({ urls: [], more: 0 });
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
     null,
   );
@@ -55,8 +69,6 @@ export default function BulkBookmarksAction() {
     isBulkEditEnabled,
     listContext: withinListContext,
     setIsBulkEditEnabled,
-    selectAll: selectAllBookmarks,
-    unSelectAll: unSelectAllBookmarks,
     isEverythingSelected,
   } = bulkActionsStore;
   const {
@@ -159,143 +171,77 @@ export default function BulkBookmarksAction() {
     selectedBookmarks.length &&
     selectedBookmarks.every((item) => item.archived === true);
 
-  const actionList = [
+  const count = selectedBookmarks.length;
+  const everything = isEverythingSelected();
+  const canRemoveFromList =
+    !!withinListContext &&
+    withinListContext.type === "manual" &&
+    (withinListContext.userRole === "editor" ||
+      withinListContext.userRole === "owner");
+
+  // Fork: done to many less often, so behind the card's "…".
+  const moreActions = [
+    {
+      name: t("actions.edit_tags"),
+      icon: <Hash className="size-4" />,
+      action: () => setBulkTagModalOpen(true),
+      isPending: false,
+    },
+    {
+      name: alreadyFavourited ? t("actions.unfavorite") : t("actions.favorite"),
+      icon: <FavouritedActionIcon favourited={!!alreadyFavourited} size={16} />,
+      action: () => updateBookmarks({ favourited: !alreadyFavourited }),
+      isPending: updateBookmarkMutator.isPending,
+    },
+    {
+      name: alreadyArchived ? t("actions.unarchive") : t("actions.archive"),
+      icon: <ArchivedActionIcon size={16} archived={!!alreadyArchived} />,
+      action: () => updateBookmarks({ archived: !alreadyArchived }),
+      isPending: updateBookmarkMutator.isPending,
+    },
     {
       name: isClipboardAvailable()
         ? t("actions.copy_link")
         : "Copying is only available over https",
-      icon: <Link size={18} />,
+      icon: <Link className="size-4" />,
       action: () => copyLinks(),
       isPending: false,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: t("actions.remove_from_list"),
-      icon: <ListMinus size={18} />,
-      action: () => setIsRemoveFromListDialogOpen(true),
-      isPending: removeBookmarkFromListMutator.isPending,
-      hidden:
-        !isBulkEditEnabled ||
-        !withinListContext ||
-        withinListContext.type !== "manual" ||
-        (withinListContext.userRole !== "editor" &&
-          withinListContext.userRole !== "owner"),
-    },
-    {
-      name: t("actions.add_to_list"),
-      icon: <List size={18} />,
-      action: () => setManageListsModalOpen(true),
-      isPending: false,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: t("actions.edit_tags"),
-      icon: <Hash size={18} />,
-      action: () => setBulkTagModalOpen(true),
-      isPending: false,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: alreadyFavourited ? t("actions.unfavorite") : t("actions.favorite"),
-      icon: <FavouritedActionIcon favourited={!!alreadyFavourited} size={18} />,
-      action: () => updateBookmarks({ favourited: !alreadyFavourited }),
-      isPending: updateBookmarkMutator.isPending,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: alreadyArchived ? t("actions.unarchive") : t("actions.archive"),
-      icon: <ArchivedActionIcon size={18} archived={!!alreadyArchived} />,
-      action: () => updateBookmarks({ archived: !alreadyArchived }),
-      isPending: updateBookmarkMutator.isPending,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: t("actions.preserve_offline_archive"),
-      icon: <FileDown size={18} />,
-      action: () => recrawlBookmarks(true),
-      isPending: recrawlBookmarkMutator.isPending,
-      hidden: !isBulkEditEnabled,
     },
     {
       name: t("actions.refresh"),
-      icon: <RotateCw size={18} />,
+      icon: <RotateCw className="size-4" />,
       action: () => recrawlBookmarks(false),
       isPending: recrawlBookmarkMutator.isPending,
-      hidden: !isBulkEditEnabled,
     },
     {
-      name: t("actions.delete"),
-      icon: <Trash2 size={18} color="red" />,
-      action: () => setIsDeleteDialogOpen(true),
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: isEverythingSelected()
-        ? t("actions.unselect_all")
-        : t("actions.select_all"),
-      icon: (
-        <p className="flex items-center gap-2">
-          ( <CheckCheck size={18} /> {selectedBookmarks.length} )
-        </p>
-      ),
-      action: () =>
-        isEverythingSelected() ? unSelectAllBookmarks() : selectAllBookmarks(),
-      alwaysEnable: true,
-      hidden: !isBulkEditEnabled,
-    },
-    {
-      name: t("actions.close_bulk_edit"),
-      icon: <X size={18} />,
-      action: () => setIsBulkEditEnabled(false),
-      alwaysEnable: true,
-      hidden: !isBulkEditEnabled,
+      name: t("actions.preserve_offline_archive"),
+      icon: <FileDown className="size-4" />,
+      action: () => recrawlBookmarks(true),
+      isPending: recrawlBookmarkMutator.isPending,
     },
   ];
 
-  const renderActions = (mobile: boolean) => (
-    <div className="flex min-w-max items-center">
-      {actionList.map(
-        ({ name, icon, action, isPending, hidden, alwaysEnable }) => {
-          const className = `${hidden ? "hidden" : "block"} ${
-            mobile && alwaysEnable ? "-order-1" : ""
-          }`;
-          const disabled = !selectedBookmarks.length && !alwaysEnable;
+  // Select all: every loaded bookmark of yours (as Ctrl/⌘+A).
+  const userId = useSession().data?.user?.id;
+  const toggleAll = () =>
+    everything ? setSelection([]) : selectAllLoaded((b) => b.userId === userId);
 
-          if (mobile) {
-            return (
-              <ActionButton
-                aria-label={name}
-                title={name}
-                className={className}
-                disabled={disabled}
-                loading={!!isPending}
-                variant="ghost"
-                key={name}
-                onClick={action}
-              >
-                {icon}
-              </ActionButton>
-            );
-          }
-
-          return (
-            <ActionButtonWithTooltip
-              className={className}
-              tooltip={name}
-              disabled={disabled}
-              delayDuration={100}
-              loading={!!isPending}
-              variant="ghost"
-              key={name}
-              onClick={action}
-            >
-              {icon}
-            </ActionButtonWithTooltip>
-          );
-        },
-      )}
-    </div>
-  );
+  // The pictures come from the cards on screen (whatever each one shows).
+  const openDeleteDialog = () => {
+    const { visibleBookmarks } = useBulkActionsStore.getState();
+    const indexOf = new Map(visibleBookmarks.map((b, i) => [b.id, i]));
+    const shown = selectedBookmarks.slice(0, 6);
+    setDeletePreview({
+      urls: shown.map((bookmark) => {
+        const card = document.querySelector<HTMLElement>(
+          `[data-bookmark-index="${indexOf.get(bookmark.id)}"]`,
+        );
+        return card ? pictureUrlOf(card) : null;
+      }),
+      more: count - shown.length,
+    });
+    setIsDeleteDialogOpen(true);
+  };
 
   const isModalOpen =
     isDeleteDialogOpen ||
@@ -308,8 +254,39 @@ export default function BulkBookmarksAction() {
       <ActionConfirmingDialog
         open={isDeleteDialogOpen}
         setOpen={setIsDeleteDialogOpen}
-        title={"Delete Bookmarks"}
-        description={<p>Are you sure you want to delete these bookmarks?</p>}
+        title={`Delete ${count} ${count === 1 ? "item" : "items"}?`}
+        description={
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {deletePreview.urls.map((url, i) =>
+                url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- the card's own picture, already loaded
+                  <img
+                    key={i}
+                    src={url}
+                    alt=""
+                    className="size-12 rounded-md object-cover"
+                  />
+                ) : (
+                  <span
+                    key={i}
+                    className="flex size-12 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                  >
+                    <FileText className="size-5" />
+                  </span>
+                ),
+              )}
+              {deletePreview.more > 0 && (
+                <span className="flex size-12 items-center justify-center rounded-md bg-muted text-sm font-medium text-muted-foreground">
+                  +{deletePreview.more}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This can&apos;t be undone.
+            </p>
+          </div>
+        }
         actionButton={() => (
           <ActionButton
             type="button"
@@ -352,16 +329,124 @@ export default function BulkBookmarksAction() {
         open={bulkTagModal}
         setOpen={setBulkTagModalOpen}
       />
+      {/* Fork: a card at the bottom while selecting, in the look of the
+          app's menus — ✕ to stop, how many are picked (a chip in the blue
+          of the picked cards' ticks), Select all, then what to do with them:
+          add to a list, remove from this one, delete; the rest behind "…".
+          On a phone it sits above the tab bar. */}
       {portalContainer && isBulkEditEnabled && !isModalOpen
         ? createPortal(
-            <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-[70] sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-max sm:max-w-[calc(100vw-2rem)] sm:-translate-x-1/2">
+            <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-[70] flex justify-center sm:inset-x-4 sm:bottom-6">
               <div
                 aria-label={t("actions.bulk_edit")}
-                className="overflow-x-auto rounded-2xl border bg-background/95 p-1 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm duration-200 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none dark:ring-white/10"
+                className="flex max-w-full items-center gap-0.5 rounded-xl border bg-popover/95 p-1 text-popover-foreground shadow-lg shadow-black/10 backdrop-blur duration-200 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none"
                 role="toolbar"
               >
-                <div className="sm:hidden">{renderActions(true)}</div>
-                <div className="hidden sm:block">{renderActions(false)}</div>
+                <Button
+                  variant="ghost"
+                  size="none"
+                  className="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+                  aria-label={t("actions.close_bulk_edit")}
+                  title="Done (Esc)"
+                  onClick={() => setIsBulkEditEnabled(false)}
+                >
+                  <X className="size-4" />
+                </Button>
+                {count > 0 ? (
+                  <span className="mx-1 inline-flex h-6 shrink-0 items-center rounded-full bg-primary px-2.5 text-xs font-semibold tabular-nums text-primary-foreground">
+                    {count}
+                    <span className="hidden sm:inline">&nbsp;selected</span>
+                  </span>
+                ) : (
+                  <span className="mx-1.5 min-w-0 truncate text-sm text-muted-foreground">
+                    <span className="sm:hidden">Tap items to select</span>
+                    <span className="hidden sm:inline">
+                      Click items, or drag a box around them
+                    </span>
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="none"
+                  className="hidden h-8 shrink-0 rounded-lg px-2.5 text-sm sm:inline-flex"
+                  onClick={toggleAll}
+                >
+                  {everything ? "Deselect all" : "Select all"}
+                </Button>
+                <span
+                  aria-hidden
+                  className="mx-1 h-5 w-px shrink-0 bg-border"
+                />
+                <Button
+                  variant="ghost"
+                  size="none"
+                  className="h-8 shrink-0 gap-1.5 rounded-lg px-2 text-sm sm:px-2.5"
+                  disabled={count === 0}
+                  title={t("actions.add_to_list")}
+                  onClick={() => setManageListsModalOpen(true)}
+                >
+                  <ListPlus className="size-4" />
+                  Add to
+                </Button>
+                {canRemoveFromList && (
+                  <Button
+                    variant="ghost"
+                    size="none"
+                    className="h-8 shrink-0 gap-1.5 rounded-lg px-2 text-sm sm:px-2.5"
+                    disabled={count === 0}
+                    title={t("actions.remove_from_list")}
+                    onClick={() => setIsRemoveFromListDialogOpen(true)}
+                  >
+                    <ListMinus className="size-4" />
+                    Remove from
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="none"
+                  className="h-8 shrink-0 gap-1.5 rounded-lg px-2 text-sm text-destructive hover:bg-destructive/10 hover:text-destructive sm:px-2.5"
+                  disabled={count === 0}
+                  title={t("actions.delete")}
+                  onClick={openDeleteDialog}
+                >
+                  <Trash2 className="size-4" />
+                  <span className="hidden sm:inline">
+                    {t("actions.delete")}
+                  </span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="none"
+                      className="size-8 shrink-0 rounded-lg"
+                      aria-label="More actions"
+                      title="More actions"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="end">
+                    <DropdownMenuItem
+                      className="flex gap-2 sm:hidden"
+                      onClick={toggleAll}
+                    >
+                      <CheckCheck className="size-4" />
+                      <span>{everything ? "Deselect all" : "Select all"}</span>
+                    </DropdownMenuItem>
+                    {moreActions.map(({ name, icon, action, isPending }) => (
+                      <DropdownMenuItem
+                        key={name}
+                        className="flex gap-2"
+                        disabled={count === 0 || isPending}
+                        onClick={action}
+                      >
+                        {icon}
+                        <span>{name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>,
             portalContainer,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,10 +9,34 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTranslation } from "@/lib/i18n/client";
+import { startSelection } from "@/lib/selection";
+import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal } from "lucide-react";
+import { CircleCheck, MoreHorizontal } from "lucide-react";
 
 import { BookmarkSortSubmenu } from "./sort/SortSubmenu";
+
+/**
+ * Fork: "Select" — select mode on the page's cards (lib/selection.ts), first
+ * in a page's "…". Only while the page shows a grid of bookmarks, and only
+ * in the "…" of the page you're on (`current`).
+ */
+export function SelectMenuItem({ current = true }: { current?: boolean }) {
+  const { t } = useTranslation();
+  const inBookmarkGrid = useInBookmarkGridStore(
+    (state) => state.inBookmarkGrid,
+  );
+  if (!current || !inBookmarkGrid) {
+    return null;
+  }
+  return (
+    <DropdownMenuItem className="flex gap-2" onClick={() => startSelection()}>
+      <CircleCheck className="size-4" />
+      <span>{t("actions.select")}</span>
+    </DropdownMenuItem>
+  );
+}
 
 export interface PageOptionsItem {
   id: string;
@@ -31,6 +56,7 @@ export function PageOptions({
   label,
   items = [],
   sort,
+  path,
 }: {
   variant: "sidebar" | "header";
   /** What the button is called, e.g. "Tailored feed options". */
@@ -38,8 +64,11 @@ export function PageOptions({
   items?: PageOptionsItem[];
   /** The page's Sort submenu (components/dashboard/sort/SortSubmenu.tsx). */
   sort: React.ReactNode;
+  /** The page's address: the sidebar's "…" offers Select only there. */
+  path?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -70,6 +99,7 @@ export function PageOptions({
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align={variant === "header" ? "end" : "start"}>
+        <SelectMenuItem current={variant === "header" || pathname === path} />
         {items.map((item) => (
           <DropdownMenuItem
             key={item.id}
@@ -91,16 +121,19 @@ export function BookmarkPageOptions({
   variant,
   label,
   pageKey,
+  path,
 }: {
   variant: "sidebar" | "header";
   label: string;
   pageKey: string;
+  path?: string;
 }) {
   return (
     <PageOptions
       variant={variant}
       label={label}
       sort={<BookmarkSortSubmenu pageKey={pageKey} />}
+      path={path}
     />
   );
 }

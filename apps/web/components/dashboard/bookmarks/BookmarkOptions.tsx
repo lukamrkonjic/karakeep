@@ -13,10 +13,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/lib/auth/client";
-import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
 import useUpload from "@/lib/hooks/upload-file";
 import { useIsPhone } from "@/lib/hooks/useIsPhone";
+import { startSelection } from "@/lib/selection";
 import { useCardSheetStore } from "@/lib/store/useCardSheetStore";
 import { useTranslation } from "@/lib/i18n/client";
 import {
@@ -99,9 +99,6 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
 
   // Check if the current user owns this bookmark
   const isOwner = session?.user?.id === bookmark.userId;
-  const enableBulkEditForBookmark = useBulkActionsStore(
-    (state) => state.enableBulkEditForBookmark,
-  );
 
   const [isClipboardAvailable, setIsClipboardAvailable] = useState(false);
   // Fork: on a phone the actions are a sheet, opened by the "…" or by a long
@@ -252,7 +249,7 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
       // choosing several (to drag them onto a list together, say).
       visible: isOwner,
       disabled: false,
-      onClick: () => enableBulkEditForBookmark(bookmark.id),
+      onClick: () => startSelection(bookmark.id),
     },
     {
       id: "edit",

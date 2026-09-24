@@ -2,12 +2,15 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import {
   BOOKMARK_DRAG_SOURCE_LIST_MIME,
+  draggedBookmarkCount,
   draggedBookmarkIds,
   isAddDrag,
   isBookmarkDrag,
 } from "@/lib/bookmark-drag";
+import useBulkActionsStore from "@/lib/bulkActions";
 import { useTranslation } from "@/lib/i18n/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast as sonner } from "sonner";
 
 import {
   useAddBookmarkToList,
@@ -25,9 +28,11 @@ const HOVER_MS = 650;
  * dragged from (and its sub-lists, which a parent's page can show), or, from
  * a page that isn't a list (home, search, a tag), out of every list they're
  * in. With Ctrl (or Alt/Option) held it adds instead, and they keep their
- * other lists. `over` says what a drop would do right now, for the target to
- * show; `onHover` fires once a drag has rested on the target a moment (the
- * sidebar unfolds a folded list that way).
+ * other lists. `over` says what a drop would do right now and `hint` says
+ * it for the target to show ("Move 3", "+ Add"); `onHover` fires once a drag
+ * has rested on the target a moment (the sidebar unfolds a folded list that
+ * way). After a drop, the message about it has an Undo; a selection that was
+ * moved is let go (added, it stays picked for the next list).
  */
 export function useListDrop(
   list: { id: string; name: string },
@@ -40,6 +45,7 @@ export function useListDrop(
   const { mutateAsync: addToList } = useAddBookmarkToList();
   const { mutateAsync: removeFromList } = useRemoveBookmarkFromList();
   const [over, setOver] = useState<"move" | "add" | null>(null);
+  const [count, setCount] = useState(1);
   const depth = useRef(0);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -68,6 +74,7 @@ export function useListDrop(
       }
       e.preventDefault();
       setOver(isAddDrag(e) ? "add" : "move");
+      setCount(draggedBookmarkCount());
     },
     [enabled, onHover],
   );
@@ -129,17 +136,28 @@ export function useListDrop(
         }
         return false;
       };
+      // What changed, bookmark by bookmark, so it can be undone.
+      const changes: {
+        bookmarkId: string;
+        joined: boolean;
+        left: string[];
+      }[] = [];
       try {
         await Promise.all(
           ids.map(async (bookmarkId) => {
-            await addToList({ bookmarkId, listId: list.id });
+            const { lists: before } = await queryClient.fetchQuery(
+              api.lists.getListsOfBookmark.queryOptions({ bookmarkId }),
+            );
+            const joined = !before.some((l) => l.id === list.id);
+            if (joined) {
+              await addToList({ bookmarkId, listId: list.id });
+            }
+            const change = { bookmarkId, joined, left: [] as string[] };
+            changes.push(change);
             if (add) {
               return;
             }
-            const { lists: current } = await queryClient.fetchQuery(
-              api.lists.getListsOfBookmark.queryOptions({ bookmarkId }),
-            );
-            const leaving = current.filter(
+            const leaving = before.filter(
               (l) =>
                 l.id !== list.id &&
                 (sourceListId
@@ -148,12 +166,44 @@ export function useListDrop(
             );
             for (const from of leaving) {
               await removeFromList({ bookmarkId, listId: from.id });
+              change.left.push(from.id);
             }
           }),
         );
+        // A selection that was moved is let go; added, it stays picked (to
+        // go into another list too).
+        const selection = useBulkActionsStore.getState();
+        if (
+          !add &&
+          selection.isBulkEditEnabled &&
+          ids.every((id) => selection.selectedBookmarkIds.includes(id))
+        ) {
+          selection.setIsBulkEditEnabled(false);
+        }
         const what = ids.length === 1 ? "" : `${ids.length} `;
-        toast({
-          description: add
+        const undo = async () => {
+          try {
+            await Promise.all(
+              changes.map(async ({ bookmarkId, joined, left }) => {
+                for (const listId of left) {
+                  await addToList({ bookmarkId, listId });
+                }
+                if (joined) {
+                  await removeFromList({ bookmarkId, listId: list.id });
+                }
+              }),
+            );
+            sonner("Undone");
+          } catch {
+            sonner.error(
+              t("common.something_went_wrong", {
+                defaultValue: "Something went wrong",
+              }),
+            );
+          }
+        };
+        sonner(
+          add
             ? `Added ${what}to "${list.name}"`
             : ids.length === 1
               ? t("lists.move_to_list_success", {
@@ -161,7 +211,8 @@ export function useListDrop(
                   defaultValue: `Moved to "${list.name}"`,
                 })
               : `Moved ${what}to "${list.name}"`,
-        });
+          { action: { label: "Undo", onClick: () => void undo() } },
+        );
       } catch {
         toast({
           description: t("common.something_went_wrong", {
@@ -184,5 +235,6 @@ export function useListDrop(
     ],
   );
 
-  return { over, onDragEnter, onDragOver, onDragLeave, onDrop };
+  const hint = `${over === "add" ? "+ Add" : "Move"}${count > 1 ? ` ${count}` : ""}`;
+  return { over, hint, onDragEnter, onDragOver, onDragLeave, onDrop };
 }

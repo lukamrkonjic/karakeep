@@ -58,7 +58,7 @@ function SubfolderTile({
       </div>
       {drop.over && (
         <span className="pointer-events-none absolute right-2 top-2 rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground shadow-sm">
-          {drop.over === "add" ? "+ Add" : "Move"}
+          {drop.hint}
         </span>
       )}
     </Link>

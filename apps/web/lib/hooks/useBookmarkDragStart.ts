@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import {
   BOOKMARK_DRAG_MIME,
   BOOKMARK_DRAG_SOURCE_LIST_MIME,
+  setDraggedBookmarkCount,
 } from "@/lib/bookmark-drag";
 import { setBookmarkDragImage } from "@/lib/bookmarkDragImage";
 import useBulkActionsStore from "@/lib/bulkActions";
@@ -38,6 +39,7 @@ export function useBookmarkDrag(bookmark: ZBookmark) {
           ? selectedBookmarkIds
           : [bookmark.id];
       e.dataTransfer.setData(BOOKMARK_DRAG_MIME, ids.join(","));
+      setDraggedBookmarkCount(ids.length);
       if (sourceListId) {
         e.dataTransfer.setData(BOOKMARK_DRAG_SOURCE_LIST_MIME, sourceListId);
       }

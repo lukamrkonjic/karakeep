@@ -71,6 +71,7 @@ export default async function Dashboard({
                       variant="sidebar"
                       label="Archive options"
                       pageKey="archive"
+                      path="/dashboard/archive"
                     />
                   ),
                 },

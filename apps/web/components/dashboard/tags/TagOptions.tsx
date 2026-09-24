@@ -11,6 +11,7 @@ import { useShowArchived } from "@/components/utils/useShowArchived";
 import { useTranslation } from "@/lib/i18n/client";
 import { Combine, Pencil, Square, SquareCheck, Trash2 } from "lucide-react";
 
+import { SelectMenuItem } from "../PageOptions";
 import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import DeleteTagConfirmationDialog from "./DeleteTagConfirmationDialog";
 import { MergeTagModal } from "./MergeTagModal";
@@ -49,6 +50,8 @@ export function TagOptions({
       />
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
+        {/* Fork: select mode on this tag's bookmarks. */}
+        <SelectMenuItem />
         <DropdownMenuItem
           className="flex gap-2"
           onClick={() => setRenameTagDialogOpen(true)}

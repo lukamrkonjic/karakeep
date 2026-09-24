@@ -10,19 +10,18 @@ import { useClientConfig } from "@/lib/clientConfig";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { useTranslation } from "@/lib/i18n/client";
 import {
+  selectRangeTo,
+  startSelection,
+  toggleSelection,
+} from "@/lib/selection";
+import {
   bookmarkLayoutSwitch,
   useBookmarkDisplaySettings,
   useBookmarkLayout,
 } from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  Circle,
-  CircleCheck,
-  Image as ImageIcon,
-  NotebookPen,
-} from "lucide-react";
+import { Check, Image as ImageIcon, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -121,28 +120,54 @@ export function BulkEditSelectionOverlay({
     s.isBookmarkSelected(bookmark.id),
   );
   const isBulkEditEnabled = useBulkActionsStore((s) => s.isBulkEditEnabled);
-  const toggleBookmark = useBulkActionsStore((state) => state.toggleBookmark);
   const { data: session } = useSession();
+  const userId = session?.user?.id;
 
-  // Don't show selector for non-owned bookmarks or when bulk edit is disabled
-  const isOwner = session?.user?.id === bookmark.userId;
-  if (!isBulkEditEnabled || !isOwner) return null;
+  // Don't show selector for non-owned bookmarks
+  const isOwner = userId === bookmark.userId;
+  if (!isOwner) return null;
+
+  // Fork: before selecting, the round box shows where a pointer hovers (not
+  // by touch — a long press does it there); clicking it starts selecting,
+  // with this card picked.
+  if (!isBulkEditEnabled) {
+    return (
+      <button
+        type="button"
+        aria-label="Select"
+        title="Select"
+        className="absolute left-2 top-2 z-30 hidden size-6 items-center justify-center rounded-full border-2 border-white bg-black/25 text-white/70 opacity-0 shadow transition-opacity duration-150 hover:bg-black/40 hover:text-white focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:flex"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          startSelection(bookmark.id);
+        }}
+      >
+        <Check className="size-3.5" strokeWidth={3} />
+      </button>
+    );
+  }
 
   // Fork: every card shows whether it's chosen — a round box in its corner,
   // ticked and ringed when it is (it used to be a 10% tint, invisible on a
-  // photo, and nothing at all on a phone).
+  // photo, and nothing at all on a phone). The whole card is the button; a
+  // Shift-click picks everything since the last one picked.
   return (
     <button
       type="button"
       aria-pressed={isSelected}
       aria-label={isSelected ? "Deselect" : "Select"}
       className={cn(
-        "absolute inset-0 z-50 h-full w-full rounded-[inherit] transition-colors",
+        "absolute inset-0 z-[35] h-full w-full rounded-[inherit] transition-colors",
         isSelected
           ? "bg-black/25 ring-2 ring-inset ring-primary dark:bg-white/15"
           : "bg-transparent",
       )}
-      onClick={() => toggleBookmark(bookmark.id)}
+      onClick={(e) =>
+        e.shiftKey
+          ? selectRangeTo(bookmark.id, (b) => b.userId === userId)
+          : toggleSelection(bookmark.id)
+      }
     >
       <span
         className={cn(
@@ -166,16 +191,9 @@ function HoverActionBar({
   inline?: boolean;
 }) {
   const { t } = useTranslation();
-  const enableBulkEditForBookmark = useBulkActionsStore(
-    (state) => state.enableBulkEditForBookmark,
-  );
   const isBulkEditEnabled = useBulkActionsStore(
     (state) => state.isBulkEditEnabled,
   );
-  const isSelected = useBulkActionsStore((state) =>
-    state.isBookmarkSelected(bookmark.id),
-  );
-  const toggleBookmark = useBulkActionsStore((state) => state.toggleBookmark);
   const { data: session } = useSession();
   const demoMode = !!useClientConfig().demoMode;
   const updateBookmarkMutator = useUpdateBookmark({
@@ -188,38 +206,17 @@ function HoverActionBar({
   });
 
   const isOwner = session?.user?.id === bookmark.userId;
-  if (!isOwner) return null;
+  // Fork: picking is the round box's job (BulkEditSelectionOverlay): no
+  // circle here, and no bar while selecting — the whole card is the button.
+  if (!isOwner || isBulkEditEnabled || demoMode) return null;
 
   return (
     <div
       className={cn(
-        "z-[60] gap-1 rounded bg-white/50 p-1 backdrop-blur-sm transition-opacity duration-200 dark:bg-black/50",
+        "pointer-events-none z-[60] hidden gap-1 rounded bg-white/50 p-1 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 dark:bg-black/50 [@media(pointer:fine)]:pointer-events-auto [@media(pointer:fine)]:flex",
         inline ? "shrink-0" : "absolute right-2 top-2",
-        isBulkEditEnabled
-          ? "pointer-events-auto flex opacity-100"
-          : "pointer-events-none hidden opacity-0 group-hover:opacity-100 [@media(pointer:fine)]:pointer-events-auto [@media(pointer:fine)]:flex",
       )}
     >
-      <button
-        aria-label={t("actions.bulk_edit")}
-        title={t("actions.bulk_edit")}
-        className="rounded p-0.5 hover:bg-background/50"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (isBulkEditEnabled) {
-            toggleBookmark(bookmark.id);
-          } else {
-            enableBulkEditForBookmark(bookmark.id);
-          }
-        }}
-      >
-        {isSelected ? (
-          <CircleCheck className="size-4" />
-        ) : (
-          <Circle className="size-4" />
-        )}
-      </button>
       {!demoMode && (
         <>
           <button
@@ -446,7 +443,14 @@ function CompactView({
             <BookmarkFormattedCreatedAt createdAt={bookmark.createdAt} />
           </Link>
         </div>
-        <div className="relative z-[60] flex shrink-0 items-center">
+        {/* Fork: under the selection overlay while selecting — the whole
+            card is the button then. */}
+        <div
+          className={cn(
+            "relative flex shrink-0 items-center",
+            !isBulkEditEnabled && "z-[60]",
+          )}
+        >
           <HoverActionBar bookmark={bookmark} inline />
           <BookmarkActionBar
             bookmark={bookmark}

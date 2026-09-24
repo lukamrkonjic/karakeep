@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
 import { EditListModal } from "../lists/EditListModal";
+import { SelectMenuItem } from "../PageOptions";
 import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import DeleteListConfirmationDialog from "./DeleteListConfirmationDialog";
 import LeaveListConfirmationDialog from "./LeaveListConfirmationDialog";
@@ -57,6 +59,8 @@ export function ListOptions({
   const { showSublists, onClickShowSublists } = useShowSublists(list.id);
   // Only worth offering on a list that has something nested under it.
   const { data: allLists } = useBookmarkLists();
+  // Fork: Select, in the "…" of the list you're on (header or sidebar).
+  const onThisList = usePathname() === `/dashboard/lists/${list.id}`;
   const hasSublists = !!allLists?.data.some((l) => l.parentId === list.id);
 
   const [deleteListDialogOpen, setDeleteListDialogOpen] = useState(false);
@@ -241,6 +245,7 @@ export function ListOptions({
       />
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
+        <SelectMenuItem current={onThisList} />
         {visibleItems
           .filter((item) => !AFTER_SORT.has(item.id))
           .map(renderItem)}

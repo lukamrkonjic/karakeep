@@ -32,6 +32,7 @@ export function TailoredFeedOptions({
           },
         ]}
         sort={<BookmarkSortSubmenu pageKey="feed" withRecentlyAdded />}
+        path="/dashboard/feed"
       />
     </>
   );
