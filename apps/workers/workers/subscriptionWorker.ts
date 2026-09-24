@@ -22,17 +22,22 @@ import { withWorkerTracing } from "workerTracing";
 
 import type { ZSubscriptionRequestSchema } from "@karakeep/shared-server";
 import { db } from "@karakeep/db";
+import type { InstagramCookies } from "@karakeep/shared/utils/instagram";
 import {
   assets,
   AssetTypes,
   bookmarks,
+  instagramSessionsTable,
   listSubscriptionImportsTable,
   listSubscriptionsTable,
   users,
 } from "@karakeep/db/schema";
 import {
   deleteAsset,
+  INSTAGRAM_SESSION_PURPOSE,
+  InstagramSessionError,
   newAssetId,
+  openSecret,
   QuotaService,
   queueSubscriptionSync,
   saveAssetFromFile,
@@ -50,16 +55,19 @@ import {
 } from "@karakeep/shared/types/bookmarks";
 import { List } from "@karakeep/trpc/models/lists";
 
+import { fetchInstagramCollection } from "./connectors/instagram";
+import { fetchPinterestBoard } from "./connectors/pinterest";
 import type {
+  SubscriptionFetchResult,
   SubscriptionItem,
   SubscriptionMedia,
-} from "./connectors/pinterest";
-import { fetchPinterestBoard } from "./connectors/pinterest";
+} from "./connectors/types";
 import { normalizeContentType } from "./crawler/utils";
 
 /**
- * Fork: keeps a list in sync with a source (for now, a public Pinterest
- * board — see connectors/pinterest.ts).
+ * Fork: keeps a list in sync with a source — a public Pinterest board
+ * (connectors/pinterest.ts) or one of the user's Instagram saved collections,
+ * read with the session they pasted (connectors/instagram.ts).
  *
  * Modelled on the RSS feed worker: an hourly cron queues whatever is due, the
  * runner fetches the board and files what is new. The ledger
@@ -72,9 +80,22 @@ import { normalizeContentType } from "./crawler/utils";
 
 type SubscriptionRunResult = "success" | "failure" | "skipped";
 
-/** A board bigger than this finishes over several runs, queued back to back. */
-const MAX_NEW_PER_RUN = 300;
-const FETCH_TIMEOUT_MS = 5 * 60_000;
+/** A source bigger than this finishes over several runs, queued back to back. */
+const MAX_NEW_PER_RUN: Record<Subscription["kind"], number> = {
+  pinterest: 300,
+  // Every run pages from the top down to what it has, and Instagram is paged
+  // slowly: fewer, bigger runs.
+  instagram: 500,
+};
+const FETCH_TIMEOUT_MS: Record<Subscription["kind"], number> = {
+  pinterest: 5 * 60_000,
+  instagram: 20 * 60_000,
+};
+const SOURCES: Record<Subscription["kind"], { name: string; referer: string }> =
+  {
+    pinterest: { name: "Pinterest", referer: "https://www.pinterest.com/" },
+    instagram: { name: "Instagram", referer: "https://www.instagram.com/" },
+  };
 const DOWNLOAD_TIMEOUT_MS = 2 * 60_000;
 /** Consecutive download failures after which the source is assumed down. */
 const MAX_FAILURES_IN_A_ROW = 5;
@@ -213,12 +234,13 @@ function discard(resp: { body: unknown }) {
 async function downloadOne(
   media: SubscriptionMedia,
   fallbackName: string,
+  referer: string,
 ): Promise<DownloadedFile> {
   const maxBytes = serverConfig.maxAssetSizeMb * 1024 * 1024;
   const resp = await fetchWithProxy(media.url, {
     headers: {
       "user-agent": UA,
-      referer: "https://www.pinterest.com/",
+      referer,
       // Whatever can be kept (or converted to something that can): a CDN
       // picks the best format the request allows.
       accept:
@@ -315,11 +337,14 @@ async function downloadOne(
  * A passing failure (5xx, network) is not a reason to settle for less: the
  * whole item is tried again on the next sync.
  */
-async function download(item: SubscriptionItem): Promise<DownloadedFile> {
+async function download(
+  item: SubscriptionItem,
+  referer: string,
+): Promise<DownloadedFile> {
   const reasons: string[] = [];
   for (const media of item.media) {
     try {
-      return await downloadOne(media, item.externalId);
+      return await downloadOne(media, item.externalId, referer);
     } catch (error) {
       if (!(error instanceof PermanentSkip)) {
         throw error;
@@ -436,7 +461,7 @@ async function importItem(
     return "linked";
   }
 
-  const file = await download(item);
+  const file = await download(item, SOURCES[subscription.kind].referer);
   let assetId: string;
   try {
     assetId = await storeAsset(subscription.userId, file);
@@ -477,6 +502,37 @@ async function importItem(
   }
   await remember(subscription, item, bookmarkId);
   return "downloaded";
+}
+
+/** The user's Instagram session, opened — or why there's none to use. */
+async function instagramSessionOf(
+  userId: string,
+): Promise<{ cookies: InstagramCookies } | { problem: string }> {
+  const row = await db.query.instagramSessionsTable.findFirst({
+    where: eq(instagramSessionsTable.userId, userId),
+    columns: { session: true, status: true },
+  });
+  if (!row) {
+    return {
+      problem:
+        "Instagram isn't connected. Paste your session in Settings → List subscriptions.",
+    };
+  }
+  if (row.status !== "ok") {
+    return {
+      problem:
+        "Your Instagram session has expired. Paste a fresh one in Settings → List subscriptions.",
+    };
+  }
+  const opened = openSecret(row.session, INSTAGRAM_SESSION_PURPOSE);
+  if (!opened) {
+    // Sealed under another server secret (NEXTAUTH_SECRET changed).
+    return {
+      problem:
+        "The saved Instagram session can't be read any more (the server's secret changed). Paste it again in Settings → List subscriptions.",
+    };
+  }
+  return { cookies: JSON.parse(opened) as InstagramCookies };
 }
 
 async function run(
@@ -532,20 +588,6 @@ async function run(
   logger.info(
     `[subscription][${jobId}] Syncing ${subscription.kind} "${subscription.name ?? subscription.url}" into list ${subscription.listId} ...`,
   );
-  const { data: fetched, error: fetchError } = await tryCatch(
-    fetchPinterestBoard(subscription.url, {
-      signal: AbortSignal.any([
-        job.abortSignal,
-        AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      ]),
-    }),
-  );
-  if (fetchError) {
-    return fail(
-      `Could not read ${subscription.url}: ${errorMessage(fetchError)}`,
-    );
-  }
-
   const handled = new Set(
     (
       await db
@@ -554,12 +596,51 @@ async function run(
         .where(eq(listSubscriptionImportsTable.subscriptionId, subscription.id))
     ).map((row) => row.externalId),
   );
+
+  const signal = AbortSignal.any([
+    job.abortSignal,
+    AbortSignal.timeout(FETCH_TIMEOUT_MS[subscription.kind]),
+  ]);
+  let reading: Promise<SubscriptionFetchResult>;
+  if (subscription.kind === "instagram") {
+    const session = await instagramSessionOf(subscription.userId);
+    if ("problem" in session) {
+      return fail(session.problem);
+    }
+    reading = fetchInstagramCollection(subscription.url, session.cookies, {
+      signal,
+      isKnown: (externalId) => handled.has(externalId),
+    });
+  } else {
+    reading = fetchPinterestBoard(subscription.url, { signal });
+  }
+  const { data: fetched, error: fetchError } = await tryCatch(reading);
+  if (fetchError) {
+    if (fetchError instanceof InstagramSessionError) {
+      // Settings shows it, and no other collection tries it again.
+      await db
+        .update(instagramSessionsTable)
+        .set({ status: "expired", checkedAt: new Date() })
+        .where(eq(instagramSessionsTable.userId, subscription.userId));
+      return fail(fetchError.message);
+    }
+    return fail(
+      `Could not read ${subscription.url}: ${errorMessage(fetchError)}`,
+    );
+  }
+  if (subscription.kind === "instagram") {
+    await db
+      .update(instagramSessionsTable)
+      .set({ checkedAt: new Date() })
+      .where(eq(instagramSessionsTable.userId, subscription.userId));
+  }
+
   const fresh = fetched.items.filter((item) => !handled.has(item.externalId));
   // The board lists its newest pin first and so does the list, by when each
   // bookmark was made. Filing bottom-up keeps the board's order; taking the
   // oldest first means a board too big for one run fills in from the bottom,
   // each later run's pins landing above the earlier ones.
-  const batch = fresh.slice(-MAX_NEW_PER_RUN).reverse();
+  const batch = fresh.slice(-MAX_NEW_PER_RUN[subscription.kind]).reverse();
   logger.info(
     `[subscription][${jobId}] ${fetched.items.length} items at the source${fetched.complete ? "" : " (paging stopped early)"}, ${fresh.length} new; taking ${batch.length}.`,
   );
@@ -628,7 +709,7 @@ async function run(
         `[subscription][${jobId}] Failed on ${item.sourceUrl}, will retry next sync: ${errorMessage(error)}`,
       );
       if (failedInARow >= MAX_FAILURES_IN_A_ROW) {
-        stoppedBecause = `Pinterest isn't handing out the pictures (${errorMessage(error)}); trying again next sync.`;
+        stoppedBecause = `${SOURCES[subscription.kind].name} isn't handing out the pictures (${errorMessage(error)}); trying again next sync.`;
         break;
       }
     }

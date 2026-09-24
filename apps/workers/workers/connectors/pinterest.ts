@@ -21,31 +21,13 @@ import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
  * like); those are skipped.
  */
 
-export interface SubscriptionMedia {
-  kind: "image" | "video";
-  url: string;
-}
+import type {
+  SubscriptionFetchResult,
+  SubscriptionItem,
+  SubscriptionMedia,
+} from "./types";
 
-export interface SubscriptionItem {
-  /** The source's id for this item (a pin id). */
-  externalId: string;
-  /** Identifies the picture itself, so a repin of it is still one bookmark. */
-  mediaKey: string | null;
-  title: string | null;
-  /** The item's page, which the bookmark points back to. */
-  sourceUrl: string;
-  /** Best first; the worker keeps the first one that downloads. */
-  media: SubscriptionMedia[];
-}
-
-export interface SubscriptionFetchResult {
-  /** What the source calls itself, for the subscription's name. */
-  name: string | null;
-  /** In the board's order, top first. */
-  items: SubscriptionItem[];
-  /** False when paging stopped before the end of the board. */
-  complete: boolean;
-}
+export type { SubscriptionFetchResult, SubscriptionItem, SubscriptionMedia };
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";

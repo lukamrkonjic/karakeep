@@ -5,3 +5,5 @@ export * from "./queues";
 export * from "./eventLogger";
 export * from "./tracing";
 export * from "./eventLogTypes";
+export * from "./secretBox";
+export * from "./instagram";

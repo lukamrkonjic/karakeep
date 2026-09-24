@@ -340,66 +340,76 @@ export default function AllLists({
     }
   }, [pathName, lists.data, openSet, updatePreferences]);
 
+  // Fork: only the lists scroll; the pages and the heading stay put. The
+  // lists' scrollbar is always there (invisible until hovered), so rows don't
+  // narrow when unfolding makes them overflow, and the parts above reserve the
+  // same gutter so everything lines up.
+  const fixedPart =
+    "sidebar-scrollbar shrink-0 overflow-hidden [scrollbar-gutter:stable]";
   return (
-    <ul className="sidebar-scrollbar max-h-full gap-y-2 overflow-auto text-sm">
-      {/* Fork: every entry has a "…" on hover, where a list's sits. Home
+    <div className="flex min-h-0 flex-1 flex-col text-sm">
+      <ul className={fixedPart}>
+        {/* Fork: every entry has a "…" on hover, where a list's sits. Home
           took the All Lists page's place (list invitations show there). */}
-      <SidebarItem
-        logo={null}
-        name={t("common.home")}
-        path="/dashboard/bookmarks"
-        className="group my-0.5"
-        linkClassName="py-1.5 px-2"
-        right={
-          <div className="flex items-center">
-            <InvitationNotificationBadge />
+        <SidebarItem
+          logo={null}
+          name={t("common.home")}
+          path="/dashboard/bookmarks"
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+          right={
+            <div className="flex items-center">
+              <InvitationNotificationBadge />
+              <BookmarkPageOptions
+                variant="sidebar"
+                label="Home options"
+                pageKey="home"
+              />
+            </div>
+          }
+        />
+        <SidebarItem
+          logo={null}
+          name="Tailored feed"
+          path="/dashboard/feed"
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+          right={<TailoredFeedOptions variant="sidebar" />}
+        />
+        <SidebarItem
+          logo={null}
+          name={t("common.tags")}
+          path="/dashboard/tags"
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+          right={
             <BookmarkPageOptions
               variant="sidebar"
-              label="Home options"
-              pageKey="home"
+              label="Tags options"
+              pageKey="tags"
             />
-          </div>
-        }
-      />
-      <SidebarItem
-        logo={null}
-        name="Tailored feed"
-        path="/dashboard/feed"
-        className="group my-0.5"
-        linkClassName="py-1.5 px-2"
-        right={<TailoredFeedOptions variant="sidebar" />}
-      />
-      <SidebarItem
-        logo={null}
-        name={t("common.tags")}
-        path="/dashboard/tags"
-        className="group my-0.5"
-        linkClassName="py-1.5 px-2"
-        right={
-          <BookmarkPageOptions
-            variant="sidebar"
-            label="Tags options"
-            pageKey="tags"
-          />
-        }
-      />
-      <SidebarItem
-        logo={null}
-        name={t("lists.favourites")}
-        path={`/dashboard/favourites`}
-        className="group my-0.5"
-        linkClassName="py-1.5 px-2"
-        right={
-          <BookmarkPageOptions
-            variant="sidebar"
-            label="Favourites options"
-            pageKey="favourites"
-          />
-        }
-      />
+          }
+        />
+        <SidebarItem
+          logo={null}
+          name={t("lists.favourites")}
+          path={`/dashboard/favourites`}
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+          right={
+            <BookmarkPageOptions
+              variant="sidebar"
+              label="Favourites options"
+              pageKey="favourites"
+            />
+          }
+        />
+      </ul>
 
       {/* Fork: the pages above, the lists below their own heading. */}
-      <li className="flex items-center justify-between pb-2 pt-6">
+      <div
+        className={cn(fixedPart, "flex items-center justify-between pb-2 pt-6")}
+      >
         <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
           Lists
         </p>
@@ -430,62 +440,64 @@ export default function AllLists({
             </button>
           </EditListModal>
         </div>
-      </li>
+      </div>
 
-      {/* Owned Lists */}
-      <CollapsibleBookmarkLists
-        listsData={lists}
-        filter={(node) => node.item.userRole === "owner"}
-        openState={openState}
-        reorderable
-        render={({ node, level, open, numBookmarks }) => (
-          <DroppableListSidebarItem
-            node={node}
-            level={level}
-            open={open}
-            numBookmarks={numBookmarks}
-            selectedListId={selectedListId}
-            setSelectedListId={setSelectedListId}
-          />
-        )}
-      />
-
-      {/* Shared Lists */}
-      {hasSharedLists && (
-        <Collapsible open={sharedListsOpen} onOpenChange={setSharedListsOpen}>
-          <SidebarItem
-            collapseButton={
-              <CollapsibleTriggerChevron
-                className="size-4"
-                open={sharedListsOpen}
-              />
-            }
-            logo={<span className="text-lg">👥</span>}
-            name={t("lists.shared_lists")}
-            path="#"
-            className="my-0.5"
-            linkClassName="py-1.5 px-2"
-          />
-          <CollapsibleContent>
-            <CollapsibleBookmarkLists
-              listsData={lists}
-              filter={(node) => node.item.userRole !== "owner"}
-              openState={openState}
-              indentOffset={1}
-              render={({ node, level, open, numBookmarks }) => (
-                <DroppableListSidebarItem
-                  node={node}
-                  level={level}
-                  open={open}
-                  numBookmarks={numBookmarks}
-                  selectedListId={selectedListId}
-                  setSelectedListId={setSelectedListId}
-                />
-              )}
+      <ul className="sidebar-scrollbar min-h-0 flex-1 overflow-y-scroll">
+        {/* Owned Lists */}
+        <CollapsibleBookmarkLists
+          listsData={lists}
+          filter={(node) => node.item.userRole === "owner"}
+          openState={openState}
+          reorderable
+          render={({ node, level, open, numBookmarks }) => (
+            <DroppableListSidebarItem
+              node={node}
+              level={level}
+              open={open}
+              numBookmarks={numBookmarks}
+              selectedListId={selectedListId}
+              setSelectedListId={setSelectedListId}
             />
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-    </ul>
+          )}
+        />
+
+        {/* Shared Lists */}
+        {hasSharedLists && (
+          <Collapsible open={sharedListsOpen} onOpenChange={setSharedListsOpen}>
+            <SidebarItem
+              collapseButton={
+                <CollapsibleTriggerChevron
+                  className="size-4"
+                  open={sharedListsOpen}
+                />
+              }
+              logo={<span className="text-lg">👥</span>}
+              name={t("lists.shared_lists")}
+              path="#"
+              className="my-0.5"
+              linkClassName="py-1.5 px-2"
+            />
+            <CollapsibleContent>
+              <CollapsibleBookmarkLists
+                listsData={lists}
+                filter={(node) => node.item.userRole !== "owner"}
+                openState={openState}
+                indentOffset={1}
+                render={({ node, level, open, numBookmarks }) => (
+                  <DroppableListSidebarItem
+                    node={node}
+                    level={level}
+                    open={open}
+                    numBookmarks={numBookmarks}
+                    selectedListId={selectedListId}
+                    setSelectedListId={setSelectedListId}
+                  />
+                )}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </ul>
+    </div>
   );
 }

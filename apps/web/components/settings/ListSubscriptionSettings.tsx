@@ -32,6 +32,7 @@ import { useUpdateUserSettings } from "@karakeep/shared-react/hooks/users";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { SUBSCRIPTION_INTERVAL_CHOICES } from "@karakeep/shared/types/listSubscriptions";
 
+import { InstagramConnection } from "./InstagramConnection";
 import { SettingsPage, SettingsSection } from "./SettingsPage";
 
 /**
@@ -147,6 +148,11 @@ function Subscriptions() {
                   >
                     {subscription.name ?? subscription.url}
                   </a>
+                  <span className="text-xs text-muted-foreground">
+                    {subscription.kind === "instagram"
+                      ? "Instagram"
+                      : "Pinterest"}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <Link
@@ -192,9 +198,10 @@ export default function ListSubscriptionSettings() {
   return (
     <SettingsPage
       title="List subscriptions"
-      description="Keep a list in sync with a public Pinterest board."
+      description="Keep a list in sync with a public Pinterest board or one of your Instagram saved collections."
     >
       <Schedule />
+      <InstagramConnection />
       <Subscriptions />
     </SettingsPage>
   );

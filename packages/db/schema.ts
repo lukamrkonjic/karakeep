@@ -804,8 +804,9 @@ export const listSubscriptionsTable = sqliteTable(
     userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Which connector reads `url`. Only public Pinterest boards for now.
-    kind: text("kind", { enum: ["pinterest"] })
+    // Which connector reads `url`: a public Pinterest board, or one of the
+    // user's Instagram saved collections (through instagramSessions).
+    kind: text("kind", { enum: ["pinterest", "instagram"] })
       .notNull()
       .default("pinterest"),
     url: text("url").notNull(),
@@ -826,6 +827,27 @@ export const listSubscriptionsTable = sqliteTable(
     unique().on(t.listId, t.url),
   ],
 );
+
+// Fork: the Instagram browser session a user pasted, so the subscription
+// worker can read their saved collections (Instagram has no API for them).
+// `session` is sealed with the server's secret (shared-server secretBox): it
+// is as good as the account's password. One per user.
+export const instagramSessionsTable = sqliteTable("instagramSessions", {
+  userId: text("userId")
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: createdAtField(),
+  session: text("session").notNull(),
+  // Who it belongs to, to show in Settings.
+  instagramUserId: text("instagramUserId").notNull(),
+  username: text("username"),
+  // "expired" once Instagram turned it away: a fresh one must be pasted.
+  status: text("status", { enum: ["ok", "expired"] })
+    .notNull()
+    .default("ok"),
+  checkedAt: integer("checkedAt", { mode: "timestamp" }),
+});
 
 // What the subscriptions have taken. It answers two questions: has this
 // subscription already handled an item (then never touch it again, even if

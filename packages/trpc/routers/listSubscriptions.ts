@@ -2,13 +2,22 @@ import { experimental_trpcMiddleware, TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { bookmarkLists, listSubscriptionsTable } from "@karakeep/db/schema";
+import {
+  bookmarkLists,
+  instagramSessionsTable,
+  listSubscriptionsTable,
+} from "@karakeep/db/schema";
 import { queueSubscriptionSync } from "@karakeep/shared-server";
 import {
   zListSubscriptionSchema,
   zNewListSubscriptionSchema,
   zUpdateListSubscriptionSchema,
 } from "@karakeep/shared/types/listSubscriptions";
+import {
+  instagramCollectionName,
+  instagramCollectionUrl,
+  parseInstagramCollectionUrl,
+} from "@karakeep/shared/utils/instagram";
 import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
 
 import type { AuthedContext } from "../index";
@@ -16,10 +25,49 @@ import { createScopedAuthedProcedure, router } from "../index";
 import { List } from "../models/lists";
 
 /**
- * Fork: subscriptions that keep a list in sync with a source (for now, a
- * public Pinterest board). The worker does the fetching — see
- * apps/workers/workers/subscriptionWorker.ts.
+ * Fork: subscriptions that keep a list in sync with a source — a public
+ * Pinterest board, or one of your Instagram saved collections (which needs
+ * Instagram connected, see routers/instagram.ts). The worker does the
+ * fetching — see apps/workers/workers/subscriptionWorker.ts.
  */
+
+/** A pasted link, as the source it is and the one form it's stored in. */
+async function sourceOf(ctx: AuthedContext, raw: string) {
+  const board = parsePinterestBoardUrl(raw);
+  if (board) {
+    // Any Pinterest domain: the same board is one subscription.
+    return {
+      kind: "pinterest" as const,
+      url: `https://www.pinterest.com${board.path}`,
+      name: board.slug,
+    };
+  }
+  const collection = parseInstagramCollectionUrl(raw);
+  if (collection) {
+    const session = await ctx.db.query.instagramSessionsTable.findFirst({
+      where: eq(instagramSessionsTable.userId, ctx.user.id),
+      columns: { status: true },
+    });
+    if (!session || session.status !== "ok") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: session
+          ? "Your Instagram session has expired. Paste a fresh one in Settings → List subscriptions, then add the collection."
+          : "Connect Instagram first: Settings → List subscriptions → Instagram.",
+      });
+    }
+    return {
+      kind: "instagram" as const,
+      url: instagramCollectionUrl(collection),
+      name: instagramCollectionName(collection),
+    };
+  }
+  throw new TRPCError({
+    code: "BAD_REQUEST",
+    message:
+      "That isn't a Pinterest board or an Instagram collection link. Use one like https://www.pinterest.com/<user>/<board>/ or https://www.instagram.com/<you>/saved/<collection>/<id>/.",
+  });
+}
 
 const subscriptionsProcedure = createScopedAuthedProcedure("lists");
 
@@ -99,17 +147,9 @@ export const listSubscriptionsAppRouter = router({
     .output(zListSubscriptionSchema)
     .mutation(async ({ input, ctx }) => {
       await ensureListEditable(ctx, input.listId);
-      const board = parsePinterestBoardUrl(input.url);
-      if (!board) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "That isn't a Pinterest board link. Use one like https://www.pinterest.com/<user>/<board>/ (board sections aren't supported yet).",
-        });
-      }
-      // Store it in the shape the connector fetches, so the same board added
-      // from two different Pinterest domains counts as one subscription.
-      const url = `https://www.pinterest.com${board.path}`;
+      // Stored in the shape the connector fetches, so the same source linked
+      // two ways counts as one subscription.
+      const { kind, url, name } = await sourceOf(ctx, input.url);
       const existing = await ctx.db.query.listSubscriptionsTable.findFirst({
         where: and(
           eq(listSubscriptionsTable.listId, input.listId),
@@ -119,7 +159,7 @@ export const listSubscriptionsAppRouter = router({
       if (existing) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "This list already subscribes to that board",
+          message: `This list already subscribes to that ${kind === "instagram" ? "collection" : "board"}`,
         });
       }
       const [subscription] = await ctx.db
@@ -127,9 +167,9 @@ export const listSubscriptionsAppRouter = router({
         .values({
           listId: input.listId,
           userId: ctx.user.id,
-          kind: "pinterest",
+          kind,
           url,
-          name: board.slug,
+          name,
         })
         .returning();
       // Fetch it straight away; the schedule takes over afterwards.

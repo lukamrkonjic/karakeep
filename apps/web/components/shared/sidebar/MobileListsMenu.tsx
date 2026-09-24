@@ -45,7 +45,7 @@ export default function MobileListsMenu({
       {/* pt-12: the lists' own header (with its +) starts below the
           dialog's close button. */}
       <DialogContent
-        className="max-h-[85vh] overflow-y-auto pt-12"
+        className="flex max-h-[85vh] flex-col pt-12"
         aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">Lists</DialogTitle>
