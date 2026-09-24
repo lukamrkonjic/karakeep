@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useIsPhone } from "@/lib/hooks/useIsPhone";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 export default function BookmarkPreviewPage(props: {
@@ -18,6 +20,7 @@ export default function BookmarkPreviewPage(props: {
   const router = useRouter();
 
   const [open, setOpen] = useState(true);
+  const isPhone = useIsPhone();
 
   const setOpenWithRouter = (value: boolean) => {
     setOpen(value);
@@ -25,6 +28,30 @@ export default function BookmarkPreviewPage(props: {
       router.back();
     }
   };
+
+  if (isPhone) {
+    // Fork: on a phone, the whole screen (PhoneViewer), not a dialog box.
+    return (
+      <DialogPrimitive.Root open={open} onOpenChange={setOpenWithRouter}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Content
+            aria-describedby={undefined}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            className="fixed inset-0 z-50 outline-none duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          >
+            <DialogPrimitive.Title className="sr-only">
+              Preview
+            </DialogPrimitive.Title>
+            <BookmarkPreview
+              bookmarkId={params.bookmarkId}
+              variant="phone"
+              onClose={() => setOpenWithRouter(false)}
+            />
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpenWithRouter}>

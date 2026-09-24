@@ -8,10 +8,14 @@ export default function manifest(): MetadataRoute.Manifest {
       "The Bookmark Everything app. Hoard links, notes, and images and they will get automatically tagged AI.",
     background_color: "#ffffff",
     theme_color: "#ffffff",
-    start_url: "/",
+    // Fork: the installed app opens on Home (not / and its redirects); the
+    // id keeps an app installed from start_url "/" the same app.
+    id: "/",
+    start_url: "/dashboard/bookmarks",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    // Fork: pictures and videos may be turned sideways.
+    orientation: "any",
     icons: [
       {
         src: "/icons/logo-16.png",
@@ -39,6 +43,13 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
+      },
+      {
+        // Fork: for Android's shaped icons — the mark within the safe zone.
+        src: "/icons/logo-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
     screenshots: [

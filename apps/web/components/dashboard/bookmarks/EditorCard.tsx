@@ -1,6 +1,7 @@
 import type { SubmitErrorHandler, SubmitHandler } from "react-hook-form";
-import React, { useImperativeHandle, useRef } from "react";
+import React, { useImperativeHandle, useRef, useState } from "react";
 import { ActionButton } from "@/components/ui/action-button";
+import { buttonVariants } from "@/components/ui/button";
 import { Form, FormControl, FormItem } from "@/components/ui/form";
 import { Kbd } from "@/components/ui/kbd";
 import MultipleChoiceDialog from "@/components/ui/multiple-choice-dialog";
@@ -9,6 +10,7 @@ import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import BookmarkSavedToast from "@/components/utils/BookmarkSavedToast";
 import { useClientConfig } from "@/lib/clientConfig";
+import { useIsTouch } from "@/lib/hooks/useIsPhone";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   useBookmarkLayout,
@@ -18,6 +20,7 @@ import { cn, getOS } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useHotkeys } from "react-hotkeys-hook";
+import { ImagePlus, Loader2 } from "lucide-react";
 import { z } from "zod";
 
 import { useCreateBookmarkWithPostHook } from "@karakeep/shared-react/hooks/bookmarks";
@@ -85,6 +88,23 @@ export default function EditorCard({
   });
 
   const uploadAsset = useUploadAsset();
+  // Fork: pictures and videos from the device (a phone has nothing to drop).
+  const isTouch = useIsTouch();
+  const [uploading, setUploading] = useState(false);
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) {
+      return;
+    }
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await uploadAsset(file);
+      }
+      onCreated?.();
+    } finally {
+      setUploading(false);
+    }
+  };
 
   function tryToImportUrls(text: string): void {
     const lines = text.split("\n");
@@ -224,7 +244,11 @@ export default function EditorCard({
                 "text-md h-full w-full border-none p-0 font-light focus-visible:ring-0",
                 { "resize-none": bookmarkLayout !== "list" },
               )}
-              placeholder={t("editor.placeholder_v2")}
+              placeholder={
+                isTouch
+                  ? "Paste a link or write a note…"
+                  : t("editor.placeholder_v2")
+              }
               onKeyDown={(e) => {
                 if (demoMode) {
                   return;
@@ -250,18 +274,49 @@ export default function EditorCard({
             />
           </FormControl>
         </FormItem>
-        <ActionButton
-          disabled={!form.formState.dirtyFields.text}
-          loading={isPending}
-          type="submit"
-          variant="secondary"
-        >
-          {form.formState.dirtyFields.text
-            ? demoMode
-              ? t("editor.disabled_submissions")
-              : `${t("actions.save")} (${OS === "macos" ? "⌘" : "Ctrl"} + Enter)`
-            : t("actions.save")}
-        </ActionButton>
+        <div className="flex gap-2">
+          <ActionButton
+            disabled={!form.formState.dirtyFields.text}
+            loading={isPending}
+            type="submit"
+            variant="secondary"
+            className="flex-1"
+          >
+            {form.formState.dirtyFields.text
+              ? demoMode
+                ? t("editor.disabled_submissions")
+                : isTouch
+                  ? t("actions.save")
+                  : `${t("actions.save")} (${OS === "macos" ? "⌘" : "Ctrl"} + Enter)`
+              : t("actions.save")}
+          </ActionButton>
+          {!demoMode && (
+            <label
+              className={cn(
+                buttonVariants({ variant: "secondary" }),
+                "cursor-pointer gap-2",
+                uploading && "pointer-events-none opacity-60",
+              )}
+            >
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ImagePlus className="size-4" />
+              )}
+              Photos
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  void addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
 
         {multiUrlImportState && (
           <MultipleChoiceDialog

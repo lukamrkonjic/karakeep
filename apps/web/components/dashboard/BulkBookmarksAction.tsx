@@ -354,7 +354,7 @@ export default function BulkBookmarksAction() {
       />
       {portalContainer && isBulkEditEnabled && !isModalOpen
         ? createPortal(
-            <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[70] sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-max sm:max-w-[calc(100vw-2rem)] sm:-translate-x-1/2">
+            <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] z-[70] sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-max sm:max-w-[calc(100vw-2rem)] sm:-translate-x-1/2">
               <div
                 aria-label={t("actions.bulk_edit")}
                 className="overflow-x-auto rounded-2xl border bg-background/95 p-1 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm duration-200 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none dark:ring-white/10"

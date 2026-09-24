@@ -6,6 +6,7 @@ import "@karakeep/tailwind-config/globals.css";
 
 import type { Viewport } from "next";
 import React from "react";
+import PwaSupport from "@/components/PwaSupport";
 import Providers from "@/lib/providers";
 import {
   getUiPreferences,
@@ -48,6 +49,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Karakeep",
+    // Fork: a status bar that is always readable (white text over the
+    // light theme's white header would not be); theme-color tints it where
+    // iOS follows that.
+    statusBarStyle: "default",
   },
   formatDetection: {
     telephone: false,
@@ -59,6 +64,15 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Fork: the installed app on a phone — edge to edge (the tab bar keeps
+  // clear of the home indicator with env(safe-area-inset-bottom)), and the
+  // browser's bars in the theme's background (PwaSupport follows the app's
+  // own theme setting).
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#161618" },
+  ],
 };
 
 export default async function RootLayout({
@@ -90,6 +104,7 @@ export default async function RootLayout({
             uiPreferences={uiPreferences}
           >
             {children}
+            <PwaSupport />
             <ReactQueryDevtools initialIsOpen={false} />
           </Providers>
           <Toaster />

@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
-import MobileListsMenu from "@/components/shared/sidebar/MobileListsMenu";
-import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
+import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
 import SidebarLayout from "@/components/shared/sidebar/SidebarLayout";
 import { ReaderSettingsProvider } from "@/lib/readerSettings";
@@ -11,9 +10,8 @@ import { api } from "@/server/api/client";
 import { getServerAuthSession } from "@/server/auth";
 import { TRPCError } from "@trpc/server";
 import { TFunction } from "i18next";
-import { Archive, Highlighter, Home, Search, Tag } from "lucide-react";
+import { Archive } from "lucide-react";
 
-import { PluginManager, PluginType } from "@karakeep/shared/plugins";
 import { tryCatch } from "@karakeep/shared/tryCatch";
 
 export default async function Dashboard({
@@ -55,37 +53,6 @@ export default async function Dashboard({
     path: "/dashboard/archive",
   });
 
-  // The mobile menu has no header logo to go home by and no room for the
-  // profile menu's extras, so it keeps every destination.
-  const items = (t: TFunction) =>
-    [
-      {
-        name: t("common.home"),
-        icon: <Home size={18} />,
-        path: "/dashboard/bookmarks",
-      },
-      PluginManager.isRegistered(PluginType.Search)
-        ? [
-            {
-              name: t("common.search"),
-              icon: <Search size={18} />,
-              path: "/dashboard/search",
-            },
-          ]
-        : [],
-      {
-        name: t("common.tags"),
-        icon: <Tag size={18} />,
-        path: "/dashboard/tags",
-      },
-      {
-        name: t("common.highlights"),
-        icon: <Highlighter size={18} />,
-        path: "/dashboard/highlights",
-      },
-      archive(t),
-    ].flat();
-
   return (
     <UserSettingsContextProvider userSettings={userSettings.data}>
       <ReaderSettingsProvider>
@@ -110,13 +77,8 @@ export default async function Dashboard({
               ]}
             />
           }
-          mobileSidebar={
-            // Fork: no All Lists page; the lists open in a panel instead.
-            <MobileSidebar
-              items={items}
-              extra={<MobileListsMenu initialData={lists.data} />}
-            />
-          }
+          // Fork: on a phone, a tab bar (Home, Feed, Lists, Search, More).
+          mobileSidebar={<MobileTabBar lists={lists.data} />}
           modal={modal}
         >
           {children}

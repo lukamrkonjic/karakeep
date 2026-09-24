@@ -335,7 +335,7 @@ export function DuplicatePictures() {
       <CheckStatus />
       <div className="flex flex-col gap-2 text-sm">
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-2">How alike:</span>
+          <span className="mr-2 basis-full sm:basis-auto">How alike:</span>
           {LEVELS.map((l) => (
             <Button
               key={l.level}

@@ -52,6 +52,12 @@ export function useInterfaceLang() {
   return usePreference("lang") ?? settings.lang;
 }
 
+/** Fork: columns on a phone (below the sm breakpoint). */
+export const DEFAULT_MOBILE_GRID_COLUMNS = 2;
+export function useMobileGridColumns() {
+  return usePreference("mobileGridColumns") ?? DEFAULT_MOBILE_GRID_COLUMNS;
+}
+
 export function useGridColumns() {
   const settings = useUserLocalSettings();
   return usePreference("gridColumns") ?? settings.gridColumns;

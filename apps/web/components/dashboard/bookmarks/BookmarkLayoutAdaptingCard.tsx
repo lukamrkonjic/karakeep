@@ -17,13 +17,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Check,
   Circle,
   CircleCheck,
   GripVertical,
   Image as ImageIcon,
   NotebookPen,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -123,24 +123,39 @@ export function BulkEditSelectionOverlay({
   );
   const isBulkEditEnabled = useBulkActionsStore((s) => s.isBulkEditEnabled);
   const toggleBookmark = useBulkActionsStore((state) => state.toggleBookmark);
-  const { theme } = useTheme();
   const { data: session } = useSession();
 
   // Don't show selector for non-owned bookmarks or when bulk edit is disabled
   const isOwner = session?.user?.id === bookmark.userId;
   if (!isBulkEditEnabled || !isOwner) return null;
 
+  // Fork: every card shows whether it's chosen — a round box in its corner,
+  // ticked and ringed when it is (it used to be a 10% tint, invisible on a
+  // photo, and nothing at all on a phone).
   return (
     <button
+      type="button"
+      aria-pressed={isSelected}
+      aria-label={isSelected ? "Deselect" : "Select"}
       className={cn(
-        "absolute left-0 top-0 z-50 h-full w-full bg-opacity-0",
-        {
-          "bg-opacity-10": isSelected,
-        },
-        theme === "dark" ? "bg-white" : "bg-black",
+        "absolute inset-0 z-50 h-full w-full rounded-[inherit] transition-colors",
+        isSelected
+          ? "bg-black/25 ring-2 ring-inset ring-primary dark:bg-white/15"
+          : "bg-transparent",
       )}
       onClick={() => toggleBookmark(bookmark.id)}
-    ></button>
+    >
+      <span
+        className={cn(
+          "absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 shadow",
+          isSelected
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-white bg-black/25",
+        )}
+      >
+        {isSelected && <Check className="size-4" strokeWidth={3} />}
+      </span>
+    </button>
   );
 }
 

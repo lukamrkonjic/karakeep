@@ -238,8 +238,12 @@ function DroppableListSidebarItem({
 
 export default function AllLists({
   initialData,
+  pages = true,
 }: {
   initialData: { lists: ZBookmarkList[] };
+  /** Fork: the pages above the lists (Home, Tailored feed, …); the phone's
+   *  Lists sheet leaves them to the tab bar. */
+  pages?: boolean;
 }) {
   const { t } = useTranslation();
   const pathName = usePathname();
@@ -348,7 +352,7 @@ export default function AllLists({
     "sidebar-scrollbar shrink-0 overflow-hidden [scrollbar-gutter:stable]";
   return (
     <div className="flex min-h-0 flex-1 flex-col text-sm">
-      <ul className={fixedPart}>
+      <ul className={cn(fixedPart, !pages && "hidden")}>
         {/* Fork: every entry has a "…" on hover, where a list's sits. Home
           took the All Lists page's place (list invitations show there). */}
         <SidebarItem
@@ -408,7 +412,11 @@ export default function AllLists({
 
       {/* Fork: the pages above, the lists below their own heading. */}
       <div
-        className={cn(fixedPart, "flex items-center justify-between pb-2 pt-6")}
+        className={cn(
+          fixedPart,
+          "flex items-center justify-between pb-2",
+          pages ? "pt-6" : "pt-1",
+        )}
       >
         <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
           Lists

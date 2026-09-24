@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
-import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
+import SettingsPhoneNav from "@/components/settings/SettingsPhoneNav";
+import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
 import SidebarLayout from "@/components/shared/sidebar/SidebarLayout";
 import { ReaderSettingsProvider } from "@/lib/readerSettings";
+import { useTranslation } from "@/lib/i18n/server";
 import { UserSettingsContextProvider } from "@/lib/userSettings";
 import { api } from "@/server/api/client";
 import { getServerAuthSession } from "@/server/auth";
@@ -128,7 +130,13 @@ export default async function SettingsLayout({
     redirect("/");
   }
 
-  const userSettings = await tryCatch(api.users.settings());
+  const [userSettings, lists] = await Promise.all([
+    tryCatch(api.users.settings()),
+    // For the phone's tab bar (its Lists sheet).
+    tryCatch(api.lists.list()),
+  ]);
+  // oxlint-disable-next-line rules-of-hooks
+  const { t } = await useTranslation();
 
   if (userSettings.error) {
     if (userSettings.error instanceof TRPCError) {
@@ -147,8 +155,13 @@ export default async function SettingsLayout({
       <ReaderSettingsProvider>
         <SidebarLayout
           sidebar={<Sidebar items={settingsSidebarItems} />}
-          mobileSidebar={<MobileSidebar items={settingsSidebarItems} />}
+          // Fork: on a phone, the tab bar, and /settings lists the pages.
+          mobileSidebar={<MobileTabBar lists={lists.data ?? { lists: [] }} />}
         >
+          <SettingsPhoneNav
+            items={settingsSidebarItems(t)}
+            title={t("settings.user_settings")}
+          />
           {children}
         </SidebarLayout>
       </ReaderSettingsProvider>

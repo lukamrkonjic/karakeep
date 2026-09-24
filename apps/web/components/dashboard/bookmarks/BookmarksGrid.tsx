@@ -4,6 +4,8 @@ import NoBookmarksBanner from "@/components/dashboard/bookmarks/NoBookmarksBanne
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
 import useBulkActionsStore from "@/lib/bulkActions";
+import { useLongPress } from "@/lib/hooks/useLongPress";
+import { useCardSheetStore } from "@/lib/store/useCardSheetStore";
 import { useBookmarkKeyboardNavigation } from "@/lib/hooks/useBookmarkKeyboardNavigation";
 import { useTranslation } from "@/lib/i18n/client";
 import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
@@ -12,6 +14,7 @@ import {
   bookmarkLayoutSwitch,
   useBookmarkLayout,
   useGridColumns,
+  useMobileGridColumns,
 } from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 import tailwindConfig from "@/tailwind.config";
@@ -42,7 +45,9 @@ function StyledBookmarkCard({
   return (
     <Slot
       className={cn(
-        "mb-5",
+        // Fork: tighter on a phone; no iOS long-press callout on a card
+        // (a long press opens its actions), no text selection by touch.
+        "mb-2 [-webkit-touch-callout:none] sm:mb-5 [@media(pointer:coarse)]:select-none",
         layout === "masonry" ? "bg-transparent" : "bg-card",
         className,
       )}
@@ -63,22 +68,27 @@ const BookmarkGridItem = memo(function BookmarkGridItem({
   const isFocused = useKeyboardNavigationStore(
     (state) => state.isNavigating && state.focusedIndex === index,
   );
+  // Fork: a long press opens the card's actions (BookmarkOptions' sheet).
+  const openActions = useCardSheetStore((state) => state.open);
+  const longPress = useLongPress(() => openActions(bookmark.id));
 
   return (
     <ErrorBoundary fallback={<UnknownCard bookmark={bookmark} />}>
-      <StyledBookmarkCard
-        className={cn(
-          isFocused &&
-            "ring-2 ring-primary ring-offset-2 ring-offset-background",
-        )}
-      >
-        <BookmarkCard bookmark={bookmark} bookmarkIndex={index} />
-      </StyledBookmarkCard>
+      <div className="contents" {...longPress}>
+        <StyledBookmarkCard
+          className={cn(
+            isFocused &&
+              "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          )}
+        >
+          <BookmarkCard bookmark={bookmark} bookmarkIndex={index} />
+        </StyledBookmarkCard>
+      </div>
     </ErrorBoundary>
   );
 });
 
-function getBreakpointConfig(userColumns: number) {
+function getBreakpointConfig(userColumns: number, phoneColumns: number) {
   const fullConfig = resolveConfig(tailwindConfig);
 
   const breakpointColumnsObj: { [key: number]: number; default: number } = {
@@ -88,7 +98,8 @@ function getBreakpointConfig(userColumns: number) {
   // Responsive behavior: reduce columns on smaller screens
   const lgColumns = Math.max(1, Math.min(userColumns, userColumns - 1));
   const mdColumns = Math.max(1, Math.min(userColumns, 2));
-  const smColumns = 1;
+  // Fork: a phone has its own setting (it used to be always 1).
+  const smColumns = phoneColumns;
 
   breakpointColumnsObj[parseInt(fullConfig.theme.screens.lg)] = lgColumns;
   breakpointColumnsObj[parseInt(fullConfig.theme.screens.md)] = mdColumns;
@@ -96,7 +107,11 @@ function getBreakpointConfig(userColumns: number) {
   return breakpointColumnsObj;
 }
 
-function getColumnsForViewport(userColumns: number, viewportWidth: number) {
+function getColumnsForViewport(
+  userColumns: number,
+  phoneColumns: number,
+  viewportWidth: number,
+) {
   const fullConfig = resolveConfig(tailwindConfig);
   const screens = fullConfig.theme.screens;
   const lg = parseInt(screens.lg);
@@ -104,7 +119,7 @@ function getColumnsForViewport(userColumns: number, viewportWidth: number) {
   const sm = parseInt(screens.sm);
 
   if (viewportWidth <= sm) {
-    return 1;
+    return phoneColumns;
   }
   if (viewportWidth <= md) {
     return Math.max(1, Math.min(userColumns, 2));
@@ -115,7 +130,7 @@ function getColumnsForViewport(userColumns: number, viewportWidth: number) {
   return userColumns;
 }
 
-function useActiveGridColumns(userColumns: number) {
+function useActiveGridColumns(userColumns: number, phoneColumns: number) {
   const [activeColumns, setActiveColumns] = useState(userColumns);
 
   useEffect(() => {
@@ -126,12 +141,16 @@ function useActiveGridColumns(userColumns: number) {
       }
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = null;
-        setActiveColumns(getColumnsForViewport(userColumns, window.innerWidth));
+        setActiveColumns(
+          getColumnsForViewport(userColumns, phoneColumns, window.innerWidth),
+        );
       });
     };
 
     const updateActiveColumnsImmediately = () => {
-      setActiveColumns(getColumnsForViewport(userColumns, window.innerWidth));
+      setActiveColumns(
+        getColumnsForViewport(userColumns, phoneColumns, window.innerWidth),
+      );
     };
 
     updateActiveColumnsImmediately();
@@ -142,7 +161,7 @@ function useActiveGridColumns(userColumns: number) {
         window.cancelAnimationFrame(animationFrame);
       }
     };
-  }, [userColumns]);
+  }, [userColumns, phoneColumns]);
 
   return activeColumns;
 }
@@ -163,7 +182,8 @@ export default function BookmarksGrid({
   const { t } = useTranslation();
   const layout = useBookmarkLayout();
   const gridColumns = useGridColumns();
-  const activeGridColumns = useActiveGridColumns(gridColumns);
+  const phoneColumns = useMobileGridColumns();
+  const activeGridColumns = useActiveGridColumns(gridColumns, phoneColumns);
   const setVisibleBookmarks = useBulkActionsStore(
     (state) => state.setVisibleBookmarks,
   );
@@ -173,8 +193,8 @@ export default function BookmarksGrid({
   );
   const withinListContext = useBookmarkListContext();
   const breakpointConfig = useMemo(
-    () => getBreakpointConfig(gridColumns),
-    [gridColumns],
+    () => getBreakpointConfig(gridColumns, phoneColumns),
+    [gridColumns, phoneColumns],
   );
   // Fire well before the sentinel actually reaches the viewport: masonry
   // columns have uneven heights, and on a slow connection/server the
@@ -251,10 +271,11 @@ export default function BookmarksGrid({
   return (
     <>
       {bookmarkLayoutSwitch(layout, {
+        // Fork: an 8px gutter on a phone (it has 2–4 columns now).
         masonry: (
           <Masonry
-            className="-ml-5 flex w-auto"
-            columnClassName="pl-5"
+            className="-ml-2 flex w-auto sm:-ml-5"
+            columnClassName="pl-2 sm:pl-5"
             breakpointCols={breakpointConfig}
           >
             {children}
@@ -262,8 +283,8 @@ export default function BookmarksGrid({
         ),
         grid: (
           <Masonry
-            className="-ml-5 flex w-auto"
-            columnClassName="pl-5"
+            className="-ml-2 flex w-auto sm:-ml-5"
+            columnClassName="pl-2 sm:pl-5"
             breakpointCols={breakpointConfig}
           >
             {children}

@@ -84,6 +84,11 @@ export function InstagramConnection() {
         {/* The three steps sit right above the field they end in. */}
         <div className="flex flex-col gap-2">
           <p className="font-medium">How to connect</p>
+          {/* Fork: a phone's browser can't show its cookies. */}
+          <p className="text-muted-foreground sm:hidden">
+            Do this on a computer: a phone&apos;s browser doesn&apos;t show its
+            cookies. Once pasted there, it works on the phone too.
+          </p>
           <ol className="list-decimal space-y-1.5 pl-5 text-muted-foreground">
             <li>
               <a

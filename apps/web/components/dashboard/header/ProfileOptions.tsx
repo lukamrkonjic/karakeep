@@ -114,7 +114,7 @@ export default function SidebarProfileOptions() {
         </DropdownMenuItem>
         <Separator className="my-2" />
         <DropdownMenuItem asChild>
-          <Link href="/settings">
+          <Link href="/settings/info">
             <Settings className="mr-2 size-4" />
             {t("settings.user_settings")}
           </Link>

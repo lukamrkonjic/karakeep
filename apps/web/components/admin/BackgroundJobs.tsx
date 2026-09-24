@@ -244,7 +244,13 @@ function JobCard({
                     </ActionButton>
                   )}
                 >
-                  <Button variant="secondary">{action.label}</Button>
+                  {/* Fork: long labels wrap on a phone. */}
+                  <Button
+                    variant="secondary"
+                    className="h-auto min-h-10 whitespace-normal py-2"
+                  >
+                    {action.label}
+                  </Button>
                 </ActionConfirmingDialog>
               ))}
             </div>

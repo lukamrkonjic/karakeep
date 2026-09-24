@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { BottomSheet, SheetItem } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +16,8 @@ import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
 import useUpload from "@/lib/hooks/upload-file";
+import { useIsPhone } from "@/lib/hooks/useIsPhone";
+import { useCardSheetStore } from "@/lib/store/useCardSheetStore";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   Archive,
@@ -52,6 +55,7 @@ import {
 import { useRemoveBookmarkFromList } from "@karakeep/shared-react/hooks/lists";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
+import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
 import { BookmarkedTextEditor } from "./BookmarkedTextEditor";
 import DeleteBookmarkConfirmationDialog from "./DeleteBookmarkConfirmationDialog";
@@ -101,6 +105,12 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
 
   const [isClipboardAvailable, setIsClipboardAvailable] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  // Fork: on a phone the actions are a sheet, opened by the "…" or by a long
+  // press on the card (BookmarksGrid).
+  const isPhone = useIsPhone();
+  const sheetOpen = useCardSheetStore((state) => state.openFor === bookmark.id);
+  const openSheet = useCardSheetStore((state) => state.open);
+  const closeSheet = useCardSheetStore((state) => state.close);
 
   useEffect(() => {
     // This code only runs in the browser
@@ -493,59 +503,110 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
         open={isTextEditorOpen}
         setOpen={setTextEditorOpen}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+      {isPhone ? (
+        <>
           <Button
             variant="ghost"
             className="px-1 focus-visible:ring-0 focus-visible:ring-offset-0"
+            aria-label="Actions"
+            onClick={(e) => {
+              e.preventDefault();
+              openSheet(bookmark.id);
+            }}
           >
             <MoreHorizontal />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-fit">
-          {visibleItems.map((item) => {
-            if (isSubsectionItem(item)) {
-              const visibleSubItems = item.items.filter(
-                (subItem) => subItem.visible,
-              );
-              if (visibleSubItems.length === 0) {
-                return null;
+          <BottomSheet
+            open={sheetOpen}
+            onOpenChange={(open) =>
+              open ? openSheet(bookmark.id) : closeSheet()
+            }
+            title={
+              getBookmarkTitle(bookmark) ||
+              t("common.bookmark", {
+                defaultValue: "Bookmark",
+              })
+            }
+            showTitle
+          >
+            {visibleItems
+              .flatMap((item) =>
+                isSubsectionItem(item)
+                  ? item.items.filter((sub) => sub.visible)
+                  : [item],
+              )
+              .map((item) => (
+                <SheetItem
+                  key={item.id}
+                  icon={item.icon}
+                  disabled={item.disabled}
+                  destructive={item.id === "delete"}
+                  className="[&_svg]:mr-0"
+                  onClick={() => {
+                    closeSheet();
+                    item.onClick();
+                  }}
+                >
+                  {item.title}
+                </SheetItem>
+              ))}
+          </BottomSheet>
+        </>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              className="px-1 focus-visible:ring-0 focus-visible:ring-offset-0"
+            >
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-fit">
+            {visibleItems.map((item) => {
+              if (isSubsectionItem(item)) {
+                const visibleSubItems = item.items.filter(
+                  (subItem) => subItem.visible,
+                );
+                if (visibleSubItems.length === 0) {
+                  return null;
+                }
+                return (
+                  <DropdownMenuSub key={item.id}>
+                    <DropdownMenuSubTrigger>
+                      {item.icon}
+                      <span>{item.title}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {visibleSubItems.map((subItem) => (
+                        <DropdownMenuItem
+                          key={subItem.id}
+                          disabled={subItem.disabled}
+                          onClick={subItem.onClick}
+                        >
+                          {subItem.icon}
+                          <span>{subItem.title}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                );
               }
               return (
-                <DropdownMenuSub key={item.id}>
-                  <DropdownMenuSubTrigger>
-                    {item.icon}
-                    <span>{item.title}</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {visibleSubItems.map((subItem) => (
-                      <DropdownMenuItem
-                        key={subItem.id}
-                        disabled={subItem.disabled}
-                        onClick={subItem.onClick}
-                      >
-                        {subItem.icon}
-                        <span>{subItem.title}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <DropdownMenuItem
+                  key={item.id}
+                  disabled={item.disabled}
+                  className={item.className}
+                  onClick={item.onClick}
+                >
+                  {item.icon}
+                  <span>{item.title}</span>
+                </DropdownMenuItem>
               );
-            }
-            return (
-              <DropdownMenuItem
-                key={item.id}
-                disabled={item.disabled}
-                className={item.className}
-                onClick={item.onClick}
-              >
-                {item.icon}
-                <span>{item.title}</span>
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <input
         type="file"
         ref={bannerFileInputRef}

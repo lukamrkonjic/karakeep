@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BookmarkTagsEditor } from "@/components/dashboard/bookmarks/BookmarkTagsEditor";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth/client";
+import { useIsPhone } from "@/lib/hooks/useIsPhone";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   usePreviewDetailsHidden,
@@ -37,6 +39,7 @@ import { BookmarkProperties } from "./BookmarkProperties";
 import HighlightsBox from "./HighlightsBox";
 import LinkContentSection from "./LinkContentSection";
 import { getPreviewMedia, MediaFitPreview } from "./MediaFitPreview";
+import { PhoneViewer } from "./PhoneViewer";
 import { NoteEditor } from "./NoteEditor";
 import { PreviewActions } from "./PreviewActions";
 import { TextContentSection } from "./TextContentSection";
@@ -110,12 +113,23 @@ export default function BookmarkPreview({
   bookmarkId: string;
   initialData?: ZBookmark;
   onClose?: () => void;
-  /** "modal" sizes itself (the dialog wraps it); "page" fills its parent. */
-  variant?: "page" | "modal";
+  /** "modal" sizes itself (the dialog wraps it); "page" fills its parent;
+   *  "phone" is the full-screen viewer (PhoneViewer). */
+  variant?: "page" | "modal" | "phone";
 }) {
   const api = useTRPC();
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>("content");
+  // Fork: a preview opened as a page (a link to it, or a reload) is the
+  // phone's full-screen viewer too.
+  const isPhone = useIsPhone();
+  const router = useRouter();
+  if (variant === "page" && isPhone) {
+    variant = "phone";
+    // A preview is a page only when loaded as one (a link, a reload): what
+    // came before may be anywhere, so closing goes Home.
+    onClose ??= () => router.replace("/dashboard/bookmarks");
+  }
   // Fork: one remembered setting for every preview (lib/previewDetails.ts).
   const sidebarCollapsed = usePreviewDetailsHidden();
   const toggleDetails = useTogglePreviewDetails();
@@ -140,6 +154,13 @@ export default function BookmarkPreview({
   );
 
   if (!bookmark) {
+    if (variant === "phone") {
+      return (
+        <div className="fixed inset-0 bg-black">
+          <FullPageSpinner />
+        </div>
+      );
+    }
     return variant === "modal" ? (
       <div className="h-[50vh] w-[50vw]">
         <FullPageSpinner />
@@ -241,6 +262,20 @@ export default function BookmarkPreview({
       </div>
     </div>
   );
+
+  if (variant === "phone") {
+    return (
+      <PhoneViewer
+        bookmark={bookmark}
+        media={previewMedia}
+        content={contentSection}
+        details={detailsSection}
+        sourceUrl={sourceUrl ?? null}
+        isOwner={isOwner}
+        onClose={onClose ?? (() => undefined)}
+      />
+    );
+  }
 
   return (
     <>

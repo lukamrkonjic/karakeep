@@ -12,6 +12,8 @@ export const zUiPreferencesSchema = z.object({
   // Upstream's view options (the header's view menu) and language.
   bookmarkGridLayout: z.enum(["grid", "list", "masonry", "compact"]).optional(),
   gridColumns: z.number().int().min(1).max(6).optional(),
+  // Fork: a phone's own column count (the one above is for wider screens).
+  mobileGridColumns: z.number().int().min(1).max(4).optional(),
   showNotes: z.boolean().optional(),
   showTags: z.boolean().optional(),
   showTitle: z.boolean().optional(),

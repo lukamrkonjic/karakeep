@@ -34,11 +34,12 @@ function ImportCard({
 }) {
   return (
     <Card className="transition-all hover:shadow-md">
-      <CardContent className="flex items-center gap-3 p-4">
+      {/* Fork: on a phone the button wraps under the text. */}
+      <CardContent className="flex flex-wrap items-center gap-3 p-4 sm:flex-nowrap">
         <div className="rounded-full bg-primary/10 p-2">
           <Download className="h-5 w-5 text-primary" />
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1 basis-40">
           <h3 className="font-medium">{text}</h3>
           <p>{description}</p>
         </div>
@@ -95,11 +96,12 @@ function ExportButton() {
 
   return (
     <Card className="transition-all hover:shadow-md">
-      <CardContent className="flex items-center gap-3 p-4">
+      {/* Fork: on a phone the button wraps under the text. */}
+      <CardContent className="flex flex-wrap items-center gap-3 p-4 sm:flex-nowrap">
         <div className="rounded-full bg-primary/10 p-2">
           <Upload className="h-5 w-5 text-primary" />
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1 basis-40">
           <h3 className="font-medium">Export File</h3>
           <p>{t("settings.import.export_links_and_notes")}</p>
           <Select

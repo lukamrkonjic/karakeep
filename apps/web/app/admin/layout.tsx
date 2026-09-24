@@ -1,12 +1,16 @@
 import React from "react";
 import { redirect } from "next/navigation";
 import { AdminNotices } from "@/components/admin/AdminNotices";
+import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import MobileSidebar from "@/components/shared/sidebar/MobileSidebar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
 import SidebarLayout from "@/components/shared/sidebar/SidebarLayout";
+import { api } from "@/server/api/client";
 import { getServerAuthSession } from "@/server/auth";
 import { TFunction } from "i18next";
 import { Activity, ArrowLeft, Settings, Users, Wrench } from "lucide-react";
+
+import { tryCatch } from "@karakeep/shared/tryCatch";
 
 const adminSidebarItems = (
   t: TFunction,
@@ -51,11 +55,21 @@ export default async function AdminLayout({
   if (!session || session.user.role !== "admin") {
     redirect("/");
   }
+  // For the phone's tab bar (its Lists sheet).
+  const lists = await tryCatch(api.lists.list());
 
   return (
     <SidebarLayout
       sidebar={<Sidebar items={adminSidebarItems} />}
-      mobileSidebar={<MobileSidebar items={adminSidebarItems} />}
+      mobileSidebar={
+        // Fork: the phone's tab bar, and the admin pages' own icons.
+        <>
+          <MobileTabBar lists={lists.data ?? { lists: [] }} />
+          <div className="border-b sm:hidden">
+            <MobileSidebar items={adminSidebarItems} />
+          </div>
+        </>
+      }
     >
       <div className="flex flex-col gap-1">
         <AdminNotices />

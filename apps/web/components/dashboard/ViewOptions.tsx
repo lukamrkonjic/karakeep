@@ -12,12 +12,14 @@ import {
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { useIsPhone } from "@/lib/hooks/useIsPhone";
 import { useTranslation } from "@/lib/i18n/client";
 import { useUpdatePreferences } from "@/lib/uiPreferences";
 import {
   useBookmarkDisplaySettings,
   useBookmarkLayout,
   useGridColumns,
+  useMobileGridColumns,
 } from "@/lib/userLocalSettings/bookmarksLayout";
 import {
   Check,
@@ -46,6 +48,12 @@ export default function ViewOptions() {
   const { t } = useTranslation();
   const layout = useBookmarkLayout();
   const gridColumns = useGridColumns();
+  // Fork: a phone has its own column count (1–4); the slider sets the one
+  // for the screen it's on.
+  const isPhone = useIsPhone();
+  const phoneColumns = useMobileGridColumns();
+  const columns = isPhone ? phoneColumns : gridColumns;
+  const maxColumns = isPhone ? 4 : 6;
   const displaySettings = useBookmarkDisplaySettings();
   // Fork: saved to the account, applied at once — the grid follows the
   // columns slider while it's dragged.
@@ -112,24 +120,32 @@ export default function ViewOptions() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm font-semibold">
                   {t("view_options.columns")}
+                  {isPhone && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      on a phone
+                    </span>
+                  )}
                 </span>
-                <span className="text-sm text-muted-foreground">
-                  {gridColumns}
-                </span>
+                <span className="text-sm text-muted-foreground">{columns}</span>
               </div>
               <Slider
-                value={[gridColumns]}
+                value={[columns]}
                 onValueChange={([value]) =>
-                  void updatePreferences({ gridColumns: value })
+                  void updatePreferences(
+                    isPhone
+                      ? { mobileGridColumns: value }
+                      : { gridColumns: value },
+                  )
                 }
                 min={1}
-                max={6}
+                max={maxColumns}
                 step={1}
                 className="w-full"
               />
               <div className="mt-1 flex justify-between text-xs text-muted-foreground">
                 <span>1</span>
-                <span>6</span>
+                <span>{maxColumns}</span>
               </div>
             </div>
           </>

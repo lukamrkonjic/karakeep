@@ -6,12 +6,13 @@ import {
   bookmarkLayoutSwitch,
   useBookmarkLayout,
   useGridColumns,
+  useMobileGridColumns,
 } from "@/lib/userLocalSettings/bookmarksLayout";
 import tailwindConfig from "@/tailwind.config";
 import Masonry from "react-masonry-css";
 import resolveConfig from "tailwindcss/resolveConfig";
 
-function getBreakpointConfig(userColumns: number) {
+function getBreakpointConfig(userColumns: number, phoneColumns: number) {
   const fullConfig = resolveConfig(tailwindConfig);
 
   const breakpointColumnsObj: { [key: number]: number; default: number } = {
@@ -20,7 +21,8 @@ function getBreakpointConfig(userColumns: number) {
 
   const lgColumns = Math.max(1, Math.min(userColumns, userColumns - 1));
   const mdColumns = Math.max(1, Math.min(userColumns, 2));
-  const smColumns = 1;
+  // Fork: a phone has its own setting (it used to be always 1).
+  const smColumns = phoneColumns;
 
   breakpointColumnsObj[parseInt(fullConfig.theme.screens.lg)] = lgColumns;
   breakpointColumnsObj[parseInt(fullConfig.theme.screens.md)] = mdColumns;
@@ -50,9 +52,10 @@ export default function BookmarksGridSkeleton({
 }) {
   const layout = useBookmarkLayout();
   const gridColumns = useGridColumns();
+  const phoneColumns = useMobileGridColumns();
   const breakpointConfig = useMemo(
-    () => getBreakpointConfig(gridColumns),
-    [gridColumns],
+    () => getBreakpointConfig(gridColumns, phoneColumns),
+    [gridColumns, phoneColumns],
   );
 
   const children = Array.from({ length: count }, (_, i) => (
