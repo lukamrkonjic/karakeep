@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
-import { and, eq, isNotNull, max } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, max, or } from "drizzle-orm";
 import {
   ACCEPTED_IMAGE_TYPES,
   CONVERTIBLE_IMAGE_TYPES,
@@ -20,7 +20,10 @@ import {
 import { TRPCError } from "@trpc/server";
 import { withWorkerTracing } from "workerTracing";
 
-import type { ZSubscriptionRequestSchema } from "@karakeep/shared-server";
+import type {
+  InstagramFetch,
+  ZSubscriptionRequestSchema,
+} from "@karakeep/shared-server";
 import { db } from "@karakeep/db";
 import type { InstagramCookies } from "@karakeep/shared/utils/instagram";
 import {
@@ -33,6 +36,7 @@ import {
   users,
 } from "@karakeep/db/schema";
 import {
+  checkInstagramSession,
   deleteAsset,
   INSTAGRAM_SESSION_PURPOSE,
   InstagramSessionError,
@@ -102,6 +106,9 @@ const MAX_FAILURES_IN_A_ROW = 5;
 /** The cron fires on the hour; a run that finished a few minutes past the
  *  hour must still count as due on the hour it is next due. */
 const SCHEDULE_SLACK_MS = 10 * 60_000;
+/** An Instagram session nothing has used for this long is checked on its
+ *  own (a sync that reads a collection is a check). */
+const INSTAGRAM_CHECK_EVERY_MS = 24 * 3600_000;
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
@@ -110,11 +117,14 @@ export const SubscriptionRefreshingWorker = cron.schedule(
   "0 * * * *",
   async () => {
     logger.info("[subscription] Looking for subscriptions to sync ...");
+    // Users whose Instagram session a sync is about to use (and so check).
+    const syncingInstagram = new Set<string>();
     try {
       const rows = await db
         .select({
           id: listSubscriptionsTable.id,
           userId: listSubscriptionsTable.userId,
+          kind: listSubscriptionsTable.kind,
           lastRunAt: listSubscriptionsTable.lastRunAt,
           intervalHours: users.subscriptionIntervalHours,
         })
@@ -134,11 +144,21 @@ export const SubscriptionRefreshingWorker = cron.schedule(
             row.intervalHours * 3600_000 - SCHEDULE_SLACK_MS;
         if (due) {
           await queueSubscriptionSync(db, row);
+          if (row.kind === "instagram") {
+            syncingInstagram.add(row.userId);
+          }
         }
       }
     } catch (error) {
       logger.error(
         `[subscription] Error scheduling subscription jobs: ${error}`,
+      );
+    }
+    try {
+      await checkInstagramSessions(syncingInstagram);
+    } catch (error) {
+      logger.error(
+        `[subscription] Error checking Instagram sessions: ${error}`,
       );
     }
   },
@@ -504,6 +524,86 @@ async function importItem(
   return "downloaded";
 }
 
+/**
+ * Settings and the app's banner say so, and no collection tries it again.
+ * Only the first time counts: when it expired is what closing the banner
+ * remembers, so a second finding mustn't bring it back.
+ */
+async function markInstagramExpired(userId: string) {
+  await db
+    .update(instagramSessionsTable)
+    .set({ status: "expired", checkedAt: new Date() })
+    .where(
+      and(
+        eq(instagramSessionsTable.userId, userId),
+        eq(instagramSessionsTable.status, "ok"),
+      ),
+    );
+}
+
+/**
+ * Asks Instagram whether each connected session still works once nothing
+ * has used it for a day, so an expired one is noticed even when no
+ * Instagram collection syncs (manual syncs, paused subscriptions, none
+ * yet). `skip`: users a sync is about to check anyway.
+ */
+export async function checkInstagramSessions(skip = new Set<string>()) {
+  const rows = await db.query.instagramSessionsTable.findMany({
+    where: and(
+      eq(instagramSessionsTable.status, "ok"),
+      or(
+        isNull(instagramSessionsTable.checkedAt),
+        lt(
+          instagramSessionsTable.checkedAt,
+          new Date(Date.now() - INSTAGRAM_CHECK_EVERY_MS + SCHEDULE_SLACK_MS),
+        ),
+      ),
+    ),
+    columns: { userId: true },
+  });
+  for (const { userId } of rows) {
+    if (skip.has(userId)) {
+      continue;
+    }
+    const session = await instagramSessionOf(userId);
+    if ("problem" in session) {
+      // Sealed under another server secret: as good as expired, and the
+      // fix is the same (paste it again).
+      logger.warn(
+        `[subscription] Instagram session of ${userId}: ${session.problem}`,
+      );
+      await markInstagramExpired(userId);
+      continue;
+    }
+    const { data: checked, error } = await tryCatch(
+      checkInstagramSession(session.cookies, {
+        fetch: fetchWithProxy as unknown as InstagramFetch,
+        signal: AbortSignal.timeout(60_000),
+      }),
+    );
+    if (error instanceof InstagramSessionError) {
+      logger.info(
+        `[subscription] Instagram signed out the session of ${userId}: ${error.message}`,
+      );
+      await markInstagramExpired(userId);
+    } else if (error) {
+      // Slow down, or not reached: the next hour tries again.
+      logger.warn(
+        `[subscription] Couldn't check the Instagram session of ${userId}: ${errorMessage(error)}`,
+      );
+    } else {
+      await db
+        .update(instagramSessionsTable)
+        .set({
+          checkedAt: new Date(),
+          // Picks up a renamed account.
+          ...(checked.username ? { username: checked.username } : {}),
+        })
+        .where(eq(instagramSessionsTable.userId, userId));
+    }
+  }
+}
+
 /** The user's Instagram session, opened — or why there's none to use. */
 async function instagramSessionOf(
   userId: string,
@@ -617,11 +717,7 @@ async function run(
   const { data: fetched, error: fetchError } = await tryCatch(reading);
   if (fetchError) {
     if (fetchError instanceof InstagramSessionError) {
-      // Settings shows it, and no other collection tries it again.
-      await db
-        .update(instagramSessionsTable)
-        .set({ status: "expired", checkedAt: new Date() })
-        .where(eq(instagramSessionsTable.userId, subscription.userId));
+      await markInstagramExpired(subscription.userId);
       return fail(fetchError.message);
     }
     return fail(

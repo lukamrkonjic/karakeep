@@ -32,6 +32,9 @@ export const zUiPreferencesSchema = z.object({
   // Feed videos: play on hover, and whether with sound.
   hoverVideoAutoplay: z.boolean().optional(),
   hoverVideoSound: z.boolean().optional(),
+  // The "Instagram cookie expired" banner was closed for this expiry (the
+  // expired session's checkedAt): it never comes back for it.
+  instagramExpiryDismissed: z.string().max(40).optional(),
 });
 
 export type ZUiPreferences = z.infer<typeof zUiPreferencesSchema>;

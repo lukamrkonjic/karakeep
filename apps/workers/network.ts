@@ -485,6 +485,9 @@ export const fetchWithProxy = async (
     body: preparedBody,
     baseOptions,
   } = prepareFetchOptions(options);
+  // Fork: `redirect: "manual"` hands a redirect back instead of following
+  // it (Instagram answers a signed-out session with one to its login).
+  const followRedirects = options.redirect !== "manual";
 
   let redirectsRemaining = maxRedirects;
   let currentUrl = url;
@@ -517,7 +520,7 @@ export const fetchWithProxy = async (
       }),
     );
 
-    if (!isRedirectResponse(response)) {
+    if (!isRedirectResponse(response) || !followRedirects) {
       return response;
     }
 

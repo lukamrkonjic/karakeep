@@ -14,7 +14,7 @@ export default async function Header() {
   }
 
   return (
-    <header className="sticky left-0 right-0 top-0 z-50 flex h-20 w-full min-w-0 items-center gap-2 overflow-hidden bg-background pl-4 pr-5">
+    <header className="sticky left-0 right-0 top-0 z-50 flex h-20 w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden bg-background pl-4 pr-5">
       <div className="hidden w-56 shrink-0 items-center sm:flex xl:w-[17rem]">
         <Link
           href="/dashboard/bookmarks"

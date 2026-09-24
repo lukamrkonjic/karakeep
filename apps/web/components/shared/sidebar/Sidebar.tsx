@@ -38,7 +38,7 @@ export default async function Sidebar({
   const footer = footerItems?.(t) ?? [];
 
   return (
-    <aside className="flex h-[calc(100vh-80px)] w-60 flex-col gap-5 p-4 pt-5 xl:w-72">
+    <aside className="flex h-full w-60 flex-col gap-5 p-4 pt-5 xl:w-72">
       {top.length > 0 && <SidebarItems items={top} />}
       {/* The sections take the height that is left and scroll inside it, so
           the footer stays in view however many lists there are. */}
