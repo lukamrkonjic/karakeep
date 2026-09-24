@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import useBulkActionsStore from "@/lib/bulkActions";
-import { useBookmarkDragStart } from "@/lib/hooks/useBookmarkDragStart";
-import { useIsTouch } from "@/lib/hooks/useIsPhone";
+import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { cn } from "@/lib/utils";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -47,25 +46,22 @@ export function MasonryMediaCard({
     bookmark.assets.find((a) => a.id === media.assetId)?.fileName ??
     null;
   const { isBulkEditEnabled } = useBulkActionsStore();
-  const handleDragStart = useBookmarkDragStart(bookmark);
-  // Fork: by touch there is no sidebar to drop on, and iOS would start a
-  // drag on the long press that opens the tile's actions.
-  const isTouch = useIsTouch();
-  const draggable = !isBulkEditEnabled && !isTouch;
+  // Fork: always draggable with a mouse (a selected tile drags the whole
+  // selection); never by touch, where a long press opens its actions.
+  const drag = useBookmarkDrag(bookmark);
 
   return (
     <div
       className={cn(
         "group relative overflow-hidden rounded-lg",
-        draggable && "cursor-grab active:cursor-grabbing",
+        drag.draggable && "cursor-grab active:cursor-grabbing",
         className,
       )}
       data-bookmark-index={bookmarkIndex}
       // The whole tile is the drag handle — there's no room for a separate
       // grip icon on a borderless media-only tile. Drag it onto a sidebar
       // list to add it there (see AllLists.tsx's useDropTarget).
-      draggable={draggable}
-      onDragStart={draggable ? handleDragStart : undefined}
+      {...drag}
     >
       <BulkEditSelectionOverlay bookmark={bookmark} />
 

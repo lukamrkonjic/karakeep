@@ -15,6 +15,7 @@ export default function SidebarItem({
   collapseButton,
   right = null,
   dropHighlight = false,
+  dropHint,
   onDrop,
   onDragOver,
   onDragEnter,
@@ -29,6 +30,8 @@ export default function SidebarItem({
   right?: React.ReactNode;
   collapseButton?: React.ReactNode;
   dropHighlight?: boolean;
+  /** Fork: what a drop would do (Move / + Add), shown while highlighted. */
+  dropHint?: React.ReactNode;
   onDrop?: React.DragEventHandler;
   onDragOver?: React.DragEventHandler;
   onDragEnter?: React.DragEventHandler;
@@ -67,6 +70,11 @@ export default function SidebarItem({
         </Link>
       </div>
       {right}
+      {dropHighlight && dropHint && (
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground shadow-sm">
+          {dropHint}
+        </span>
+      )}
     </li>
   );
 }

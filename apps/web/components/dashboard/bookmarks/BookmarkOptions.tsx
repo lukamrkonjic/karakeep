@@ -104,7 +104,6 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
   );
 
   const [isClipboardAvailable, setIsClipboardAvailable] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
   // Fork: on a phone the actions are a sheet, opened by the "…" or by a long
   // press on the card (BookmarksGrid).
   const isPhone = useIsPhone();
@@ -119,16 +118,6 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
         window.navigator &&
         !!window.navigator.clipboard,
     );
-
-    const touchPointer = window.matchMedia("(any-pointer: coarse)");
-    const updateIsTouchDevice = () => setIsTouchDevice(touchPointer.matches);
-
-    updateIsTouchDevice();
-    touchPointer.addEventListener("change", updateIsTouchDevice);
-
-    return () => {
-      touchPointer.removeEventListener("change", updateIsTouchDevice);
-    };
   }, []);
 
   const { setOpen: setManageListsModalOpen, content: manageListsModal } =
@@ -259,7 +248,9 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
       id: "select",
       title: t("actions.select"),
       icon: <Circle className="mr-2 size-4" />,
-      visible: isOwner && isTouchDevice,
+      // Fork: on a desktop too — a masonry tile has no other way to start
+      // choosing several (to drag them onto a list together, say).
+      visible: isOwner,
       disabled: false,
       onClick: () => enableBulkEditForBookmark(bookmark.id),
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import SidebarItem from "@/components/shared/sidebar/SidebarItem";
 import { Button } from "@/components/ui/button";
@@ -9,16 +9,11 @@ import {
   CollapsibleContent,
   CollapsibleTriggerChevron,
 } from "@/components/ui/collapsible";
-import { toast } from "@/components/ui/sonner";
-import {
-  BOOKMARK_DRAG_MIME,
-  BOOKMARK_DRAG_SOURCE_LIST_MIME,
-} from "@/lib/bookmark-drag";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
+import { useListDrop } from "@/lib/hooks/useListDrop";
 import { cn } from "@/lib/utils";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronsDownUp,
   ChevronsUpDown,
@@ -29,11 +24,8 @@ import {
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import {
   augmentBookmarkListsWithInitialData,
-  useAddBookmarkToList,
   useBookmarkLists,
-  useRemoveBookmarkFromList,
 } from "@karakeep/shared-react/hooks/lists";
-import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
 import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
@@ -44,120 +36,11 @@ import { ListOptions } from "../lists/ListOptions";
 import { BookmarkPageOptions } from "../PageOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
-function useDropTarget(listId: string, listName: string) {
-  const api = useTRPC();
-  const queryClient = useQueryClient();
-  const { data: allLists } = useBookmarkLists();
-  const { mutateAsync: addToList } = useAddBookmarkToList();
-  const { mutateAsync: removeFromList } = useRemoveBookmarkFromList();
-  const [dropHighlight, setDropHighlight] = useState(false);
-  const dragCounterRef = useRef(0);
-  const { t } = useTranslation();
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(BOOKMARK_DRAG_MIME)) {
-      e.preventDefault();
-      // Every drop is a move (see onDrop).
-      e.dataTransfer.dropEffect = "move";
-    }
-  }, []);
-
-  const onDragEnter = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(BOOKMARK_DRAG_MIME)) {
-      e.preventDefault();
-      dragCounterRef.current++;
-      setDropHighlight(true);
-    }
-  }, []);
-
-  const onDragLeave = useCallback(() => {
-    dragCounterRef.current--;
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0;
-      setDropHighlight(false);
-    }
-  }, []);
-
-  const onDrop = useCallback(
-    async (e: React.DragEvent) => {
-      dragCounterRef.current = 0;
-      setDropHighlight(false);
-      const bookmarkId = e.dataTransfer.getData(BOOKMARK_DRAG_MIME);
-      if (!bookmarkId) return;
-      e.preventDefault();
-      const sourceListId =
-        e.dataTransfer.getData(BOOKMARK_DRAG_SOURCE_LIST_MIME) || undefined;
-      if (sourceListId === listId) return; // dropped back onto its own list
-      try {
-        // A drop always MOVES, never copies: out of the list it was dragged
-        // from, or, from a view that is not a list (home, search, a tag),
-        // out of every list it is in. The preview's List chips are the one
-        // place to put a bookmark in several lists at once.
-        const { lists: current } = await queryClient.fetchQuery(
-          api.lists.getListsOfBookmark.queryOptions({ bookmarkId }),
-        );
-        // Dragged out of a list, leave it — including from a sub-list of it,
-        // since a parent's page can show everything nested under it.
-        const parentOf = new Map(
-          (allLists?.data ?? []).map((l) => [l.id, l.parentId ?? null]),
-        );
-        const within = (id: string, rootId: string) => {
-          for (
-            let cur: string | null | undefined = id, hops = 0;
-            cur && hops < 50;
-            cur = parentOf.get(cur), hops++
-          ) {
-            if (cur === rootId) {
-              return true;
-            }
-          }
-          return false;
-        };
-        const leaving = current.filter(
-          (l) =>
-            l.id !== listId &&
-            (sourceListId
-              ? within(l.id, sourceListId)
-              : l.type === "manual" && l.userRole !== "viewer"),
-        );
-        await addToList({ bookmarkId, listId });
-        for (const from of leaving) {
-          await removeFromList({ bookmarkId, listId: from.id });
-        }
-        toast({
-          description: t("lists.move_to_list_success", {
-            list: listName,
-            defaultValue: `Moved to "${listName}"`,
-          }),
-        });
-      } catch {
-        toast({
-          description: t("common.something_went_wrong", {
-            defaultValue: "Something went wrong",
-          }),
-          variant: "destructive",
-        });
-      }
-    },
-    [
-      api,
-      queryClient,
-      allLists,
-      addToList,
-      removeFromList,
-      listId,
-      listName,
-      t,
-    ],
-  );
-
-  return { dropHighlight, onDragOver, onDragEnter, onDragLeave, onDrop };
-}
-
 function DroppableListSidebarItem({
   node,
   level,
   open,
+  onOpenChange,
   numBookmarks,
   selectedListId,
   setSelectedListId,
@@ -165,6 +48,7 @@ function DroppableListSidebarItem({
   node: ZBookmarkListTreeNode;
   level: number;
   open: boolean;
+  onOpenChange: (open: boolean) => void;
   numBookmarks?: number;
   selectedListId: string | null;
   setSelectedListId: (id: string | null) => void;
@@ -172,8 +56,19 @@ function DroppableListSidebarItem({
   const canDrop =
     node.item.type === "manual" &&
     (node.item.userRole === "owner" || node.item.userRole === "editor");
-  const { dropHighlight, onDragOver, onDragEnter, onDragLeave, onDrop } =
-    useDropTarget(node.item.id, node.item.name);
+  // Fork: bookmarks dropped here move (or, with Ctrl/Alt, are added); a
+  // folded list unfolds when a drag rests on it, so its sub-lists can be
+  // dropped on too (useListDrop).
+  const drop = useListDrop(
+    { id: node.item.id, name: node.item.name },
+    {
+      enabled: canDrop,
+      onHover:
+        node.children.length > 0 && !open
+          ? () => onOpenChange(true)
+          : undefined,
+    },
+  );
 
   return (
     <SidebarItem
@@ -227,11 +122,12 @@ function DroppableListSidebarItem({
       }
       linkClassName="py-1.5 px-2"
       style={{ marginLeft: `${level * 1}rem` }}
-      dropHighlight={canDrop && dropHighlight}
-      onDragOver={canDrop ? onDragOver : undefined}
-      onDragEnter={canDrop ? onDragEnter : undefined}
-      onDragLeave={canDrop ? onDragLeave : undefined}
-      onDrop={canDrop ? onDrop : undefined}
+      dropHighlight={drop.over !== null}
+      dropHint={drop.over === "add" ? "+ Add" : "Move"}
+      onDragOver={drop.onDragOver}
+      onDragEnter={drop.onDragEnter}
+      onDragLeave={drop.onDragLeave}
+      onDrop={drop.onDrop}
     />
   );
 }
@@ -457,11 +353,12 @@ export default function AllLists({
           filter={(node) => node.item.userRole === "owner"}
           openState={openState}
           reorderable
-          render={({ node, level, open, numBookmarks }) => (
+          render={({ node, level, open, onOpenChange, numBookmarks }) => (
             <DroppableListSidebarItem
               node={node}
               level={level}
               open={open}
+              onOpenChange={onOpenChange}
               numBookmarks={numBookmarks}
               selectedListId={selectedListId}
               setSelectedListId={setSelectedListId}
@@ -491,11 +388,12 @@ export default function AllLists({
                 filter={(node) => node.item.userRole !== "owner"}
                 openState={openState}
                 indentOffset={1}
-                render={({ node, level, open, numBookmarks }) => (
+                render={({ node, level, open, onOpenChange, numBookmarks }) => (
                   <DroppableListSidebarItem
                     node={node}
                     level={level}
                     open={open}
+                    onOpenChange={onOpenChange}
                     numBookmarks={numBookmarks}
                     selectedListId={selectedListId}
                     setSelectedListId={setSelectedListId}

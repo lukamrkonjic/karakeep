@@ -3,18 +3,22 @@ import {
   BOOKMARK_DRAG_MIME,
   BOOKMARK_DRAG_SOURCE_LIST_MIME,
 } from "@/lib/bookmark-drag";
+import { setBookmarkDragImage } from "@/lib/bookmarkDragImage";
+import useBulkActionsStore from "@/lib/bulkActions";
+import { useIsTouch } from "@/lib/hooks/useIsPhone";
 
 import { useBookmarkListContext } from "@karakeep/shared-react/hooks/bookmark-list-context";
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
 /**
- * Shared HTML5 drag-start handler for dragging a bookmark onto a sidebar
- * list (see AllLists.tsx's useDropTarget, which reads BOOKMARK_DRAG_MIME).
- * Used by both the grid/list card's drag handle and the masonry tile, which
- * has no room for a separate handle icon and is draggable as a whole.
+ * Makes a card draggable onto a list (the sidebar's, or a list page's
+ * sub-list tiles — see useListDrop). Fork: the whole card, in every layout;
+ * a card that's part of the selection drags the whole selection; a small
+ * picture of it follows the pointer (bookmarkDragImage). Not by touch, where
+ * a long press opens the card's actions instead.
  */
-export function useBookmarkDragStart(bookmark: ZBookmark) {
+export function useBookmarkDrag(bookmark: ZBookmark) {
   // If we're currently browsing a manual list, tag the drag with it so a
   // drop target can remove the bookmark from here too (a true "move"
   // instead of just adding to the target list). Smart lists can't have a
@@ -22,43 +26,27 @@ export function useBookmarkDragStart(bookmark: ZBookmark) {
   const listContext = useBookmarkListContext();
   const sourceListId =
     listContext?.type === "manual" ? listContext.id : undefined;
+  const isTouch = useIsTouch();
 
-  return useCallback(
+  const onDragStart = useCallback(
     (e: React.DragEvent) => {
       e.stopPropagation();
-      e.dataTransfer.setData(BOOKMARK_DRAG_MIME, bookmark.id);
+      const { isBulkEditEnabled, selectedBookmarkIds } =
+        useBulkActionsStore.getState();
+      const ids =
+        isBulkEditEnabled && selectedBookmarkIds.includes(bookmark.id)
+          ? selectedBookmarkIds
+          : [bookmark.id];
+      e.dataTransfer.setData(BOOKMARK_DRAG_MIME, ids.join(","));
       if (sourceListId) {
         e.dataTransfer.setData(BOOKMARK_DRAG_SOURCE_LIST_MIME, sourceListId);
       }
-      // Dropping onto a list always moves the bookmark (see AllLists.tsx).
-      e.dataTransfer.effectAllowed = "move";
-
-      // Create a small pill element as the drag preview
-      const pill = document.createElement("div");
-      const title = getBookmarkTitle(bookmark) ?? "Untitled";
-      pill.textContent =
-        title.length > 40 ? title.substring(0, 40) + "…" : title;
-      Object.assign(pill.style, {
-        position: "fixed",
-        left: "-9999px",
-        top: "-9999px",
-        padding: "6px 12px",
-        borderRadius: "8px",
-        backgroundColor: "hsl(var(--card))",
-        border: "1px solid hsl(var(--border))",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-        fontSize: "13px",
-        fontFamily: "inherit",
-        color: "hsl(var(--foreground))",
-        maxWidth: "240px",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      });
-      document.body.appendChild(pill);
-      e.dataTransfer.setDragImage(pill, 0, 0);
-      requestAnimationFrame(() => pill.remove());
+      // A drop moves, or adds with Ctrl/Alt held (useListDrop).
+      e.dataTransfer.effectAllowed = "copyMove";
+      setBookmarkDragImage(e, getBookmarkTitle(bookmark) ?? "", ids.length);
     },
     [bookmark, sourceListId],
   );
+
+  return { draggable: !isTouch, onDragStart };
 }

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
-import { useBookmarkDragStart } from "@/lib/hooks/useBookmarkDragStart";
+import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   bookmarkLayoutSwitch,
@@ -20,7 +20,6 @@ import {
   Check,
   Circle,
   CircleCheck,
-  GripVertical,
   Image as ImageIcon,
   NotebookPen,
 } from "lucide-react";
@@ -159,32 +158,6 @@ export function BulkEditSelectionOverlay({
   );
 }
 
-function DragHandle({
-  bookmark,
-  className,
-}: {
-  bookmark: ZBookmark;
-  className?: string;
-}) {
-  const { isBulkEditEnabled } = useBulkActionsStore();
-  const handleDragStart = useBookmarkDragStart(bookmark);
-
-  if (isBulkEditEnabled) return null;
-
-  return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      className={cn(
-        "absolute z-40 hidden cursor-grab rounded bg-background/70 p-0.5 opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 [@media(pointer:fine)]:block",
-        className,
-      )}
-    >
-      <GripVertical className="size-4 text-muted-foreground" />
-    </div>
-  );
-}
-
 function HoverActionBar({
   bookmark,
   inline = false,
@@ -298,6 +271,8 @@ function ListView({
   className,
   bookmarkIndex,
 }: Props) {
+  // Fork: the whole card drags onto a list (useBookmarkDrag).
+  const drag = useBookmarkDrag(bookmark);
   const { showNotes, showTags, showTitle, imageFit } =
     useBookmarkDisplaySettings();
   const imgFitClass = switchCase(imageFit, {
@@ -313,13 +288,10 @@ function ListView({
         className,
       )}
       data-bookmark-index={bookmarkIndex}
+      {...drag}
     >
       <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
-      <DragHandle
-        bookmark={bookmark}
-        className="left-1 top-1/2 -translate-y-1/2"
-      />
       <HoverActionBar bookmark={bookmark} />
       <div className="flex size-32 items-center justify-center overflow-hidden">
         {image("list", cn("size-32 rounded-lg", imgFitClass))}
@@ -360,6 +332,8 @@ function GridView({
   fitHeight = false,
   bookmarkIndex,
 }: Props & { layout: BookmarksLayoutTypes }) {
+  // Fork: the whole card drags onto a list (useBookmarkDrag).
+  const drag = useBookmarkDrag(bookmark);
   const { showNotes, showTags, showTitle, imageFit } =
     useBookmarkDisplaySettings();
   const imgFitClass = switchCase(imageFit, {
@@ -380,10 +354,10 @@ function GridView({
         fitHeight && layout != "grid" ? "max-h-96" : "h-96",
       )}
       data-bookmark-index={bookmarkIndex}
+      {...drag}
     >
       <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
-      <DragHandle bookmark={bookmark} className="left-2 top-2" />
       <HoverActionBar bookmark={bookmark} />
       {img && <div className="h-56 w-full shrink-0 overflow-hidden">{img}</div>}
       <div className="flex h-full flex-col justify-between gap-2 overflow-hidden p-2">
@@ -418,6 +392,8 @@ function CompactView({
   className,
   bookmarkIndex,
 }: Props) {
+  // Fork: the whole card drags onto a list (useBookmarkDrag).
+  const drag = useBookmarkDrag(bookmark);
   const { showTitle } = useBookmarkDisplaySettings();
   const isBulkEditEnabled = useBulkActionsStore(
     (state) => state.isBulkEditEnabled,
@@ -430,6 +406,7 @@ function CompactView({
         "max-h-96",
       )}
       data-bookmark-index={bookmarkIndex}
+      {...drag}
     >
       <BulkEditSelectionOverlay bookmark={bookmark} />
       <OwnerIndicator bookmark={bookmark} />
