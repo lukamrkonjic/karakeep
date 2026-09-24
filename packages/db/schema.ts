@@ -3,6 +3,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { relations, sql, SQL } from "drizzle-orm";
 import {
   AnySQLiteColumn,
+  blob,
   foreignKey,
   index,
   integer,
@@ -892,6 +893,81 @@ export const listSubscriptionImportsTable = sqliteTable(
     unique().on(t.subscriptionId, t.externalId),
   ],
 );
+
+// Fork: duplicate pictures (apps/workers/workers/duplicatesWorker.ts). What
+// a picture bookmark looks like to the picture model: its embedding, made
+// once from the asset named here (a replaced file is looked at again).
+export const pictureEmbeddingsTable = sqliteTable(
+  "pictureEmbeddings",
+  {
+    bookmarkId: text("bookmarkId")
+      .notNull()
+      .primaryKey()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAtField(),
+    assetId: text("assetId").notNull(),
+    model: text("model").notNull(),
+    // 512 little-endian float32s, length 1; null when the picture couldn't
+    // be read (so it isn't tried again every night).
+    embedding: blob("embedding", { mode: "buffer" }),
+    width: integer("width"),
+    height: integer("height"),
+    // Compared with the user's other pictures yet? A check that stops
+    // halfway picks up here.
+    compared: integer("compared", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => [index("pictureEmbeddings_userId_idx").on(t.userId, t.compared)],
+);
+
+// Two pictures the model finds alike, closest first by `distance` (Immich's
+// cosine distance). "kept": the user kept both — never offered again.
+export const duplicatePicturesTable = sqliteTable(
+  "duplicatePictures",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    createdAt: createdAtField(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The pair in id order, so it is stored once.
+    bookmarkId: text("bookmarkId")
+      .notNull()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    otherBookmarkId: text("otherBookmarkId")
+      .notNull()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    distance: real("distance").notNull(),
+    status: text("status", { enum: ["open", "kept"] })
+      .notNull()
+      .default("open"),
+  },
+  (t) => [
+    unique().on(t.bookmarkId, t.otherBookmarkId),
+    index("duplicatePictures_userId_idx").on(t.userId, t.status),
+    // Deleting a bookmark removes its pairs through either column.
+    index("duplicatePictures_otherBookmarkId_idx").on(t.otherBookmarkId),
+  ],
+);
+
+// Each user's last duplicate-pictures check (nightly, or "Check now").
+export const pictureDuplicateScansTable = sqliteTable("pictureDuplicateScans", {
+  userId: text("userId")
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status", {
+    enum: ["pending", "running", "done", "failed"],
+  }).notNull(),
+  // When the last check finished.
+  checkedAt: integer("checkedAt", { mode: "timestamp" }),
+  error: text("error"),
+});
 
 export const backupsTable = sqliteTable(
   "backups",

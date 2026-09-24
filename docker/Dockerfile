@@ -68,6 +68,17 @@ RUN (cd apps/web && pnpm exec next build --experimental-build-mode compile)
 RUN (cd apps/workers && pnpm --config.verify-deps-before-run=false build)
 RUN CI=true pnpm deploy --node-linker=isolated --legacy --filter @karakeep/workers --prod /prod/workers
 
+# Fork: onnxruntime-node (the duplicate-pictures model) ships its native
+# runtime for every OS and CPU, ~290 MB; keep only this image's (~45 MB).
+ARG TARGETARCH
+RUN ORT_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64) \
+    && find /prod/workers/node_modules -type d -path "*/onnxruntime-node/bin/napi-v*" -prune \
+    | while read -r dir; do \
+        find "$dir" -mindepth 2 -maxdepth 2 -type d ! -path "$dir/linux/$ORT_ARCH" -exec rm -rf {} + \
+        && find "$dir" -mindepth 1 -type d -empty -delete; \
+    done \
+    && test -e "$(find /prod/workers/node_modules -path "*/onnxruntime-node/bin/napi-v*/linux/$ORT_ARCH/onnxruntime_binding.node" | head -n 1)"
+
 # Build the cli
 RUN (cd apps/cli && pnpm --config.verify-deps-before-run=false build)
 

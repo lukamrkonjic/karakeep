@@ -8,6 +8,7 @@ import { configAppRouter } from "./config";
 import { feedsAppRouter } from "./feeds";
 import { highlightsAppRouter } from "./highlights";
 import { importSessionsRouter } from "./importSessions";
+import { duplicatePicturesAppRouter } from "./duplicatePictures";
 import { instagramAppRouter } from "./instagram";
 import { invitesAppRouter } from "./invites";
 import { listSubscriptionsAppRouter } from "./listSubscriptions";
@@ -41,6 +42,7 @@ export const appRouter = router({
   subscriptions: subscriptionsRouter,
   listSubscriptions: listSubscriptionsAppRouter,
   instagram: instagramAppRouter,
+  duplicatePictures: duplicatePicturesAppRouter,
   uiPreferences: uiPreferencesAppRouter,
   config: configAppRouter,
 });

@@ -17,6 +17,9 @@ allowBuilds:
   tesseract.js: true
   # These install scripts are informational or unnecessary for our installs.
   "@parcel/watcher": false
+  # Fork: its postinstall fetches NVIDIA CUDA libraries on Linux; the CPU
+  # runtime the duplicate-pictures worker uses is in the package itself.
+  onnxruntime-node: false
   core-js: false
   core-js-pure: false
   postman-code-generators: false

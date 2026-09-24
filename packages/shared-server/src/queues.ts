@@ -1,8 +1,11 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
 import type { DB } from "@karakeep/db";
-import { listSubscriptionsTable } from "@karakeep/db/schema";
+import {
+  listSubscriptionsTable,
+  pictureDuplicateScansTable,
+} from "@karakeep/db/schema";
 import {
   EnqueueOptions,
   getQueueClient,
@@ -381,3 +384,40 @@ export const BackupQueue = createDeferredQueue<ZBackupRequest>("backup_queue", {
   },
   keepFailedJobs: false,
 });
+
+// Fork: duplicate pictures — one check of one user's pictures (the nightly
+// run, or Cleanups → Duplicate pictures → Check now).
+export const zDuplicatePicturesRequestSchema = z.object({
+  userId: z.string(),
+});
+export type ZDuplicatePicturesRequest = z.infer<
+  typeof zDuplicatePicturesRequestSchema
+>;
+
+export const DuplicatePicturesQueue =
+  createDeferredQueue<ZDuplicatePicturesRequest>("duplicate_pictures_queue", {
+    defaultJobArgs: {
+      // It runs every night anyway.
+      numRetries: 0,
+    },
+    keepFailedJobs: false,
+  });
+
+/**
+ * Asks for a check of the user's pictures, shown as pending until the worker
+ * starts it. A check that is already queued or running absorbs this one.
+ */
+export async function queueDuplicatePicturesCheck(db: DB, userId: string) {
+  await db
+    .insert(pictureDuplicateScansTable)
+    .values({ userId, status: "pending" })
+    .onConflictDoUpdate({
+      target: pictureDuplicateScansTable.userId,
+      set: { status: "pending", error: null },
+      setWhere: ne(pictureDuplicateScansTable.status, "running"),
+    });
+  await DuplicatePicturesQueue.enqueue(
+    { userId },
+    { idempotencyKey: `duplicate-pictures:${userId}`, groupId: userId },
+  );
+}

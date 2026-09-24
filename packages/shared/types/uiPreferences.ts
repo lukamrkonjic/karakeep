@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { zDuplicateMatchLevelSchema } from "./duplicatePictures";
+
 /**
  * Fork: the web app's UI preferences, kept per account (users.uiPreferences)
  * so every device shows the same — they used to live in each browser's
@@ -35,6 +37,8 @@ export const zUiPreferencesSchema = z.object({
   // The "Instagram cookie expired" banner was closed for this expiry (the
   // expired session's checkedAt): it never comes back for it.
   instagramExpiryDismissed: z.string().max(40).optional(),
+  // Cleanups → Duplicate pictures: how alike counts as a duplicate.
+  duplicatePicturesMatch: zDuplicateMatchLevelSchema.optional(),
 });
 
 export type ZUiPreferences = z.infer<typeof zUiPreferencesSchema>;

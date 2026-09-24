@@ -6,6 +6,7 @@ import {
   AdminMaintenanceQueue,
   AssetPreprocessingQueue,
   BackupQueue,
+  DuplicatePicturesQueue,
   EmbeddingsQueue,
   FeedQueue,
   initEventLogger,
@@ -37,6 +38,9 @@ let feedRefreshingWorker:
   | undefined;
 let subscriptionRefreshingWorker:
   | typeof import("./workers/subscriptionWorker").SubscriptionRefreshingWorker
+  | undefined;
+let duplicatePicturesSchedulingWorker:
+  | typeof import("./workers/duplicatesWorker").DuplicatePicturesSchedulingWorker
   | undefined;
 
 const workerBuilders = {
@@ -90,6 +94,13 @@ const workerBuilders = {
     subscriptionRefreshingWorker = SubscriptionRefreshingWorker;
     await SubscriptionQueue.ensureInit();
     return SubscriptionWorker.build();
+  },
+  duplicates: async () => {
+    const { DuplicatePicturesSchedulingWorker, DuplicatePicturesWorker } =
+      await import("./workers/duplicatesWorker");
+    duplicatePicturesSchedulingWorker = DuplicatePicturesSchedulingWorker;
+    await DuplicatePicturesQueue.ensureInit();
+    return DuplicatePicturesWorker.build();
   },
   assetPreprocessing: async () => {
     const { AssetPreprocessingWorker } =
@@ -167,6 +178,10 @@ async function main() {
     subscriptionRefreshingWorker?.start();
   }
 
+  if (workers.some((w) => w.name === "duplicates")) {
+    duplicatePicturesSchedulingWorker?.start();
+  }
+
   // Start import polling worker
   let importWorker = null;
   let importWorkerPromise: Promise<void> | null = null;
@@ -200,6 +215,9 @@ async function main() {
   }
   if (workers.some((w) => w.name === "subscription")) {
     subscriptionRefreshingWorker?.stop();
+  }
+  if (workers.some((w) => w.name === "duplicates")) {
+    duplicatePicturesSchedulingWorker?.stop();
   }
   if (importWorker) {
     importWorker.stop();

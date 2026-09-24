@@ -144,6 +144,8 @@ export function defaultBeforeEach(seedDB = true) {
         triggerSearchReindex: testQueueMocks.triggerSearchReindex,
         // Fork: list subscriptions queue their first sync on creation.
         queueSubscriptionSync: vi.fn(async () => undefined),
+        // Fork: Cleanups → Duplicate pictures → Check now.
+        queueDuplicatePicturesCheck: vi.fn(async () => undefined),
       };
     });
     Object.assign(context, await buildTestContext(seedDB));
