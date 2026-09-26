@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ActionButton } from "@/components/ui/action-button";
+import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 
+import type { ZListSubscription } from "@karakeep/shared/types/listSubscriptions";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
 import {
@@ -62,6 +64,72 @@ function OptionCheckbox({
       />
       {children}
     </label>
+  );
+}
+
+/**
+ * "Forget what it took": the next sync takes the whole source again, as if
+ * the subscription were new — to take again what was deleted, say with other
+ * settings. What you still have is filed again, never downloaded twice.
+ */
+function ForgetWhatItTook({
+  subscription,
+  onForgotten,
+}: {
+  subscription: ZListSubscription;
+  onForgotten: () => void;
+}) {
+  const api = useTRPC();
+  const { mutate: forget, isPending } = useMutation(
+    api.listSubscriptions.forget.mutationOptions({
+      onSuccess: ({ forgotten }) => {
+        const what = `${forgotten.toLocaleString()} ${forgotten === 1 ? "picture" : "pictures"}`;
+        toast({
+          description: subscription.enabled
+            ? `Forgot ${what}; syncing again.`
+            : `Forgot ${what}; it syncs again when you resume it.`,
+        });
+        onForgotten();
+      },
+      onError: (e) => toast({ variant: "destructive", description: e.message }),
+    }),
+  );
+  const source = subscription.kind === "instagram" ? "collection" : "board";
+  return (
+    <ActionConfirmingDialog
+      title="Forget what it took?"
+      description={
+        <p className="text-sm text-muted-foreground">
+          {subscription.enabled ? "Right away" : "When you resume it"}, it goes
+          through the whole {source} again as if it were new, with its current
+          settings. Pictures you deleted are downloaded again; ones you still
+          have are put back in this list, not copied.
+        </p>
+      }
+      actionButton={(setDialogOpen) => (
+        <ActionButton
+          loading={isPending}
+          onClick={() =>
+            forget(
+              { subscriptionId: subscription.id },
+              { onSuccess: () => setDialogOpen(false) },
+            )
+          }
+        >
+          Forget
+        </ActionButton>
+      )}
+    >
+      <button
+        type="button"
+        disabled={isSyncing(subscription)}
+        title="Take the whole source again, as if the subscription were new"
+        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+      >
+        <RotateCcw className="size-3" />
+        Forget what it took
+      </button>
+    </ActionConfirmingDialog>
   );
 }
 
@@ -265,6 +333,10 @@ export function ListSubscriptionsModal({
                   >
                     Skip near-duplicates
                   </OptionCheckbox>
+                  <ForgetWhatItTook
+                    subscription={subscription}
+                    onForgotten={() => void invalidate()}
+                  />
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">

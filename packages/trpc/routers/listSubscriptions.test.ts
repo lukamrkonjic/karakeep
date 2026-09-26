@@ -1,14 +1,19 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { listSubscriptionsTable } from "@karakeep/db/schema";
+import {
+  listSubscriptionImportsTable,
+  listSubscriptionsTable,
+} from "@karakeep/db/schema";
+import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import type { CustomTestContext } from "../testUtils";
 import { defaultBeforeEach } from "../testUtils";
 
 beforeEach<CustomTestContext>(defaultBeforeEach(true));
 
-// Fork: a list subscription's "Whole carousels" checkbox.
+// Fork: a list subscription's "Whole carousels" checkbox, and forgetting what
+// it took.
 describe("List subscriptions", () => {
   const board = "https://www.pinterest.com/luka/art/";
 
@@ -127,6 +132,83 @@ describe("List subscriptions", () => {
         subscriptionId: id,
         wholeCarousel: false,
       }),
+    ).rejects.toThrow(/Subscription not found/);
+  });
+
+  test<CustomTestContext>("forgetting what it took: kept pictures detached, the rest dropped", async ({
+    apiCallers,
+    db,
+  }) => {
+    const caller = apiCallers[0];
+    const userId = (await caller.users.whoami()).id;
+    const list = await caller.lists.create({
+      name: "Art",
+      icon: "",
+      type: "manual",
+    });
+    const { id } = await caller.listSubscriptions.create({
+      listId: list.id,
+      url: board,
+    });
+    const other = await caller.listSubscriptions.create({
+      listId: list.id,
+      url: "https://www.pinterest.com/luka/food/",
+    });
+    // Its first sync is done.
+    await db
+      .update(listSubscriptionsTable)
+      .set({ lastStatus: "success" })
+      .where(eq(listSubscriptionsTable.id, id));
+    const kept = await caller.bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "a picture still here",
+    });
+    await db.insert(listSubscriptionImportsTable).values([
+      { userId, subscriptionId: id, externalId: "1", bookmarkId: kept.id },
+      // Its picture was deleted, or it was skipped for good.
+      { userId, subscriptionId: id, externalId: "2", bookmarkId: null },
+      { userId, subscriptionId: other.id, externalId: "3", bookmarkId: null },
+    ]);
+    // The router's (mocked) one: testUtils mocks shared-server once it's
+    // loaded, after this file's own imports.
+    const queued = vi.mocked(
+      (await import("@karakeep/shared-server")).queueSubscriptionSync,
+    );
+    queued.mockClear();
+
+    expect(
+      await caller.listSubscriptions.forget({ subscriptionId: id }),
+    ).toEqual({ forgotten: 2 });
+    const rows = await db.select().from(listSubscriptionImportsTable);
+    expect(
+      rows.map((r) => [r.externalId, r.subscriptionId, r.bookmarkId]).sort(),
+    ).toEqual([
+      ["1", null, kept.id],
+      ["3", other.id, null],
+    ]);
+    expect(queued).toHaveBeenCalledTimes(1);
+    expect(queued.mock.calls[0][1]).toMatchObject({ id });
+
+    // Not while it syncs; a paused one forgets without syncing.
+    await db
+      .update(listSubscriptionsTable)
+      .set({ lastStatus: "pending" })
+      .where(eq(listSubscriptionsTable.id, id));
+    await expect(
+      caller.listSubscriptions.forget({ subscriptionId: id }),
+    ).rejects.toThrow(/syncing/);
+    await caller.listSubscriptions.update({
+      subscriptionId: id,
+      enabled: false,
+    });
+    queued.mockClear();
+    expect(
+      await caller.listSubscriptions.forget({ subscriptionId: id }),
+    ).toEqual({ forgotten: 0 });
+    expect(queued).not.toHaveBeenCalled();
+
+    await expect(
+      apiCallers[1].listSubscriptions.forget({ subscriptionId: other.id }),
     ).rejects.toThrow(/Subscription not found/);
   });
 });

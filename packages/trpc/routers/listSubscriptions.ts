@@ -1,10 +1,11 @@
 import { experimental_trpcMiddleware, TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import {
   bookmarkLists,
   instagramSessionsTable,
+  listSubscriptionImportsTable,
   listSubscriptionsTable,
 } from "@karakeep/db/schema";
 import { queueSubscriptionSync } from "@karakeep/shared-server";
@@ -233,6 +234,60 @@ export const listSubscriptionsAppRouter = router({
       await ctx.db
         .delete(listSubscriptionsTable)
         .where(eq(listSubscriptionsTable.id, input.subscriptionId));
+    }),
+
+  /**
+   * "Forget what it took": the next sync goes through the whole source again,
+   * as if the subscription were new. Its record of an item whose picture you
+   * still have is detached, as a removed subscription's is, so that picture
+   * is filed in the list again, not downloaded twice; the rest (deleted
+   * pictures, items skipped for good) is dropped, so it's taken again.
+   */
+  forget: subscriptionsProcedure
+    .input(z.object({ subscriptionId: z.string() }))
+    .output(z.object({ forgotten: z.number() }))
+    .use(ensureSubscriptionOwnership)
+    .mutation(async ({ input, ctx }) => {
+      // A running sync goes by the record it read when it started.
+      if (
+        ctx.subscription.enabled &&
+        ctx.subscription.lastStatus === "pending"
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "It's syncing. Forget what it took once that's done.",
+        });
+      }
+      const forgotten = await ctx.db.transaction((tx) => {
+        const dropped = tx
+          .delete(listSubscriptionImportsTable)
+          .where(
+            and(
+              eq(
+                listSubscriptionImportsTable.subscriptionId,
+                input.subscriptionId,
+              ),
+              isNull(listSubscriptionImportsTable.bookmarkId),
+            ),
+          )
+          .run();
+        const detached = tx
+          .update(listSubscriptionImportsTable)
+          .set({ subscriptionId: null })
+          .where(
+            eq(
+              listSubscriptionImportsTable.subscriptionId,
+              input.subscriptionId,
+            ),
+          )
+          .run();
+        return dropped.changes + detached.changes;
+      });
+      // A paused one takes it again when it's resumed.
+      if (ctx.subscription.enabled) {
+        await queueSubscriptionSync(ctx.db, ctx.subscription);
+      }
+      return { forgotten };
     }),
 
   /** "Sync now": every enabled subscription of a list, right away. */

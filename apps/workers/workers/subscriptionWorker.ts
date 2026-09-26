@@ -30,6 +30,7 @@ import {
   assets,
   AssetTypes,
   bookmarks,
+  bookmarksInLists,
   instagramSessionsTable,
   listSubscriptionImportsTable,
   listSubscriptionsTable,
@@ -429,7 +430,14 @@ async function existingBookmarkFor(
       and(
         eq(listSubscriptionImportsTable.userId, userId),
         item.mediaKey
-          ? eq(listSubscriptionImportsTable.mediaKey, item.mediaKey)
+          ? or(
+              eq(listSubscriptionImportsTable.mediaKey, item.mediaKey),
+              // Taken before its picture had a key: known by its id.
+              and(
+                isNull(listSubscriptionImportsTable.mediaKey),
+                eq(listSubscriptionImportsTable.externalId, item.externalId),
+              ),
+            )
           : eq(listSubscriptionImportsTable.externalId, item.externalId),
         isNotNull(listSubscriptionImportsTable.bookmarkId),
       ),
@@ -455,16 +463,31 @@ async function remember(
     .onConflictDoNothing();
 }
 
+/** Files a bookmark in the list; false when it was in it already. */
 async function addToList(
   client: TRPCClient,
   subscription: Subscription,
   bookmarkId: string,
-) {
+): Promise<boolean> {
+  const [there] = await db
+    .select({ bookmarkId: bookmarksInLists.bookmarkId })
+    .from(bookmarksInLists)
+    .where(
+      and(
+        eq(bookmarksInLists.listId, subscription.listId),
+        eq(bookmarksInLists.bookmarkId, bookmarkId),
+      ),
+    )
+    .limit(1);
+  if (there) {
+    return false;
+  }
   try {
     await client.lists.addToList({ listId: subscription.listId, bookmarkId });
   } catch (error) {
     throw new StopRun(`Couldn't add to the list: ${errorMessage(error)}`);
   }
+  return true;
 }
 
 async function importItem(
@@ -474,13 +497,15 @@ async function importItem(
   createdAt: Date,
   nearDuplicates: NearDuplicateFinder | null,
   signal: AbortSignal,
-): Promise<"downloaded" | "linked" | "alike"> {
+): Promise<"downloaded" | "linked" | "alike" | "kept"> {
   // A picture the user already has: file that bookmark, don't make a copy.
+  // "kept": it's in the list already (a subscription that forgot what it
+  // took goes through what it has again), so it isn't new.
   const existing = await existingBookmarkFor(subscription.userId, item);
   if (existing) {
-    await addToList(client, subscription, existing);
+    const filed = await addToList(client, subscription, existing);
     await remember(subscription, item, existing);
-    return "linked";
+    return filed ? "linked" : "kept";
   }
 
   const file = await download(item, SOURCES[subscription.kind].referer);
@@ -495,9 +520,9 @@ async function importItem(
         signal,
       );
       if (seen?.match) {
-        await addToList(client, subscription, seen.match);
+        const filed = await addToList(client, subscription, seen.match);
         await remember(subscription, item, seen.match);
-        return "alike";
+        return filed ? "alike" : "kept";
       }
       looked = seen?.looked ?? null;
     }
@@ -799,6 +824,7 @@ async function run(
   let downloaded = 0;
   let linked = 0;
   let alike = 0;
+  let kept = 0;
   let skipped = 0;
   let failed = 0;
   let failedInARow = 0;
@@ -822,6 +848,8 @@ async function run(
         downloaded++;
       } else if (outcome === "alike") {
         alike++;
+      } else if (outcome === "kept") {
+        kept++;
       } else {
         linked++;
       }
@@ -865,7 +893,7 @@ async function run(
     lastImportedCount: added,
   });
   logger.info(
-    `[subscription][${jobId}] Added ${added} to list ${subscription.listId} (${downloaded} downloaded, ${linked} already saved${alike ? `, ${alike} near-duplicates of saved ones` : ""})${skipped ? `, skipped ${skipped}` : ""}${failed ? `, ${failed} failed` : ""}${stoppedBecause ? `; stopped: ${stoppedBecause}` : ""}.`,
+    `[subscription][${jobId}] Added ${added} to list ${subscription.listId} (${downloaded} downloaded, ${linked} already saved${alike ? `, ${alike} near-duplicates of saved ones` : ""})${kept ? `, ${kept} in it already` : ""}${skipped ? `, skipped ${skipped}` : ""}${failed ? `, ${failed} failed` : ""}${stoppedBecause ? `; stopped: ${stoppedBecause}` : ""}.`,
   );
 
   // New pictures: fingerprints, then a list suggested for each.
@@ -875,7 +903,7 @@ async function run(
 
   // More than one run's worth: carry straight on rather than waiting for the
   // schedule. Only while it is getting somewhere.
-  if (!stoppedBecause && added > 0 && fresh.length > batch.length) {
+  if (!stoppedBecause && added + kept > 0 && fresh.length > batch.length) {
     await SubscriptionQueue.enqueue(
       { subscriptionId: subscription.id },
       { groupId: subscription.userId },
