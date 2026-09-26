@@ -9,11 +9,7 @@ import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { useTranslation } from "@/lib/i18n/client";
-import {
-  selectRangeTo,
-  startSelection,
-  toggleSelection,
-} from "@/lib/selection";
+import { selectRangeTo, toggleSelection } from "@/lib/selection";
 import {
   bookmarkLayoutSwitch,
   useBookmarkDisplaySettings,
@@ -127,25 +123,10 @@ export function BulkEditSelectionOverlay({
   const isOwner = userId === bookmark.userId;
   if (!isOwner) return null;
 
-  // Fork: before selecting, the round box shows where a pointer hovers (not
-  // by touch — a long press does it there); clicking it starts selecting,
-  // with this card picked.
+  // Fork: nothing on the card until selecting — that starts with a long
+  // press, a Ctrl/⌘-click, the drag box or "…" → Select.
   if (!isBulkEditEnabled) {
-    return (
-      <button
-        type="button"
-        aria-label="Select"
-        title="Select"
-        className="absolute left-2 top-2 z-30 hidden size-6 items-center justify-center rounded-full border-2 border-white bg-black/25 text-white/70 opacity-0 shadow transition-opacity duration-150 hover:bg-black/40 hover:text-white focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:flex"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          startSelection(bookmark.id);
-        }}
-      >
-        <Check className="size-3.5" strokeWidth={3} />
-      </button>
-    );
+    return null;
   }
 
   // Fork: every card shows whether it's chosen — a round box in its corner,

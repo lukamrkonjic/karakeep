@@ -127,7 +127,7 @@ function CheckStatus() {
         </ActionButton>
         <span>
           {status.status === "waiting" &&
-            "Waiting for the new pictures' fingerprints… "}
+            "Waiting for new pictures to be indexed… "}
           {status.status === "pending" && "Waiting for the workers… "}
           {status.status === "running" && `Checking: ${counted}.`}
           {status.status === "never" && "Not checked yet."}

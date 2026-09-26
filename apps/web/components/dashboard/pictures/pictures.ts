@@ -11,20 +11,22 @@ import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
  * search by description, list suggestions — routers/pictures.ts).
  */
 
-/** The picture to show for a bookmark: its own, or a video's first frame. */
-export function pictureAssetOf(bookmark: ZBookmark): string | null {
-  if (bookmark.content.type !== BookmarkTypes.ASSET) {
-    return null;
+/**
+ * The picture to show for a bookmark: a picture bookmark's own file, or a
+ * video's first frame — a video bookmark's, or a note's or link's with one
+ * (the same pictures as the fingerprints: shared-server pictureSources.ts).
+ */
+export function pictureOf(
+  bookmark: ZBookmark,
+): { assetId: string; video: boolean } | null {
+  if (
+    bookmark.content.type === BookmarkTypes.ASSET &&
+    bookmark.content.assetType === "image"
+  ) {
+    return { assetId: bookmark.content.assetId, video: false };
   }
-  if (bookmark.content.assetType === "image") {
-    return bookmark.content.assetId;
-  }
-  if (bookmark.content.assetType === "video") {
-    return (
-      bookmark.assets.find((a) => a.assetType === "videoThumbnail")?.id ?? null
-    );
-  }
-  return null;
+  const frame = bookmark.assets.find((a) => a.assetType === "videoThumbnail");
+  return frame ? { assetId: frame.id, video: true } : null;
 }
 
 /** Refreshes what adding to a list, or a suggestion going away, changes. */

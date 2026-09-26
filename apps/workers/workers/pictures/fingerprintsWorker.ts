@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { workerStatsCounter } from "metrics";
 import cron from "node-cron";
 import { withWorkerTracing } from "workerTracing";
@@ -6,10 +6,6 @@ import { withWorkerTracing } from "workerTracing";
 import type { ZPictureJobRequest } from "@karakeep/shared-server";
 import { db } from "@karakeep/db";
 import {
-  assets,
-  AssetTypes,
-  bookmarkAssets,
-  bookmarks,
   duplicatePicturesTable,
   pictureDuplicateScansTable,
   pictureEmbeddingsTable,
@@ -18,6 +14,7 @@ import {
 } from "@karakeep/db/schema";
 import {
   CLIP_MODEL_ID,
+  fingerprintProgress,
   getPictureSettings,
   PictureFingerprintsQueue,
   queueDuplicatePicturesCompare,
@@ -34,8 +31,8 @@ import { pictureModel } from "./models";
 
 /**
  * Fork: picture fingerprints — the picture model's embedding of every
- * picture (a video by its first frame), made once and again only when the
- * file is replaced. Every hour, every night or only when asked (Settings →
+ * picture (a video by its first frame, whether it's a video bookmark or on a
+ * note or link), made once and again only when the file is replaced. Every hour, every night or only when asked (Settings →
  * Pictures). Duplicate pictures and list suggestions work on them: asking for
  * either marks it "waiting" and asks for this job, which queues what waits
  * when it's done.
@@ -53,7 +50,7 @@ export const PictureFingerprintsSchedulingWorker = cron.schedule(
         const due =
           fingerprintSchedule === "hourly" ||
           (fingerprintSchedule === "nightly" && nightly);
-        if (due && (await picturesToLookAt(userId)).length > 0) {
+        if (due && (await fingerprintProgress(db, userId)).todo.length > 0) {
           await requestPictureFingerprints(db, userId);
         }
       }
@@ -98,53 +95,6 @@ export class PictureFingerprintsWorker {
   }
 }
 
-/** The user's pictures without a fingerprint (of their current file). */
-export async function picturesToLookAt(userId: string) {
-  const rows = await db
-    .select({
-      bookmarkId: bookmarks.id,
-      kind: bookmarkAssets.assetType,
-      assetId: bookmarkAssets.assetId,
-      lookedAt: pictureEmbeddingsTable.assetId,
-      model: pictureEmbeddingsTable.model,
-    })
-    .from(bookmarks)
-    .innerJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
-    .leftJoin(
-      pictureEmbeddingsTable,
-      eq(pictureEmbeddingsTable.bookmarkId, bookmarks.id),
-    )
-    .where(
-      and(
-        eq(bookmarks.userId, userId),
-        inArray(bookmarkAssets.assetType, ["image", "video"]),
-      ),
-    );
-  // A video is looked at by its first frame, once the preprocessing worker
-  // has made one.
-  const posters = new Map(
-    (
-      await db
-        .select({ bookmarkId: assets.bookmarkId, id: assets.id })
-        .from(assets)
-        .where(
-          and(
-            eq(assets.userId, userId),
-            eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL),
-          ),
-        )
-    ).map((a) => [a.bookmarkId, a.id]),
-  );
-  return rows.flatMap((row) => {
-    const assetId =
-      row.kind === "image" ? row.assetId : posters.get(row.bookmarkId);
-    if (!assetId || (row.lookedAt === assetId && row.model === CLIP_MODEL_ID)) {
-      return [];
-    }
-    return [{ bookmarkId: row.bookmarkId, assetId, again: !!row.lookedAt }];
-  });
-}
-
 /** Queues the jobs waiting for this one, and new pictures' suggestions. */
 async function queueWhatWaits(userId: string, made: number) {
   const scan = await db.query.pictureDuplicateScansTable.findFirst({
@@ -172,7 +122,9 @@ async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
     error: null,
   });
 
-  const todo = await picturesToLookAt(userId);
+  // Every picture without a fingerprint of its current file — the whole
+  // library the first time (shared-server's pictureSources.ts says which).
+  const { todo } = await fingerprintProgress(db, userId);
   if (todo.length > 0) {
     // Loaded — downloaded, the first time — before the first picture: a
     // model that can't be had fails the run, not every picture.

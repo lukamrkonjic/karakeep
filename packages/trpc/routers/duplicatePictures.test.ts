@@ -8,6 +8,7 @@ import {
   duplicatePicturesTable,
   pictureEmbeddingsTable,
 } from "@karakeep/db/schema";
+import { CLIP_MODEL_ID } from "@karakeep/shared-server";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import type { CustomTestContext } from "../testUtils";
@@ -44,7 +45,7 @@ async function picture(
     bookmarkId: bookmark.id,
     userId,
     assetId: `asset-${name}`,
-    model: "test",
+    model: CLIP_MODEL_ID,
     width,
     height,
     compared: true,

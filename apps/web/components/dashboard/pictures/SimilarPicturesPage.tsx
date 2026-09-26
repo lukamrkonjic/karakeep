@@ -8,7 +8,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
-import { pictureAssetOf } from "./pictures";
+import { pictureOf } from "./pictures";
 
 /**
  * Fork: "More like this", all of it — every picture like this one from all
@@ -37,7 +37,7 @@ export default function SimilarPicturesPage({
   if (error) {
     throw error;
   }
-  const picture = source ? pictureAssetOf(source) : null;
+  const picture = source ? pictureOf(source) : null;
   const total = data?.pages[0]?.total;
   const name = source?.title?.trim();
 
@@ -51,7 +51,7 @@ export default function SimilarPicturesPage({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={getAssetUrl(picture)}
+              src={getAssetUrl(picture.assetId)}
               alt={name ?? ""}
               className="size-16 object-cover"
             />
@@ -72,8 +72,7 @@ export default function SimilarPicturesPage({
         <BookmarksGridSkeleton />
       ) : total === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Nothing like it — or it hasn&apos;t got its fingerprint yet (Settings
-          → Pictures).
+          Nothing like it — or it isn&apos;t indexed yet (Settings → Pictures).
         </p>
       ) : (
         <BookmarksGrid

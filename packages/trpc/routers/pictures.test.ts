@@ -10,6 +10,7 @@ import {
   pictureTextQueriesTable,
 } from "@karakeep/db/schema";
 import {
+  CLIP_MODEL_ID,
   normalizeDescription,
   pictureTextQueryId,
   vectorToBuffer,
@@ -50,7 +51,7 @@ async function picture(api: Api, db: DB, name: string, degrees: number) {
     bookmarkId: bookmark.id,
     userId,
     assetId: `asset-${name}`,
-    model: "test",
+    model: CLIP_MODEL_ID,
     embedding: vectorToBuffer(at(degrees)),
     compared: true,
     suggested: true,
@@ -233,18 +234,58 @@ describe("Pictures", () => {
     expect((await caller.pictures.status()).suggestions.open).toBe(0);
   });
 
-  test<CustomTestContext>("status: how many pictures have a fingerprint", async ({
+  test<CustomTestContext>("status: every picture, a video on a note too", async ({
     apiCallers,
     db,
   }) => {
     const caller = apiCallers[0];
+    const userId = (await caller.users.whoami()).id;
     await picture(caller, db, "a", 0);
-    const status = await caller.pictures.status();
-    expect(status.fingerprints).toMatchObject({
+    // A note carrying a video counts by the video's first frame.
+    const note = await caller.bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "a note with a video",
+    });
+    await db.insert(assets).values({
+      id: "frame-note",
+      assetType: AssetTypes.LINK_VIDEO_THUMBNAIL,
+      contentType: "image/jpeg",
+      size: 10,
+      userId,
+      bookmarkId: note.id,
+    });
+    const fingerprints = async () =>
+      (await caller.pictures.status()).fingerprints;
+    expect(await fingerprints()).toMatchObject({
       status: "never",
       done: 1,
-      total: 1,
+      unreadable: 0,
+      total: 2,
     });
-    expect(status.models).toEqual({ picture: false, text: false });
+
+    // Looked at but unreadable: counted apart.
+    await db.insert(pictureEmbeddingsTable).values({
+      bookmarkId: note.id,
+      userId,
+      assetId: "frame-note",
+      model: CLIP_MODEL_ID,
+      compared: true,
+      suggested: true,
+    });
+    expect(await fingerprints()).toMatchObject({
+      done: 1,
+      unreadable: 1,
+      total: 2,
+    });
+    // One of another model or file doesn't count: it's done again.
+    await db
+      .update(pictureEmbeddingsTable)
+      .set({ model: "another" })
+      .where(eq(pictureEmbeddingsTable.bookmarkId, note.id));
+    expect(await fingerprints()).toMatchObject({ done: 1, unreadable: 0 });
+    expect((await caller.pictures.status()).models).toEqual({
+      picture: false,
+      text: false,
+    });
   });
 });

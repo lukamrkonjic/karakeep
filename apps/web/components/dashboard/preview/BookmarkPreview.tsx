@@ -32,6 +32,7 @@ import {
 import { BookmarkMarkdownComponent } from "../bookmarks/BookmarkMarkdownComponent";
 import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
 import { ListSuggestionChips } from "../pictures/ListSuggestionChips";
+import { pictureOf } from "../pictures/pictures";
 import { SimilarPictures } from "../pictures/SimilarPictures";
 import { AssetContentSection } from "./AssetContentSection";
 import AttachmentBox from "./AttachmentBox";
@@ -253,7 +254,7 @@ export default function BookmarkPreview({
         media={previewMedia}
         readOnly={!isOwner}
       />
-      {previewMedia && <SimilarPictures bookmarkId={bookmark.id} />}
+      {pictureOf(bookmark) && <SimilarPictures bookmarkId={bookmark.id} />}
       <AttachmentBox
         bookmark={bookmark}
         readOnly={!isOwner}

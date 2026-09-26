@@ -4,8 +4,6 @@ import { z } from "zod";
 
 import type { ZPictureThumb } from "@karakeep/shared/types/pictures";
 import {
-  assets,
-  AssetTypes,
   bookmarkAssets,
   bookmarkLists,
   bookmarks,
@@ -19,6 +17,7 @@ import {
 import {
   bufferToVector,
   clipModelDownloaded,
+  fingerprintProgress,
   getPictureSettings,
   normalizeDescription,
   pictureTextQueryId,
@@ -164,7 +163,11 @@ async function describedVector(
   return null;
 }
 
-/** The user's picture bookmarks as thumbnails. */
+/**
+ * The user's pictures as thumbnails: a picture bookmark's own file, or for a
+ * video (a video bookmark, a note or link with one) the first frame its
+ * fingerprint is of.
+ */
 async function thumbsOf(
   ctx: AuthedContext,
   ids: string[],
@@ -177,11 +180,10 @@ async function thumbsOf(
         title: bookmarks.title,
         kind: bookmarkAssets.assetType,
         assetId: bookmarkAssets.assetId,
-        // A video's first frame, which its fingerprint is of.
         lookedAt: pictureEmbeddingsTable.assetId,
       })
       .from(bookmarks)
-      .innerJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
+      .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
       .leftJoin(
         pictureEmbeddingsTable,
         eq(pictureEmbeddingsTable.bookmarkId, bookmarks.id),
@@ -190,15 +192,15 @@ async function thumbsOf(
         and(eq(bookmarks.userId, ctx.user.id), inArray(bookmarks.id, chunk)),
       );
     for (const row of rows) {
-      if (row.kind !== "image" && row.kind !== "video") {
+      const picture = row.kind === "image" ? row.assetId : row.lookedAt;
+      if (!picture) {
         continue;
       }
       thumbs.set(row.bookmarkId, {
         bookmarkId: row.bookmarkId,
         title: row.title,
-        kind: row.kind,
-        imageAssetId:
-          row.kind === "video" ? (row.lookedAt ?? row.assetId) : row.assetId,
+        kind: row.kind === "image" ? "image" : "video",
+        imageAssetId: picture,
       });
     }
   }
@@ -281,40 +283,17 @@ export const picturesAppRouter = router({
           detail: run?.detail ?? null,
         };
       };
-      const [{ images }] = await ctx.db
-        .select({ images: count() })
-        .from(bookmarkAssets)
-        .innerJoin(bookmarks, eq(bookmarks.id, bookmarkAssets.id))
-        .where(
-          and(
-            eq(bookmarks.userId, ctx.user.id),
-            eq(bookmarkAssets.assetType, "image"),
-          ),
-        );
-      // Videos count once they have a first frame to look at.
-      const [{ videos }] = await ctx.db
-        .select({ videos: sql<number>`count(distinct ${assets.bookmarkId})` })
-        .from(assets)
-        .where(
-          and(
-            eq(assets.userId, ctx.user.id),
-            eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL),
-          ),
-        );
-      const [{ done }] = await ctx.db
-        .select({ done: count() })
-        .from(pictureEmbeddingsTable)
-        .where(eq(pictureEmbeddingsTable.userId, ctx.user.id));
+      // The same pictures the fingerprints job works through.
+      const { done, unreadable, total } = await fingerprintProgress(
+        ctx.db,
+        ctx.user.id,
+      );
       const [{ open }] = await ctx.db
         .select({ open: count() })
         .from(pictureListSuggestionsTable)
         .where(openSuggestions(ctx));
       return {
-        fingerprints: {
-          ...runOf("fingerprints"),
-          done,
-          total: images + videos,
-        },
+        fingerprints: { ...runOf("fingerprints"), done, unreadable, total },
         suggestions: { ...runOf("suggestions"), open },
         models: {
           picture: await clipModelDownloaded("picture"),

@@ -7,7 +7,7 @@ import { Play } from "lucide-react";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
-import { pictureAssetOf } from "./pictures";
+import { pictureOf } from "./pictures";
 
 /** Shown in the details; the rest are a click away. */
 const SHOWN = 9;
@@ -41,13 +41,10 @@ export function SimilarPictures({ bookmarkId }: { bookmarkId: string }) {
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         {data.bookmarks.map((bookmark) => {
-          const assetId = pictureAssetOf(bookmark);
-          if (!assetId) {
+          const picture = pictureOf(bookmark);
+          if (!picture) {
             return null;
           }
-          const isVideo =
-            bookmark.content.type === "asset" &&
-            bookmark.content.assetType === "video";
           return (
             <Link
               key={bookmark.id}
@@ -59,13 +56,13 @@ export function SimilarPictures({ bookmarkId }: { bookmarkId: string }) {
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={getAssetUrl(assetId)}
+                src={getAssetUrl(picture.assetId)}
                 alt={bookmark.title ?? ""}
                 loading="lazy"
                 draggable={false}
                 className="size-full object-cover transition-opacity group-hover:opacity-80"
               />
-              {isVideo && (
+              {picture.video && (
                 <Play className="absolute bottom-1 right-1 size-3.5 fill-white text-white drop-shadow" />
               )}
             </Link>

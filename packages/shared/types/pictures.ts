@@ -103,9 +103,10 @@ export type ZPictureJobStatus = z.infer<typeof zPictureJobStatusSchema>;
 
 export const zPicturesStatusSchema = z.object({
   fingerprints: zPictureJobStatusSchema.extend({
-    // Pictures with a fingerprint, of all the user's pictures (and videos
-    // with a first frame).
+    // Of all the user's pictures (and videos with a first frame): with a
+    // fingerprint of their current file, and looked at but unreadable.
     done: z.number(),
+    unreadable: z.number(),
     total: z.number(),
   }),
   suggestions: zPictureJobStatusSchema.extend({

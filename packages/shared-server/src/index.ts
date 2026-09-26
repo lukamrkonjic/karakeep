@@ -10,3 +10,4 @@ export * from "./instagram";
 export * from "./pictureVectors";
 export * from "./pictureModels";
 export * from "./pictureSettings";
+export * from "./pictureSources";

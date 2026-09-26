@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { cn } from "@/lib/utils";
@@ -49,10 +48,6 @@ export function MasonryMediaCard({
     bookmark.assets.find((a) => a.id === media.assetId)?.fileName ??
     null;
   const { isBulkEditEnabled } = useBulkActionsStore();
-  // Fork: your own tile shows the round Select box top left on hover (see
-  // BulkEditSelectionOverlay); the title makes room for it.
-  const { data: session } = useSession();
-  const selectBox = !isBulkEditEnabled && session?.user?.id === bookmark.userId;
   // Fork: always draggable with a mouse (a selected tile drags the whole
   // selection); never by touch, where a long press opens its actions.
   const drag = useBookmarkDrag(bookmark);
@@ -110,12 +105,6 @@ export function MasonryMediaCard({
           isBulkEditEnabled && "hidden",
         )}
       >
-        {selectBox && (
-          <span
-            aria-hidden
-            className="hidden size-6 shrink-0 [@media(hover:hover)]:block"
-          />
-        )}
         {title && (
           <span
             title={title}

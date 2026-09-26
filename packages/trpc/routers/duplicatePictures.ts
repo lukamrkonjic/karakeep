@@ -1,10 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { and, count, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
 
 import {
   assets,
-  AssetTypes,
   bookmarkAssets,
   bookmarkLists,
   bookmarks,
@@ -15,6 +14,7 @@ import {
   tagsOnBookmarks,
 } from "@karakeep/db/schema";
 import {
+  fingerprintProgress,
   queueDuplicatePicturesCheck,
   triggerSearchReindex,
 } from "@karakeep/shared-server";
@@ -253,36 +253,18 @@ export const duplicatePicturesAppRouter = router({
       const scan = await ctx.db.query.pictureDuplicateScansTable.findFirst({
         where: eq(pictureDuplicateScansTable.userId, ctx.user.id),
       });
-      const [{ images }] = await ctx.db
-        .select({ images: count() })
-        .from(bookmarkAssets)
-        .innerJoin(bookmarks, eq(bookmarks.id, bookmarkAssets.id))
-        .where(
-          and(
-            eq(bookmarks.userId, ctx.user.id),
-            eq(bookmarkAssets.assetType, "image"),
-          ),
-        );
-      // Videos count once they have a first frame to look at.
-      const [{ videos }] = await ctx.db
-        .select({ videos: sql<number>`count(distinct ${assets.bookmarkId})` })
-        .from(assets)
-        .where(
-          and(
-            eq(assets.userId, ctx.user.id),
-            eq(assets.assetType, AssetTypes.LINK_VIDEO_THUMBNAIL),
-          ),
-        );
-      const [{ checked }] = await ctx.db
-        .select({ checked: count() })
-        .from(pictureEmbeddingsTable)
-        .where(eq(pictureEmbeddingsTable.userId, ctx.user.id));
+      // The pictures the fingerprints job works through (shared-server's
+      // pictureSources.ts), and how many it has looked at.
+      const { done, unreadable, total } = await fingerprintProgress(
+        ctx.db,
+        ctx.user.id,
+      );
       return {
         status: scan?.status ?? "never",
         checkedAt: scan?.checkedAt ?? null,
         error: scan?.error ?? null,
-        checked,
-        total: images + videos,
+        checked: done + unreadable,
+        total,
       };
     }),
 
