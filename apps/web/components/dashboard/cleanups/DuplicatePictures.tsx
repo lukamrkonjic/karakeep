@@ -25,9 +25,10 @@ import {
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
 /**
- * Fork: Cleanups → Duplicate pictures. The workers look for them every night
- * with Immich's picture model (apps/workers/workers/duplicatesWorker.ts);
- * here they are, group by group, to keep one or all.
+ * Fork: Cleanups → Duplicate pictures. The workers compare the pictures'
+ * fingerprints — Immich's picture model's — every night, or when asked
+ * (apps/workers/workers/duplicatesWorker.ts; Settings → Pictures); here the
+ * alike ones are, group by group, to keep one or all.
  */
 
 const LEVELS: { level: DuplicateMatchLevel; label: string; hint: string }[] = [
@@ -64,6 +65,7 @@ function CheckStatus() {
   const { data: status } = useQuery(
     api.duplicatePictures.status.queryOptions(undefined, {
       refetchInterval: (query) =>
+        query.state.data?.status === "waiting" ||
         query.state.data?.status === "pending" ||
         query.state.data?.status === "running"
           ? 4000
@@ -81,7 +83,9 @@ function CheckStatus() {
   const previous = useRef(status?.status);
   useEffect(() => {
     if (
-      (previous.current === "running" || previous.current === "pending") &&
+      (previous.current === "running" ||
+        previous.current === "pending" ||
+        previous.current === "waiting") &&
       status?.status === "done"
     ) {
       void invalidate();
@@ -92,15 +96,24 @@ function CheckStatus() {
   if (!status) {
     return null;
   }
-  const busy = status.status === "pending" || status.status === "running";
+  const busy =
+    status.status === "waiting" ||
+    status.status === "pending" ||
+    status.status === "running";
   const counted = `${status.checked.toLocaleString()} of ${status.total.toLocaleString()} pictures looked at`;
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted-foreground">
-        Every night at 3:00 Immich&apos;s picture model looks at the pictures
-        you saved since, and the ones that show the same picture are listed
-        here. Keeping one gives it the others&apos; lists, tags and favourite,
-        and deletes the others.
+        Every night at 3:00 — or when you ask:{" "}
+        <Link
+          href="/settings/pictures"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Settings → Pictures
+        </Link>{" "}
+        — the pictures you saved since are compared with all of yours, and the
+        ones that show the same picture are listed here. Keeping one gives it
+        the others&apos; lists, tags and favourite, and deletes the others.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <ActionButton
@@ -113,6 +126,8 @@ function CheckStatus() {
           {busy ? "Checking…" : "Check now"}
         </ActionButton>
         <span>
+          {status.status === "waiting" &&
+            "Waiting for the new pictures' fingerprints… "}
           {status.status === "pending" && "Waiting for the workers… "}
           {status.status === "running" && `Checking: ${counted}.`}
           {status.status === "never" && "Not checked yet."}

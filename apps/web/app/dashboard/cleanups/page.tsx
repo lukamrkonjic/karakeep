@@ -1,8 +1,9 @@
 import { DuplicatePictures } from "@/components/dashboard/cleanups/DuplicatePictures";
+import { ListSuggestions } from "@/components/dashboard/cleanups/ListSuggestions";
 import { TagDuplicationDetection } from "@/components/dashboard/cleanups/TagDuplicationDetention";
 import { Separator } from "@/components/ui/separator";
 import { useTranslation } from "@/lib/i18n/server";
-import { Images, Paintbrush, Tags } from "lucide-react";
+import { FolderInput, Images, Paintbrush, Tags } from "lucide-react";
 
 export default async function Cleanups() {
   // oxlint-disable-next-line rules-of-hooks
@@ -14,6 +15,14 @@ export default async function Cleanups() {
         <Paintbrush />
         {t("cleanups.cleanups")}
       </span>
+      <Separator />
+      {/* Fork: lists suggested for new pictures (ListSuggestions.tsx). */}
+      <span className="flex items-center gap-1 text-xl">
+        <FolderInput />
+        List suggestions
+      </span>
+      <Separator />
+      <ListSuggestions />
       <Separator />
       {/* Fork: duplicate pictures, found nightly (DuplicatePictures.tsx). */}
       <span className="flex items-center gap-1 text-xl">

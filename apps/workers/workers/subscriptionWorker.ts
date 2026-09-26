@@ -38,12 +38,14 @@ import {
 import {
   checkInstagramSession,
   deleteAsset,
+  getPictureSettings,
   INSTAGRAM_SESSION_PURPOSE,
   InstagramSessionError,
   newAssetId,
   openSecret,
   QuotaService,
   queueSubscriptionSync,
+  requestListSuggestions,
   saveAssetFromFile,
   StorageQuotaError,
   SubscriptionQueue,
@@ -66,6 +68,8 @@ import { List } from "@karakeep/trpc/models/lists";
 import { fetchInstagramCollection } from "./connectors/instagram";
 import { wantedBy } from "./connectors/ledger";
 import { fetchPinterestBoard } from "./connectors/pinterest";
+import type { Looked } from "./pictures/nearDuplicates";
+import { NearDuplicateFinder } from "./pictures/nearDuplicates";
 import type {
   SubscriptionFetchResult,
   SubscriptionItem,
@@ -468,7 +472,9 @@ async function importItem(
   client: TRPCClient,
   item: SubscriptionItem,
   createdAt: Date,
-): Promise<"downloaded" | "linked"> {
+  nearDuplicates: NearDuplicateFinder | null,
+  signal: AbortSignal,
+): Promise<"downloaded" | "linked" | "alike"> {
   // A picture the user already has: file that bookmark, don't make a copy.
   const existing = await existingBookmarkFor(subscription.userId, item);
   if (existing) {
@@ -479,7 +485,22 @@ async function importItem(
 
   const file = await download(item, SOURCES[subscription.kind].referer);
   let assetId: string;
+  let looked: Looked | null = null;
   try {
+    // "Skip near-duplicates": one that looks like a picture the user has
+    // (another copy of it) is filed as that one.
+    if (nearDuplicates && file.kind === "image") {
+      const seen = await nearDuplicates.look(
+        await fs.readFile(file.path),
+        signal,
+      );
+      if (seen?.match) {
+        await addToList(client, subscription, seen.match);
+        await remember(subscription, item, seen.match);
+        return "alike";
+      }
+      looked = seen?.looked ?? null;
+    }
     assetId = await storeAsset(subscription.userId, file);
   } finally {
     await tryCatch(fs.unlink(file.path));
@@ -517,6 +538,9 @@ async function importItem(
     throw error;
   }
   await remember(subscription, item, bookmarkId);
+  if (nearDuplicates && looked) {
+    await nearDuplicates.remember(bookmarkId, assetId, looked);
+  }
   return "downloaded";
 }
 
@@ -764,8 +788,17 @@ async function run(
   );
 
   const client = await buildImpersonatingTRPCClient(subscription.userId);
+  const pictureSettings = await getPictureSettings(db, subscription.userId);
+  const nearDuplicates =
+    subscription.skipNearDuplicates && batch.length > 0
+      ? await NearDuplicateFinder.forUser(
+          subscription.userId,
+          pictureSettings.importDuplicateLevel,
+        )
+      : null;
   let downloaded = 0;
   let linked = 0;
+  let alike = 0;
   let skipped = 0;
   let failed = 0;
   let failedInARow = 0;
@@ -782,9 +815,13 @@ async function run(
         client,
         item,
         new Date((firstSecond + index) * 1000),
+        nearDuplicates,
+        job.abortSignal,
       );
       if (outcome === "downloaded") {
         downloaded++;
+      } else if (outcome === "alike") {
+        alike++;
       } else {
         linked++;
       }
@@ -815,7 +852,7 @@ async function run(
     }
   }
 
-  const added = downloaded + linked;
+  const added = downloaded + linked + alike;
   const lastError =
     stoppedBecause ??
     (failed > 0 && added === 0
@@ -828,8 +865,13 @@ async function run(
     lastImportedCount: added,
   });
   logger.info(
-    `[subscription][${jobId}] Added ${added} to list ${subscription.listId} (${downloaded} downloaded, ${linked} already saved)${skipped ? `, skipped ${skipped}` : ""}${failed ? `, ${failed} failed` : ""}${stoppedBecause ? `; stopped: ${stoppedBecause}` : ""}.`,
+    `[subscription][${jobId}] Added ${added} to list ${subscription.listId} (${downloaded} downloaded, ${linked} already saved${alike ? `, ${alike} near-duplicates of saved ones` : ""})${skipped ? `, skipped ${skipped}` : ""}${failed ? `, ${failed} failed` : ""}${stoppedBecause ? `; stopped: ${stoppedBecause}` : ""}.`,
   );
+
+  // New pictures: fingerprints, then a list suggested for each.
+  if (downloaded > 0 && pictureSettings.suggestionsEnabled) {
+    await tryCatch(requestListSuggestions(db, subscription.userId));
+  }
 
   // More than one run's worth: carry straight on rather than waiting for the
   // schedule. Only while it is getting somewhere.

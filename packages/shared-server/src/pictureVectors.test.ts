@@ -3,10 +3,12 @@ import { describe, expect, test } from "vitest";
 import {
   alikePairs,
   bufferToVector,
+  buildPictureIndex,
   orderedPair,
   pictureDistance,
+  rankPictures,
   vectorToBuffer,
-} from "./pairs";
+} from "./pictureVectors";
 
 // Unit vectors at an angle: cos(angle) apart, so distance = 1 - cos(angle).
 const at = (id: string, degrees: number) => {
@@ -44,5 +46,41 @@ describe("duplicate picture pairs", () => {
   test("an embedding survives being stored", () => {
     const vector = Float32Array.from([0.25, -0.5, 0.125]);
     expect(bufferToVector(vectorToBuffer(vector))).toEqual(vector);
+  });
+});
+
+describe("ranking pictures", () => {
+  const index = buildPictureIndex([
+    at("a", 0),
+    at("b", 20),
+    at("c", 40),
+    at("d", 90),
+  ]);
+
+  test("most alike first, down to the minimum", () => {
+    // cos 20° ≈ 0.94, cos 40° ≈ 0.77, cos 90° = 0.
+    const ranked = rankPictures(index, at("q", 5).vector, {
+      minSimilarity: 0.5,
+    });
+    expect(ranked.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(ranked[0].similarity).toBeCloseTo(Math.cos((5 * Math.PI) / 180));
+  });
+
+  test("leaves out, keeps only, and stops at the limit", () => {
+    const query = at("q", 0).vector;
+    expect(
+      rankPictures(index, query, {
+        minSimilarity: -1,
+        exclude: new Set(["a"]),
+        only: (id) => id !== "c",
+        limit: 1,
+      }).map((r) => r.id),
+    ).toEqual(["b"]);
+  });
+
+  test("an embedding of another size matches nothing", () => {
+    expect(
+      rankPictures(index, Float32Array.from([1, 0, 0]), { minSimilarity: -1 }),
+    ).toEqual([]);
   });
 });

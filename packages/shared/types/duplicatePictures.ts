@@ -27,8 +27,9 @@ export const DEFAULT_DUPLICATE_MATCH_LEVEL: DuplicateMatchLevel = "near";
 export const MAX_DUPLICATE_DISTANCE = DUPLICATE_MATCH_LEVELS.similar;
 
 export const zDuplicatePicturesStatusSchema = z.object({
-  // "never": no check has run for this user yet.
-  status: z.enum(["never", "pending", "running", "done", "failed"]),
+  // "never": no check has run for this user yet. "waiting": for the
+  // fingerprints job to look at the new pictures first.
+  status: z.enum(["never", "waiting", "pending", "running", "done", "failed"]),
   checkedAt: z.date().nullable(),
   error: z.string().nullable(),
   // Pictures the model has looked at, of all the user's pictures.

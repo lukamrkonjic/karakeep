@@ -19,6 +19,9 @@ export const zListSubscriptionSchema = z.object({
   // not only the first. Applies to posts that come in from when it was
   // turned on.
   wholeCarousel: z.boolean(),
+  // A picture alike enough to one you have (Settings → Pictures says how
+  // alike) is linked instead of downloaded again.
+  skipNearDuplicates: z.boolean(),
   createdAt: z.date(),
   lastRunAt: z.date().nullable(),
   // "pending" = a sync is queued or running.
@@ -33,12 +36,14 @@ export const zNewListSubscriptionSchema = z.object({
   listId: z.string(),
   url: z.string().min(1),
   wholeCarousel: z.boolean().default(true),
+  skipNearDuplicates: z.boolean().default(false),
 });
 
 export const zUpdateListSubscriptionSchema = z.object({
   subscriptionId: z.string(),
   enabled: z.boolean().optional(),
   wholeCarousel: z.boolean().optional(),
+  skipNearDuplicates: z.boolean().optional(),
 });
 
 /** Your Instagram connection (Settings → List subscriptions). */

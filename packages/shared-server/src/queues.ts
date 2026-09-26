@@ -1,10 +1,11 @@
-import { eq, ne } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
 import type { DB } from "@karakeep/db";
 import {
   listSubscriptionsTable,
   pictureDuplicateScansTable,
+  pictureJobRunsTable,
 } from "@karakeep/db/schema";
 import {
   EnqueueOptions,
@@ -385,6 +386,95 @@ export const BackupQueue = createDeferredQueue<ZBackupRequest>("backup_queue", {
   keepFailedJobs: false,
 });
 
+// Fork: the picture jobs (Settings → Pictures), each its own queue and
+// worker. The fingerprints job gives new pictures their fingerprint; the
+// duplicate-pictures check and list suggestions work on those, so asking for
+// either marks it "waiting" and asks for fingerprints — whose job, when it's
+// done, queues whatever waits (apps/workers/workers/pictures/).
+export const zPictureJobRequestSchema = z.object({
+  userId: z.string(),
+});
+export type ZPictureJobRequest = z.infer<typeof zPictureJobRequestSchema>;
+
+export const PictureFingerprintsQueue = createDeferredQueue<ZPictureJobRequest>(
+  "picture_fingerprints_queue",
+  {
+    defaultJobArgs: {
+      // One cut short carries on at the next run.
+      numRetries: 1,
+    },
+    keepFailedJobs: false,
+  },
+);
+
+export const PictureSuggestionsQueue = createDeferredQueue<ZPictureJobRequest>(
+  "picture_suggestions_queue",
+  {
+    defaultJobArgs: { numRetries: 1 },
+    keepFailedJobs: false,
+  },
+);
+
+// Fork: search by description — one description for the text half of the
+// picture model (a row of pictureTextQueries to fill in).
+export const zPictureTextRequestSchema = z.object({
+  queryId: z.string(),
+});
+export type ZPictureTextRequest = z.infer<typeof zPictureTextRequestSchema>;
+
+export const PictureTextQueue = createDeferredQueue<ZPictureTextRequest>(
+  "picture_text_queue",
+  {
+    // Someone is waiting for it: asking again is the retry.
+    defaultJobArgs: { numRetries: 0 },
+    keepFailedJobs: false,
+  },
+);
+
+/** Marks a picture job pending or waiting, unless it's running now. */
+async function markPictureJob(
+  db: DB,
+  userId: string,
+  job: "fingerprints" | "suggestions",
+  status: "waiting" | "pending",
+) {
+  await db
+    .insert(pictureJobRunsTable)
+    .values({ userId, job, status })
+    .onConflictDoUpdate({
+      target: [pictureJobRunsTable.userId, pictureJobRunsTable.job],
+      set: { status, error: null },
+      setWhere: ne(pictureJobRunsTable.status, "running"),
+    });
+}
+
+/**
+ * Fingerprints for the user's pictures that have none, now. A run already
+ * queued or running absorbs this one.
+ */
+export async function requestPictureFingerprints(db: DB, userId: string) {
+  await markPictureJob(db, userId, "fingerprints", "pending");
+  await PictureFingerprintsQueue.enqueue(
+    { userId },
+    { idempotencyKey: `picture-fingerprints:${userId}`, groupId: userId },
+  );
+}
+
+/** List suggestions for the new pictures, once they have fingerprints. */
+export async function requestListSuggestions(db: DB, userId: string) {
+  await markPictureJob(db, userId, "suggestions", "waiting");
+  await requestPictureFingerprints(db, userId);
+}
+
+/** Queues list suggestions themselves (the fingerprints job, when done). */
+export async function queueListSuggestions(db: DB, userId: string) {
+  await markPictureJob(db, userId, "suggestions", "pending");
+  await PictureSuggestionsQueue.enqueue(
+    { userId },
+    { idempotencyKey: `picture-suggestions:${userId}`, groupId: userId },
+  );
+}
+
 // Fork: duplicate pictures — one check of one user's pictures (the nightly
 // run, or Cleanups → Duplicate pictures → Check now).
 export const zDuplicatePicturesRequestSchema = z.object({
@@ -404,18 +494,32 @@ export const DuplicatePicturesQueue =
   });
 
 /**
- * Asks for a check of the user's pictures, shown as pending until the worker
- * starts it. A check that is already queued or running absorbs this one.
+ * Asks for a check of the user's pictures: it waits for their fingerprints
+ * to be made first. A check already running absorbs this one.
  */
 export async function queueDuplicatePicturesCheck(db: DB, userId: string) {
   await db
     .insert(pictureDuplicateScansTable)
-    .values({ userId, status: "pending" })
+    .values({ userId, status: "waiting" })
     .onConflictDoUpdate({
       target: pictureDuplicateScansTable.userId,
-      set: { status: "pending", error: null },
+      set: { status: "waiting", error: null },
       setWhere: ne(pictureDuplicateScansTable.status, "running"),
     });
+  await requestPictureFingerprints(db, userId);
+}
+
+/** Queues a waiting check itself (the fingerprints job, when done). */
+export async function queueDuplicatePicturesCompare(db: DB, userId: string) {
+  await db
+    .update(pictureDuplicateScansTable)
+    .set({ status: "pending" })
+    .where(
+      and(
+        eq(pictureDuplicateScansTable.userId, userId),
+        eq(pictureDuplicateScansTable.status, "waiting"),
+      ),
+    );
   await DuplicatePicturesQueue.enqueue(
     { userId },
     { idempotencyKey: `duplicate-pictures:${userId}`, groupId: userId },

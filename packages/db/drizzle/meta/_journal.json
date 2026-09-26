@@ -708,6 +708,13 @@
       "when": 1790408354942,
       "tag": "0100_list_subscription_whole_carousels",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "6",
+      "when": 1790426203129,
+      "tag": "0101_picture_features",
+      "breakpoints": true
     }
   ]
 }

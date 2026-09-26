@@ -31,6 +31,8 @@ import {
 
 import { BookmarkMarkdownComponent } from "../bookmarks/BookmarkMarkdownComponent";
 import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
+import { ListSuggestionChips } from "../pictures/ListSuggestionChips";
+import { SimilarPictures } from "../pictures/SimilarPictures";
 import { AssetContentSection } from "./AssetContentSection";
 import AttachmentBox from "./AttachmentBox";
 import { BookmarkListChips } from "./BookmarkListChips";
@@ -241,12 +243,17 @@ export default function BookmarkPreview({
         {sourceUrl && <SourceField url={sourceUrl} />}
         <SummarizeBookmarkArea bookmark={bookmark} readOnly={!isOwner} />
       </div>
-      <BookmarkListChips bookmarkId={bookmark.id} readOnly={!isOwner} />
+      <div className="flex flex-col gap-2">
+        <BookmarkListChips bookmarkId={bookmark.id} readOnly={!isOwner} />
+        {/* Fork: lists suggested for a picture, and pictures like it. */}
+        {isOwner && <ListSuggestionChips bookmarkId={bookmark.id} />}
+      </div>
       <BookmarkProperties
         bookmark={bookmark}
         media={previewMedia}
         readOnly={!isOwner}
       />
+      {previewMedia && <SimilarPictures bookmarkId={bookmark.id} />}
       <AttachmentBox
         bookmark={bookmark}
         readOnly={!isOwner}

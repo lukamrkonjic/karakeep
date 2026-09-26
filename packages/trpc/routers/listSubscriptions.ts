@@ -179,6 +179,7 @@ export const listSubscriptionsAppRouter = router({
           url,
           name,
           wholeCarouselSince: input.wholeCarousel ? new Date() : null,
+          skipNearDuplicates: input.skipNearDuplicates,
         })
         .returning();
       // Fetch it straight away; the schedule takes over afterwards.
@@ -202,6 +203,9 @@ export const listSubscriptionsAppRouter = router({
         changes.wholeCarouselSince = input.wholeCarousel
           ? (ctx.subscription.wholeCarouselSince ?? new Date())
           : null;
+      }
+      if (input.skipNearDuplicates !== undefined) {
+        changes.skipNearDuplicates = input.skipNearDuplicates;
       }
       if (Object.keys(changes).length === 0) {
         return toApi(ctx.subscription);

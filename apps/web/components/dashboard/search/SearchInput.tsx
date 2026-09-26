@@ -26,8 +26,10 @@ import { useClientConfig } from "@/lib/clientConfig";
 import { useDoBookmarkSearch } from "@/lib/hooks/bookmark-search";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 
 import { useSearchHistory } from "@karakeep/shared-react/hooks/search-history";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 
 import { EditListModal } from "../lists/EditListModal";
@@ -80,6 +82,13 @@ const SearchInput = React.forwardRef<
 >(({ className, ...props }, ref) => {
   const { t } = useTranslation();
   const { semanticSearchEnabled } = useClientConfig().search;
+  // Fork: search by description, when Settings → Pictures has it on.
+  const api = useTRPC();
+  const { data: pictureSettings } = useQuery(
+    api.pictures.settings.queryOptions(),
+  );
+  const picturesEnabled = pictureSettings?.describeEnabled ?? false;
+  const showModes = semanticSearchEnabled || picturesEnabled;
   const {
     debounceSearch,
     searchQuery,
@@ -218,10 +227,12 @@ const SearchInput = React.forwardRef<
             className="text-muted-foreground"
           />
         </Link>
-        {semanticSearchEnabled ? (
+        {showModes ? (
           <SearchModeSelector
             value={searchMode}
             onValueChange={(mode) => setSearchMode(mode, value)}
+            semantic={semanticSearchEnabled}
+            pictures={picturesEnabled}
           />
         ) : null}
       </div>
@@ -235,7 +246,11 @@ const SearchInput = React.forwardRef<
             <div className="relative">
               <CommandInput
                 ref={inputRef}
-                placeholder={t(SEARCH_PLACEHOLDERS[searchMode])}
+                placeholder={
+                  searchMode === "pictures"
+                    ? "Describe a picture: red armchair, comet over a dark sea…"
+                    : t(SEARCH_PLACEHOLDERS[searchMode])
+                }
                 value={value}
                 onValueChange={handleValueChange}
                 onCompositionStart={handleCompositionStart}
@@ -244,9 +259,8 @@ const SearchInput = React.forwardRef<
                 onBlur={handleBlur}
                 className={cn(
                   "h-10",
-                  semanticSearchEnabled ? "pr-20 sm:pr-36" : "pr-10",
-                  canSaveSearch &&
-                    (semanticSearchEnabled ? "pr-32 sm:pr-48" : "pr-24"),
+                  showModes ? "pr-20 sm:pr-36" : "pr-10",
+                  canSaveSearch && (showModes ? "pr-32 sm:pr-48" : "pr-24"),
                   className,
                 )}
                 {...props}

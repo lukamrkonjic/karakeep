@@ -12,9 +12,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
-import { Blend, BrainCircuit, ChevronDown, TextSearch } from "lucide-react";
-
-import type { ZBookmarkSearchMode } from "@karakeep/shared/types/bookmarks";
+import type { SearchMode } from "@/lib/hooks/bookmark-search";
+import {
+  Blend,
+  BrainCircuit,
+  ChevronDown,
+  Images,
+  TextSearch,
+} from "lucide-react";
 
 const SEARCH_MODES = [
   {
@@ -37,18 +42,41 @@ const SEARCH_MODES = [
     Icon: BrainCircuit,
     experimental: true,
   },
+  {
+    // Fork: search by description (Settings → Pictures).
+    value: "pictures",
+    label: "Pictures",
+    description:
+      "Pictures by what's in them — “red armchair”, “comet over a dark sea” — even untitled ones.",
+    Icon: Images,
+  },
 ] as const;
+
+type Mode = (typeof SEARCH_MODES)[number];
 
 export function SearchModeSelector({
   value,
   onValueChange,
+  semantic = true,
+  pictures = false,
 }: {
-  value: ZBookmarkSearchMode;
-  onValueChange: (value: ZBookmarkSearchMode) => void;
+  value: SearchMode;
+  onValueChange: (value: SearchMode) => void;
+  /** Fork: which modes there are — semantic ones need an embeddings
+   *  provider, pictures Settings → Pictures. */
+  semantic?: boolean;
+  pictures?: boolean;
 }) {
   const { t } = useTranslation();
+  const labelOf = (mode: Mode) =>
+    "label" in mode ? mode.label : t(mode.labelKey);
+  const descriptionOf = (mode: Mode) =>
+    "description" in mode ? mode.description : t(mode.descriptionKey);
+  const modes = SEARCH_MODES.filter((mode) =>
+    mode.value === "pictures" ? pictures : mode.value === "fts" || semantic,
+  );
   const activeMode =
-    SEARCH_MODES.find((mode) => mode.value === value) ?? SEARCH_MODES[0];
+    modes.find((mode) => mode.value === value) ?? SEARCH_MODES[0];
   const ActiveIcon = activeMode.Icon;
 
   return (
@@ -67,7 +95,7 @@ export function SearchModeSelector({
           )}
         >
           <ActiveIcon className="size-3.5" />
-          <span className="hidden sm:inline">{t(activeMode.labelKey)}</span>
+          <span className="hidden sm:inline">{labelOf(activeMode)}</span>
           <ChevronDown className="size-3 opacity-60 transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </DropdownMenuTrigger>
@@ -82,15 +110,13 @@ export function SearchModeSelector({
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(nextValue) => {
-            const mode = SEARCH_MODES.find(
-              (option) => option.value === nextValue,
-            );
+            const mode = modes.find((option) => option.value === nextValue);
             if (mode) {
               onValueChange(mode.value);
             }
           }}
         >
-          {SEARCH_MODES.map((mode) => (
+          {modes.map((mode) => (
             <DropdownMenuRadioItem
               key={mode.value}
               value={mode.value}
@@ -106,7 +132,7 @@ export function SearchModeSelector({
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 font-medium">
-                  {t(mode.labelKey)}
+                  {labelOf(mode)}
                   {"experimental" in mode && mode.experimental ? (
                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {t("common.experimental")}
@@ -114,7 +140,7 @@ export function SearchModeSelector({
                   ) : null}
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                  {t(mode.descriptionKey)}
+                  {descriptionOf(mode)}
                 </span>
               </span>
             </DropdownMenuRadioItem>

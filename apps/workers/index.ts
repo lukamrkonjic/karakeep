@@ -15,6 +15,9 @@ import {
   loadAllPlugins,
   LowPriorityCrawlerQueue,
   OpenAIQueue,
+  PictureFingerprintsQueue,
+  PictureSuggestionsQueue,
+  PictureTextQueue,
   prepareQueue,
   RuleEngineQueue,
   SearchIndexingQueue,
@@ -41,6 +44,9 @@ let subscriptionRefreshingWorker:
   | undefined;
 let duplicatePicturesSchedulingWorker:
   | typeof import("./workers/duplicatesWorker").DuplicatePicturesSchedulingWorker
+  | undefined;
+let pictureFingerprintsSchedulingWorker:
+  | typeof import("./workers/pictures/fingerprintsWorker").PictureFingerprintsSchedulingWorker
   | undefined;
 
 const workerBuilders = {
@@ -101,6 +107,25 @@ const workerBuilders = {
     duplicatePicturesSchedulingWorker = DuplicatePicturesSchedulingWorker;
     await DuplicatePicturesQueue.ensureInit();
     return DuplicatePicturesWorker.build();
+  },
+  // Fork: the picture jobs (workers/pictures/, Settings → Pictures).
+  fingerprints: async () => {
+    const { PictureFingerprintsSchedulingWorker, PictureFingerprintsWorker } =
+      await import("./workers/pictures/fingerprintsWorker");
+    pictureFingerprintsSchedulingWorker = PictureFingerprintsSchedulingWorker;
+    await PictureFingerprintsQueue.ensureInit();
+    return PictureFingerprintsWorker.build();
+  },
+  suggestions: async () => {
+    const { PictureSuggestionsWorker } =
+      await import("./workers/pictures/suggestionsWorker");
+    await PictureSuggestionsQueue.ensureInit();
+    return PictureSuggestionsWorker.build();
+  },
+  pictureText: async () => {
+    const { PictureTextWorker } = await import("./workers/pictures/textWorker");
+    await PictureTextQueue.ensureInit();
+    return PictureTextWorker.build();
   },
   assetPreprocessing: async () => {
     const { AssetPreprocessingWorker } =
@@ -182,6 +207,10 @@ async function main() {
     duplicatePicturesSchedulingWorker?.start();
   }
 
+  if (workers.some((w) => w.name === "fingerprints")) {
+    pictureFingerprintsSchedulingWorker?.start();
+  }
+
   // Start import polling worker
   let importWorker = null;
   let importWorkerPromise: Promise<void> | null = null;
@@ -218,6 +247,9 @@ async function main() {
   }
   if (workers.some((w) => w.name === "duplicates")) {
     duplicatePicturesSchedulingWorker?.stop();
+  }
+  if (workers.some((w) => w.name === "fingerprints")) {
+    pictureFingerprintsSchedulingWorker?.stop();
   }
   if (importWorker) {
     importWorker.stop();

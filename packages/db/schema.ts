@@ -818,6 +818,11 @@ export const listSubscriptionsTable = sqliteTable(
     // page of a Pinterest idea pin) is taken, not only the first. Null: only
     // the first. A post first taken before this moment keeps what it has.
     wholeCarouselSince: integer("wholeCarouselSince", { mode: "timestamp" }),
+    // "Skip near-duplicates": a picture alike enough to one the user has
+    // (Settings → Pictures says how alike) is linked instead of downloaded.
+    skipNearDuplicates: integer("skipNearDuplicates", { mode: "boolean" })
+      .notNull()
+      .default(false),
     lastRunAt: integer("lastRunAt", { mode: "timestamp" }),
     lastStatus: text("lastStatus", {
       enum: ["pending", "success", "failure"],
@@ -898,9 +903,10 @@ export const listSubscriptionImportsTable = sqliteTable(
   ],
 );
 
-// Fork: duplicate pictures (apps/workers/workers/duplicatesWorker.ts). What
-// a picture bookmark looks like to the picture model: its embedding, made
-// once from the asset named here (a replaced file is looked at again).
+// Fork: a picture's fingerprint (apps/workers/workers/pictures/): what the
+// picture model makes of it, its embedding, made once from the asset named
+// here (a replaced file is looked at again). Duplicate pictures, similar
+// pictures, search by description and list suggestions all work on these.
 export const pictureEmbeddingsTable = sqliteTable(
   "pictureEmbeddings",
   {
@@ -919,9 +925,13 @@ export const pictureEmbeddingsTable = sqliteTable(
     embedding: blob("embedding", { mode: "buffer" }),
     width: integer("width"),
     height: integer("height"),
-    // Compared with the user's other pictures yet? A check that stops
-    // halfway picks up here.
+    // Compared with the user's other pictures yet (duplicate pictures)? A
+    // check that stops halfway picks up here.
     compared: integer("compared", { mode: "boolean" }).notNull().default(false),
+    // Looked at by the list-suggestions job yet?
+    suggested: integer("suggested", { mode: "boolean" })
+      .notNull()
+      .default(false),
   },
   (t) => [index("pictureEmbeddings_userId_idx").on(t.userId, t.compared)],
 );
@@ -960,18 +970,147 @@ export const duplicatePicturesTable = sqliteTable(
 );
 
 // Each user's last duplicate-pictures check (nightly, or "Check now").
+// "waiting": for the fingerprints job, which queues the check when it's done.
 export const pictureDuplicateScansTable = sqliteTable("pictureDuplicateScans", {
   userId: text("userId")
     .notNull()
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   status: text("status", {
-    enum: ["pending", "running", "done", "failed"],
+    enum: ["waiting", "pending", "running", "done", "failed"],
   }).notNull(),
   // When the last check finished.
   checkedAt: integer("checkedAt", { mode: "timestamp" }),
   error: text("error"),
 });
+
+// Fork: each user's Settings → Pictures (packages/shared/types/pictures.ts
+// has what each means). A user without a row has the defaults.
+export const pictureSettingsTable = sqliteTable("pictureSettings", {
+  userId: text("userId")
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  fingerprintSchedule: text("fingerprintSchedule", {
+    enum: ["hourly", "nightly", "manual"],
+  })
+    .notNull()
+    .default("hourly"),
+  similarEnabled: integer("similarEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  similarLevel: text("similarLevel", { enum: ["close", "related", "loose"] })
+    .notNull()
+    .default("related"),
+  describeEnabled: integer("describeEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  describeLevel: text("describeLevel", {
+    enum: ["strict", "balanced", "loose"],
+  })
+    .notNull()
+    .default("balanced"),
+  suggestionsEnabled: integer("suggestionsEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  suggestionsLevel: text("suggestionsLevel", {
+    enum: ["sure", "likely", "hunch"],
+  })
+    .notNull()
+    .default("likely"),
+  suggestionsScope: text("suggestionsScope", { enum: ["new", "month", "all"] })
+    .notNull()
+    .default("new"),
+  // When list suggestions were last turned on: the "new" pictures are the
+  // ones saved since.
+  suggestionsSince: integer("suggestionsSince", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  duplicatesSchedule: text("duplicatesSchedule", {
+    enum: ["nightly", "manual"],
+  })
+    .notNull()
+    .default("nightly"),
+  importDuplicateLevel: text("importDuplicateLevel", {
+    enum: ["identical", "near", "similar"],
+  })
+    .notNull()
+    .default("near"),
+});
+
+// Fork: each user's last run of a picture job (duplicate pictures keep
+// pictureDuplicateScans). "waiting": for the fingerprints job first.
+export const pictureJobRunsTable = sqliteTable(
+  "pictureJobRuns",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    job: text("job", { enum: ["fingerprints", "suggestions"] }).notNull(),
+    status: text("status", {
+      enum: ["waiting", "pending", "running", "done", "failed"],
+    }).notNull(),
+    finishedAt: integer("finishedAt", { mode: "timestamp" }),
+    error: text("error"),
+    // What the last run did, in a few words.
+    detail: text("detail"),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.job] })],
+);
+
+// Fork: "Belongs in…" — a list a picture's closest matches are in, suggested
+// for it. Added or dismissed ones stay, so they're never suggested again.
+export const pictureListSuggestionsTable = sqliteTable(
+  "pictureListSuggestions",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    createdAt: createdAtField(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    bookmarkId: text("bookmarkId")
+      .notNull()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    listId: text("listId")
+      .notNull()
+      .references(() => bookmarkLists.id, { onDelete: "cascade" }),
+    // The share of the picture's closest matches that are in the list.
+    score: real("score").notNull(),
+    status: text("status", { enum: ["open", "added", "dismissed"] })
+      .notNull()
+      .default("open"),
+  },
+  (t) => [
+    unique().on(t.bookmarkId, t.listId),
+    index("pictureListSuggestions_userId_idx").on(t.userId, t.status),
+    // Deleting a list removes its suggestions without a scan.
+    index("pictureListSuggestions_listId_idx").on(t.listId),
+  ],
+);
+
+// Fork: search by description — a description the text half of the picture
+// model turned into a fingerprint (apps/workers/workers/pictures/). The web
+// app asks for one here and the workers fill it in; kept as a cache, the
+// least recently used thrown out.
+export const pictureTextQueriesTable = sqliteTable(
+  "pictureTextQueries",
+  {
+    // A hash of the model and the text.
+    id: text("id").notNull().primaryKey(),
+    text: text("text").notNull(),
+    // 512 little-endian float32s, length 1; null until the workers are done.
+    embedding: blob("embedding", { mode: "buffer" }),
+    error: text("error"),
+    createdAt: createdAtField(),
+    usedAt: integer("usedAt", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("pictureTextQueries_usedAt_idx").on(t.usedAt)],
+);
 
 export const backupsTable = sqliteTable(
   "backups",

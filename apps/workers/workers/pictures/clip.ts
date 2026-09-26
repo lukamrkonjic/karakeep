@@ -5,24 +5,32 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fetchWithProxy } from "network";
 
-import serverConfig from "@karakeep/shared/config";
+import type { ModelFile } from "@karakeep/shared-server";
+import {
+  CLIP_FILES,
+  CLIP_MODEL_ID,
+  CLIP_MODEL_REVISION,
+  clipFilePath,
+  hasClipFile,
+} from "@karakeep/shared-server";
 import logger from "@karakeep/shared/logger";
 
-/**
- * Fork: the picture model behind duplicate pictures. It is Immich's default
- * CLIP model — OpenAI's ViT-B/32, exported the way Immich publishes it for
- * its own duplicate detection — run on the CPU. It turns a picture into 512
- * numbers (an embedding); two pictures whose embeddings point the same way
- * show the same thing, even resized, recompressed, cropped or filtered.
- */
+import type { TokenizerJson } from "./tokenizer";
+import { ClipTokenizer, CONTEXT_LENGTH } from "./tokenizer";
 
-export const CLIP_MODEL_ID = "immich-app/ViT-B-32__openai";
-const REVISION = "a857c8de2c07bbcfa6646adfcf31b798845afa1e";
-const MODEL_FILE = {
-  path: "visual/model.onnx",
-  size: 351_613_724,
-  sha256: "33a3df41ceef21acdf371af00f6dd0456ec1f9eba24d03a7720f9c3734e40859",
-};
+/**
+ * Fork: the picture model — Immich's default CLIP model, OpenAI's ViT-B/32,
+ * exported the way Immich publishes it for its own smart search and
+ * duplicates — run on the CPU. Its picture half turns a picture into 512
+ * numbers (its fingerprint, an embedding); its text half turns a
+ * description into 512 numbers pointing the same way as pictures of it. Two
+ * pictures whose embeddings point the same way show the same thing, even
+ * resized, recompressed, cropped or filtered.
+ *
+ * The files (0.35 GB for pictures, 0.25 GB for text) are downloaded once,
+ * each when first needed, into the data folder (shared-server's
+ * pictureModels.ts says where).
+ */
 
 // visual/preprocess_cfg.json: the shortest side to 224 px (bicubic), the
 // middle square, then OpenAI's per-channel mean and spread.
@@ -30,36 +38,23 @@ const SIZE = 224;
 const MEAN = [0.48145466, 0.4578275, 0.40821073];
 const STD = [0.26862954, 0.26130258, 0.27577711];
 
-// Leaves the NAS's other cores to everything else running at night.
+// Leaves the NAS's other cores to everything else.
 const THREADS = 2;
 
-/** Where the model is kept: downloaded once, into the data folder. */
-export function clipModelPath(): string {
-  return path.join(
-    serverConfig.dataDir,
-    "models",
-    CLIP_MODEL_ID.replace("/", "__"),
-    REVISION.slice(0, 12),
-    "model.onnx",
-  );
-}
-
-async function hasModel(file: string): Promise<boolean> {
-  const stat = await fs.stat(file).catch(() => null);
-  return stat?.size === MODEL_FILE.size;
-}
-
-async function downloadModel(file: string, signal?: AbortSignal) {
-  const url = `https://huggingface.co/${CLIP_MODEL_ID}/resolve/${REVISION}/${MODEL_FILE.path}`;
+async function download(file: ModelFile, signal?: AbortSignal) {
+  const target = clipFilePath(file);
+  const url = `https://huggingface.co/${CLIP_MODEL_ID}/resolve/${CLIP_MODEL_REVISION}/${file.repoPath}`;
   logger.info(
-    `[duplicates] Downloading the picture model (${Math.round(MODEL_FILE.size / 1e6)} MB, once) from ${url}`,
+    `[pictures] Downloading ${file.repoPath} of the picture model (${Math.round(file.size / 1e6)} MB, once) from ${url}`,
   );
   const resp = await fetchWithProxy(url, { signal });
   if (!resp.ok || !resp.body) {
-    throw new Error(`Couldn't download the picture model: HTTP ${resp.status}`);
+    throw new Error(
+      `Couldn't download the picture model's ${file.repoPath}: HTTP ${resp.status}`,
+    );
   }
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const part = `${file}.part`;
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  const part = `${target}.part`;
   const hash = createHash("sha256");
   try {
     await pipeline(
@@ -72,14 +67,22 @@ async function downloadModel(file: string, signal?: AbortSignal) {
       }),
       createWriteStream(part),
     );
-    if (hash.digest("hex") !== MODEL_FILE.sha256) {
-      throw new Error("The downloaded picture model is damaged");
+    if (hash.digest("hex") !== file.sha256) {
+      throw new Error(`The downloaded ${file.repoPath} is damaged`);
     }
-    await fs.rename(part, file);
+    await fs.rename(part, target);
   } catch (error) {
     await fs.rm(part, { force: true });
     throw error;
   }
+}
+
+/** The file's path, downloading it first if this server hasn't yet. */
+async function ensureFile(file: ModelFile, signal?: AbortSignal) {
+  if (!(await hasClipFile(file))) {
+    await download(file, signal);
+  }
+  return clipFilePath(file);
 }
 
 /**
@@ -125,7 +128,7 @@ export async function clipInput(
   };
 }
 
-export interface ClipModel {
+export interface PictureModel {
   /** The picture's embedding (scaled to length 1), and its size as shown. */
   embed(
     image: Buffer,
@@ -134,18 +137,30 @@ export interface ClipModel {
   close(): Promise<void>;
 }
 
-/** Loads the model, downloading it first if this server hasn't yet. */
-export async function openClipModel(signal?: AbortSignal): Promise<ClipModel> {
-  const file = clipModelPath();
-  if (!(await hasModel(file))) {
-    await downloadModel(file, signal);
-  }
+export interface TextModel {
+  /** The description's embedding (scaled to length 1). */
+  embed(text: string): Promise<Float32Array>;
+  /** Frees the model's memory (about 0.4 GB). */
+  close(): Promise<void>;
+}
+
+async function openSession(file: string) {
   const ort = await import("onnxruntime-node");
   const session = await ort.InferenceSession.create(file, {
     executionProviders: ["cpu"],
     graphOptimizationLevel: "all",
     intraOpNumThreads: THREADS,
   });
+  return { ort, session };
+}
+
+/** Loads the picture half, downloading it first if needed. */
+export async function openPictureModel(
+  signal?: AbortSignal,
+): Promise<PictureModel> {
+  const { ort, session } = await openSession(
+    await ensureFile(CLIP_FILES.picture, signal),
+  );
   const [inputName] = session.inputNames;
   const [outputName] = session.outputNames;
   return {
@@ -156,6 +171,31 @@ export async function openClipModel(signal?: AbortSignal): Promise<ClipModel> {
       });
       const vector = normalized(result[outputName].data as Float32Array);
       return { vector, width, height };
+    },
+    close: () => session.release(),
+  };
+}
+
+/** Loads the text half and its tokenizer, downloading them first if needed. */
+export async function openTextModel(signal?: AbortSignal): Promise<TextModel> {
+  const tokenizerFile = await ensureFile(CLIP_FILES.tokenizer, signal);
+  const tokenizer = ClipTokenizer.fromJson(
+    JSON.parse(await fs.readFile(tokenizerFile, "utf8")) as TokenizerJson,
+  );
+  const { ort, session } = await openSession(
+    await ensureFile(CLIP_FILES.text, signal),
+  );
+  const [inputName] = session.inputNames;
+  const [outputName] = session.outputNames;
+  return {
+    async embed(text) {
+      const result = await session.run({
+        [inputName]: new ort.Tensor("int32", tokenizer.encode(text), [
+          1,
+          CONTEXT_LENGTH,
+        ]),
+      });
+      return normalized(result[outputName].data as Float32Array);
     },
     close: () => session.release(),
   };

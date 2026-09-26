@@ -7,3 +7,6 @@ export * from "./tracing";
 export * from "./eventLogTypes";
 export * from "./secretBox";
 export * from "./instagram";
+export * from "./pictureVectors";
+export * from "./pictureModels";
+export * from "./pictureSettings";

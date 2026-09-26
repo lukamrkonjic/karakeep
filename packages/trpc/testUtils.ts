@@ -146,6 +146,10 @@ export function defaultBeforeEach(seedDB = true) {
         queueSubscriptionSync: vi.fn(async () => undefined),
         // Fork: Cleanups → Duplicate pictures → Check now.
         queueDuplicatePicturesCheck: vi.fn(async () => undefined),
+        // Fork: the picture jobs (Settings → Pictures, search by description).
+        requestPictureFingerprints: vi.fn(async () => undefined),
+        requestListSuggestions: vi.fn(async () => undefined),
+        PictureTextQueue: { enqueue: vi.fn(async () => undefined) },
       };
     });
     Object.assign(context, await buildTestContext(seedDB));

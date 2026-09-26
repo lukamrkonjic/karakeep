@@ -1,6 +1,8 @@
 /**
- * Fork: which pictures are alike (duplicate pictures). Brute force over all
- * of a user's pictures — a few milliseconds per picture for thousands.
+ * Fork: comparing pictures by their fingerprints (the picture model's
+ * embeddings): which are alike (duplicate pictures), which are the most like
+ * one picture or a description. Brute force over all of a user's pictures —
+ * a few milliseconds for thousands.
  */
 
 export interface PictureVector {
@@ -84,4 +86,64 @@ export function bufferToVector(buffer: Buffer): Float32Array {
     vector[i] = buffer.readFloatLE(i * 4);
   }
   return vector;
+}
+
+/** A user's pictures as one block of numbers, compared in one pass. */
+export interface PictureIndex {
+  ids: string[];
+  /** The embeddings one after another, `dims` numbers each. */
+  vectors: Float32Array;
+  dims: number;
+}
+
+export function buildPictureIndex(pictures: PictureVector[]): PictureIndex {
+  const dims = pictures[0]?.vector.length ?? 0;
+  const vectors = new Float32Array(pictures.length * dims);
+  pictures.forEach((picture, i) => vectors.set(picture.vector, i * dims));
+  return { ids: pictures.map((p) => p.id), vectors, dims };
+}
+
+export interface RankedPicture {
+  id: string;
+  /** 1 for the same direction; 1 - similarity is the distance. */
+  similarity: number;
+}
+
+/**
+ * The pictures at least `minSimilarity` like `vector`, most alike first.
+ * Embeddings are of length 1, so the similarity is their dot product.
+ */
+export function rankPictures(
+  index: PictureIndex,
+  vector: Float32Array,
+  opts: {
+    minSimilarity: number;
+    /** Leave these out (the picture itself, say). */
+    exclude?: ReadonlySet<string>;
+    /** Only pictures this accepts. */
+    only?: (id: string) => boolean;
+    limit?: number;
+  },
+): RankedPicture[] {
+  const { ids, vectors, dims } = index;
+  if (vector.length !== dims) {
+    return [];
+  }
+  const found: RankedPicture[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    let dot = 0;
+    const offset = i * dims;
+    for (let d = 0; d < dims; d++) {
+      dot += vectors[offset + d] * vector[d];
+    }
+    if (
+      dot >= opts.minSimilarity &&
+      !opts.exclude?.has(ids[i]) &&
+      (!opts.only || opts.only(ids[i]))
+    ) {
+      found.push({ id: ids[i], similarity: dot });
+    }
+  }
+  found.sort((a, b) => b.similarity - a.similarity);
+  return opts.limit === undefined ? found : found.slice(0, opts.limit);
 }

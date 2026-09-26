@@ -12,6 +12,7 @@ import { duplicatePicturesAppRouter } from "./duplicatePictures";
 import { instagramAppRouter } from "./instagram";
 import { invitesAppRouter } from "./invites";
 import { listSubscriptionsAppRouter } from "./listSubscriptions";
+import { picturesAppRouter } from "./pictures";
 import { uiPreferencesAppRouter } from "./uiPreferences";
 import { listsAppRouter } from "./lists";
 import { promptsAppRouter } from "./prompts";
@@ -43,6 +44,9 @@ export const appRouter = router({
   listSubscriptions: listSubscriptionsAppRouter,
   instagram: instagramAppRouter,
   duplicatePictures: duplicatePicturesAppRouter,
+  // Fork: Settings → Pictures, similar pictures, search by description,
+  // list suggestions.
+  pictures: picturesAppRouter,
   uiPreferences: uiPreferencesAppRouter,
   config: configAppRouter,
 });

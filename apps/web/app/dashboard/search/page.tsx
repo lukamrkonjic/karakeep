@@ -3,7 +3,11 @@
 import { Suspense, useEffect } from "react";
 import BookmarksGrid from "@/components/dashboard/bookmarks/BookmarksGrid";
 import BookmarksGridSkeleton from "@/components/dashboard/bookmarks/BookmarksGridSkeleton";
-import { useBookmarkSearch } from "@/lib/hooks/bookmark-search";
+import { PictureSearchResults } from "@/components/dashboard/pictures/PictureSearchResults";
+import {
+  useBookmarkSearch,
+  useBookmarkSearchState,
+} from "@/lib/hooks/bookmark-search";
 import { useInSearchPageStore } from "@/lib/store/useInSearchPageStore";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
 
@@ -45,10 +49,25 @@ function SearchComp() {
   );
 }
 
+/** Fork: Search → Pictures has results of its own (by description). */
+function SearchResults() {
+  const { searchMode, searchQuery } = useBookmarkSearchState();
+  const { setInSearchPage } = useInSearchPageStore();
+  useEffect(() => {
+    setInSearchPage(true);
+    return () => setInSearchPage(false);
+  }, [setInSearchPage]);
+  return searchMode === "pictures" ? (
+    <PictureSearchResults query={searchQuery} />
+  ) : (
+    <SearchComp />
+  );
+}
+
 export default function SearchPage() {
   return (
     <Suspense>
-      <SearchComp />
+      <SearchResults />
     </Suspense>
   );
 }

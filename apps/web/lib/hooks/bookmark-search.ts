@@ -12,14 +12,21 @@ import { useInSearchPageStore } from "../store/useInSearchPageStore";
 
 const DEFAULT_SEARCH_MODE: ZBookmarkSearchMode = "fts";
 
-function parseSearchMode(value: string | null): ZBookmarkSearchMode {
-  if (value === "semantic" || value === "hybrid") {
+/**
+ * Fork: "pictures" — pictures found by describing them (Settings →
+ * Pictures). The web app's own mode: the search page shows it with
+ * PictureSearchResults instead of searchBookmarks.
+ */
+export type SearchMode = ZBookmarkSearchMode | "pictures";
+
+function parseSearchMode(value: string | null): SearchMode {
+  if (value === "semantic" || value === "hybrid" || value === "pictures") {
     return value;
   }
   return DEFAULT_SEARCH_MODE;
 }
 
-function buildSearchHref(query: string, mode: ZBookmarkSearchMode) {
+function buildSearchHref(query: string, mode: SearchMode) {
   const params = new URLSearchParams();
   if (query) {
     params.set("q", query);
@@ -51,9 +58,10 @@ export function useBookmarkSearchState() {
     () => parseSearchQuery(effectiveSearch.searchQuery),
     [effectiveSearch.searchQuery],
   );
-  const selectedSearchMode = semanticSearchEnabled
-    ? effectiveSearch.searchMode
-    : DEFAULT_SEARCH_MODE;
+  const selectedSearchMode: SearchMode =
+    semanticSearchEnabled || effectiveSearch.searchMode === "pictures"
+      ? effectiveSearch.searchMode
+      : DEFAULT_SEARCH_MODE;
 
   // A query with no text (e.g. one made up entirely of qualifiers like
   // `is:fav`) has nothing to embed, so it can only be served by full-text
@@ -63,9 +71,10 @@ export function useBookmarkSearchState() {
   return {
     searchQuery: effectiveSearch.searchQuery,
     searchMode: selectedSearchMode,
-    effectiveSearchMode: hasQueryText
-      ? selectedSearchMode
-      : DEFAULT_SEARCH_MODE,
+    effectiveSearchMode:
+      hasQueryText && selectedSearchMode !== "pictures"
+        ? selectedSearchMode
+        : DEFAULT_SEARCH_MODE,
     parsedSearchQuery: parsed,
   };
 }
@@ -86,7 +95,7 @@ export function useDoBookmarkSearch() {
   }, []);
 
   const navigateToSearch = useCallback(
-    (query: string, mode: ZBookmarkSearchMode) => {
+    (query: string, mode: SearchMode) => {
       router.replace(buildSearchHref(query, mode));
     },
     [router],
@@ -113,7 +122,7 @@ export function useDoBookmarkSearch() {
   );
 
   const setSearchMode = useCallback(
-    (mode: ZBookmarkSearchMode, query = searchQuery) => {
+    (mode: SearchMode, query = searchQuery) => {
       if (timeoutId.current) {
         clearTimeout(timeoutId.current);
         timeoutId.current = null;

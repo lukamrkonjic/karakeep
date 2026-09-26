@@ -27,18 +27,22 @@ import {
   useRefreshWhenSynced,
 } from "./ListSubscriptionStatus";
 
-/**
- * Every picture of a carousel post (and every page of a Pinterest idea pin),
- * or only the first. A change applies to the posts that sync from then on.
- */
-function WholeCarouselCheckbox({
+const WHOLE_CAROUSEL_HINT =
+  "Every picture of a post with several (and every page of a Pinterest idea pin), not just the first. Applies to posts that sync from now on; what's already in the list stays as it is.";
+const NEAR_DUPLICATES_HINT =
+  "A picture that's another copy of one you have (resized, re-saved, recropped: Settings → Pictures says how alike) is linked to that one instead of downloaded again.";
+
+/** A subscription's option: whole carousels, skipping near-duplicates. */
+function OptionCheckbox({
   checked,
   onChange,
+  hint,
   className,
   children,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  hint: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -48,7 +52,7 @@ function WholeCarouselCheckbox({
         "flex w-fit cursor-pointer select-none items-center gap-2 text-muted-foreground",
         className,
       )}
-      title="Every picture of a post with several (and every page of a Pinterest idea pin), not just the first. Applies to posts that sync from now on; what's already in the list stays as it is."
+      title={hint}
     >
       <input
         type="checkbox"
@@ -81,6 +85,7 @@ export function ListSubscriptionsModal({
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [wholeCarousel, setWholeCarousel] = useState(true);
+  const [skipNearDuplicates, setSkipNearDuplicates] = useState(false);
 
   const subscriptionsQuery = api.listSubscriptions.list.queryOptions({
     listId,
@@ -151,7 +156,12 @@ export function ListSubscriptionsModal({
           onSubmit={(e) => {
             e.preventDefault();
             if (url.trim()) {
-              add({ listId, url: url.trim(), wholeCarousel });
+              add({
+                listId,
+                url: url.trim(),
+                wholeCarousel,
+                skipNearDuplicates,
+              });
             }
           }}
         >
@@ -171,13 +181,22 @@ export function ListSubscriptionsModal({
               Add
             </ActionButton>
           </div>
-          <WholeCarouselCheckbox
+          <OptionCheckbox
             checked={wholeCarousel}
             onChange={setWholeCarousel}
+            hint={WHOLE_CAROUSEL_HINT}
             className="text-sm"
           >
             Whole carousels: every picture of a post, not just the first
-          </WholeCarouselCheckbox>
+          </OptionCheckbox>
+          <OptionCheckbox
+            checked={skipNearDuplicates}
+            onChange={setSkipNearDuplicates}
+            hint={NEAR_DUPLICATES_HINT}
+            className="text-sm"
+          >
+            Skip near-duplicates of pictures you have
+          </OptionCheckbox>
         </form>
 
         {instagram && instagram.status !== "ok" && (
@@ -219,18 +238,34 @@ export function ListSubscriptionsModal({
                   </span>
                   <SubscriptionStatus subscription={subscription} />
                 </span>
-                <WholeCarouselCheckbox
-                  checked={subscription.wholeCarousel}
-                  onChange={(checked) =>
-                    update({
-                      subscriptionId: subscription.id,
-                      wholeCarousel: checked,
-                    })
-                  }
-                  className="mt-1 text-xs"
-                >
-                  Whole carousels
-                </WholeCarouselCheckbox>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  <OptionCheckbox
+                    checked={subscription.wholeCarousel}
+                    onChange={(checked) =>
+                      update({
+                        subscriptionId: subscription.id,
+                        wholeCarousel: checked,
+                      })
+                    }
+                    hint={WHOLE_CAROUSEL_HINT}
+                    className="text-xs"
+                  >
+                    Whole carousels
+                  </OptionCheckbox>
+                  <OptionCheckbox
+                    checked={subscription.skipNearDuplicates}
+                    onChange={(checked) =>
+                      update({
+                        subscriptionId: subscription.id,
+                        skipNearDuplicates: checked,
+                      })
+                    }
+                    hint={NEAR_DUPLICATES_HINT}
+                    className="text-xs"
+                  >
+                    Skip near-duplicates
+                  </OptionCheckbox>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <Button

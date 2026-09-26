@@ -18,6 +18,7 @@ import {
   Download,
   GitBranch,
   Image,
+  Images,
   KeyRound,
   Link,
   RefreshCw,
@@ -81,6 +82,13 @@ const settingsSidebarItems = (
       name: "List subscriptions",
       icon: <RefreshCw size={18} />,
       path: "/settings/list-subscriptions",
+    },
+    {
+      // Fork: what the picture model does (similar pictures, search by
+      // description, list suggestions, duplicates).
+      name: "Pictures",
+      icon: <Images size={18} />,
+      path: "/settings/pictures",
     },
     {
       name: t("settings.backups.backups"),
