@@ -15,6 +15,12 @@ export interface SubscriptionItem {
   sourceUrl: string;
   /** Best first; the worker keeps the first one that downloads. */
   media: SubscriptionMedia[];
+  /**
+   * On the second and later pictures of a carousel (or pages of a Pinterest
+   * idea pin): the first one's externalId. They follow it in `items`, and
+   * are only taken with "Whole carousels" on (see ledger.ts).
+   */
+  partOf?: string;
 }
 
 export interface SubscriptionFetchResult {

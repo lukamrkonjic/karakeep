@@ -101,7 +101,10 @@ function titleOf(post: IgMedia): string | null {
     : null;
 }
 
-/** A saved post, as the pictures and videos it is made of. */
+/**
+ * A saved post, as the pictures and videos it is made of. A carousel's are
+ * `partOf` its first, so they're only taken with "Whole carousels" on.
+ */
 export function itemsOfPost(post: IgMedia): SubscriptionItem[] {
   const code = typeof post.code === "string" && post.code ? post.code : null;
   if (!code) {
@@ -111,7 +114,7 @@ export function itemsOfPost(post: IgMedia): SubscriptionItem[] {
   const title = titleOf(post);
   const parts = post.carousel_media?.length ? post.carousel_media : [post];
   const several = parts.length > 1;
-  return parts.flatMap((part, index) => {
+  const items = parts.flatMap((part, index): SubscriptionItem[] => {
     const media = mediaOf(part);
     if (media.length === 0) {
       return [];
@@ -128,6 +131,10 @@ export function itemsOfPost(post: IgMedia): SubscriptionItem[] {
       },
     ];
   });
+  const [first, ...rest] = items;
+  return first
+    ? [first, ...rest.map((item) => ({ ...item, partOf: first.externalId }))]
+    : [];
 }
 
 async function pause(signal?: AbortSignal) {
@@ -143,8 +150,11 @@ export async function fetchInstagramCollection(
   cookies: InstagramCookies,
   opts: {
     signal?: AbortSignal;
-    /** Items the subscription has already handled: paging stops at a page of only those. */
-    isKnown?: (externalId: string) => boolean;
+    /**
+     * Items the sync has no use for (handled already, or the rest of a
+     * carousel it isn't taking): paging stops at a page of only those.
+     */
+    isKnown?: (item: SubscriptionItem) => boolean;
   } = {},
 ): Promise<SubscriptionFetchResult> {
   const ref = parseInstagramCollectionUrl(url);
@@ -186,7 +196,7 @@ export async function fetchInstagramCollection(
     if (
       opts.isKnown &&
       pageItems.length > 0 &&
-      pageItems.every((item) => opts.isKnown?.(item.externalId))
+      pageItems.every((item) => opts.isKnown?.(item))
     ) {
       break;
     }

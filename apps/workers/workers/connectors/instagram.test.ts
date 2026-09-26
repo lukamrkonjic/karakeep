@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { IgMedia } from "./instagram";
+import { wantedBy } from "./ledger";
 
 // The API is called through the workers' fetchWithProxy: pages come from here.
 const pages: Record<string, unknown>[] = [];
@@ -76,13 +77,41 @@ describe("Instagram posts", () => {
         picture("one"),
         { video_versions: [{ url: cdn("two.mp4"), width: 720 }] },
         {},
+        picture("four"),
       ],
     });
     expect(
-      items.map((i) => [i.externalId, i.sourceUrl, i.media[0].kind]),
+      items.map((i) => [i.externalId, i.sourceUrl, i.media[0].kind, i.partOf]),
     ).toEqual([
-      ["CAR_1", "https://www.instagram.com/p/CAR/?img_index=1", "image"],
-      ["CAR_2", "https://www.instagram.com/p/CAR/?img_index=2", "video"],
+      [
+        "CAR_1",
+        "https://www.instagram.com/p/CAR/?img_index=1",
+        "image",
+        undefined,
+      ],
+      [
+        "CAR_2",
+        "https://www.instagram.com/p/CAR/?img_index=2",
+        "video",
+        "CAR_1",
+      ],
+      [
+        "CAR_4",
+        "https://www.instagram.com/p/CAR/?img_index=4",
+        "image",
+        "CAR_1",
+      ],
+    ]);
+  });
+
+  test("a carousel whose first slide has nothing: the next one is first", () => {
+    const items = itemsOfPost({
+      code: "CAR",
+      carousel_media: [{}, picture("two"), picture("three")],
+    });
+    expect(items.map((i) => [i.externalId, i.partOf])).toEqual([
+      ["CAR_2", undefined],
+      ["CAR_3", "CAR_2"],
     ]);
   });
 });
@@ -128,7 +157,7 @@ describe("Instagram collections", () => {
     const reading = fetchInstagramCollection(
       "https://www.instagram.com/me/saved/all-posts/",
       session,
-      { isKnown: (id) => known.has(id) },
+      { isKnown: (item) => known.has(item.externalId) },
     );
     await vi.runAllTimersAsync();
     const result = await reading;
@@ -143,5 +172,37 @@ describe("Instagram collections", () => {
       "OLD3",
     ]);
     expect(result).toMatchObject({ name: "All posts", complete: false });
+  });
+
+  test("with only the first taken, the rest of a carousel counts as known", async () => {
+    const carousel = (code: string) => ({
+      media: { code, carousel_media: [picture("a"), picture("b")] },
+    });
+    const pageOf = (codes: string[], next: string | null) => ({
+      status: "ok",
+      items: codes.map(carousel),
+      more_available: next !== null,
+      next_max_id: next,
+    });
+    pages.push(
+      pageOf(["NEW", "OLD1"], "c1"),
+      pageOf(["OLD2"], "c2"),
+      pageOf(["OLD3"], null),
+    );
+    const handled = new Map(
+      ["OLD1_1", "OLD2_1", "OLD3_1"].map((id) => [id, new Date()]),
+    );
+    const wanted = wantedBy(handled, null);
+    const reading = fetchInstagramCollection(
+      "https://www.instagram.com/me/saved/all-posts/",
+      session,
+      { isKnown: (item) => !wanted(item) },
+    );
+    await vi.runAllTimersAsync();
+    const result = await reading;
+    expect(requested).toHaveLength(2);
+    expect(result.items.filter(wanted).map((i) => i.externalId)).toEqual([
+      "NEW_1",
+    ]);
   });
 });

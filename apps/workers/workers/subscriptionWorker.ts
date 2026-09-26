@@ -57,9 +57,14 @@ import {
   BookmarkTypes,
   MAX_BOOKMARK_TITLE_LENGTH,
 } from "@karakeep/shared/types/bookmarks";
+import {
+  isSubscriptionDue,
+  SUBSCRIPTION_SCHEDULE_SLACK_MS,
+} from "@karakeep/shared/utils/listSubscriptions";
 import { List } from "@karakeep/trpc/models/lists";
 
 import { fetchInstagramCollection } from "./connectors/instagram";
+import { wantedBy } from "./connectors/ledger";
 import { fetchPinterestBoard } from "./connectors/pinterest";
 import type {
   SubscriptionFetchResult,
@@ -79,7 +84,8 @@ import { normalizeContentType } from "./crawler/utils";
  * subscription has handled is never touched again — even after its bookmark
  * was moved or deleted — and a picture the user already has (the same image
  * pinned twice, or a board that was removed and added again) is linked into
- * the list instead of being downloaded a second time.
+ * the list instead of being downloaded a second time. The rest of a carousel
+ * comes only with "Whole carousels" on (connectors/ledger.ts).
  */
 
 type SubscriptionRunResult = "success" | "failure" | "skipped";
@@ -103,9 +109,6 @@ const SOURCES: Record<Subscription["kind"], { name: string; referer: string }> =
 const DOWNLOAD_TIMEOUT_MS = 2 * 60_000;
 /** Consecutive download failures after which the source is assumed down. */
 const MAX_FAILURES_IN_A_ROW = 5;
-/** The cron fires on the hour; a run that finished a few minutes past the
- *  hour must still count as due on the hour it is next due. */
-const SCHEDULE_SLACK_MS = 10 * 60_000;
 /** An Instagram session nothing has used for this long is checked on its
  *  own (a sync that reads a collection is a check). */
 const INSTAGRAM_CHECK_EVERY_MS = 24 * 3600_000;
@@ -134,15 +137,8 @@ export const SubscriptionRefreshingWorker = cron.schedule(
 
       const now = Date.now();
       for (const row of rows) {
-        // 0 hours means this user syncs only when they ask for it.
-        if (row.intervalHours <= 0) {
-          continue;
-        }
-        const due =
-          !row.lastRunAt ||
-          now - row.lastRunAt.getTime() >=
-            row.intervalHours * 3600_000 - SCHEDULE_SLACK_MS;
-        if (due) {
+        // Never due at 0 hours: that user syncs only when they ask.
+        if (isSubscriptionDue(row.lastRunAt, row.intervalHours, now)) {
           await queueSubscriptionSync(db, row);
           if (row.kind === "instagram") {
             syncingInstagram.add(row.userId);
@@ -555,7 +551,11 @@ export async function checkInstagramSessions(skip = new Set<string>()) {
         isNull(instagramSessionsTable.checkedAt),
         lt(
           instagramSessionsTable.checkedAt,
-          new Date(Date.now() - INSTAGRAM_CHECK_EVERY_MS + SCHEDULE_SLACK_MS),
+          new Date(
+            Date.now() -
+              INSTAGRAM_CHECK_EVERY_MS +
+              SUBSCRIPTION_SCHEDULE_SLACK_MS,
+          ),
         ),
       ),
     ),
@@ -688,14 +688,18 @@ async function run(
   logger.info(
     `[subscription][${jobId}] Syncing ${subscription.kind} "${subscription.name ?? subscription.url}" into list ${subscription.listId} ...`,
   );
-  const handled = new Set(
+  const handled = new Map(
     (
       await db
-        .select({ externalId: listSubscriptionImportsTable.externalId })
+        .select({
+          externalId: listSubscriptionImportsTable.externalId,
+          createdAt: listSubscriptionImportsTable.createdAt,
+        })
         .from(listSubscriptionImportsTable)
         .where(eq(listSubscriptionImportsTable.subscriptionId, subscription.id))
-    ).map((row) => row.externalId),
+    ).map((row) => [row.externalId, row.createdAt]),
   );
+  const wanted = wantedBy(handled, subscription.wholeCarouselSince);
 
   const signal = AbortSignal.any([
     job.abortSignal,
@@ -709,7 +713,7 @@ async function run(
     }
     reading = fetchInstagramCollection(subscription.url, session.cookies, {
       signal,
-      isKnown: (externalId) => handled.has(externalId),
+      isKnown: (item) => !wanted(item),
     });
   } else {
     reading = fetchPinterestBoard(subscription.url, { signal });
@@ -731,7 +735,7 @@ async function run(
       .where(eq(instagramSessionsTable.userId, subscription.userId));
   }
 
-  const fresh = fetched.items.filter((item) => !handled.has(item.externalId));
+  const fresh = fetched.items.filter(wanted);
   // The board lists its newest pin first and so does the list, by when each
   // bookmark was made. Filing bottom-up keeps the board's order; taking the
   // oldest first means a board too big for one run fills in from the bottom,

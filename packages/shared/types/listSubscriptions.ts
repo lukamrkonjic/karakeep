@@ -15,6 +15,10 @@ export const zListSubscriptionSchema = z.object({
   url: z.string(),
   name: z.string().nullable(),
   enabled: z.boolean(),
+  // Every picture of a carousel (and every page of a Pinterest idea pin),
+  // not only the first. Applies to posts that come in from when it was
+  // turned on.
+  wholeCarousel: z.boolean(),
   createdAt: z.date(),
   lastRunAt: z.date().nullable(),
   // "pending" = a sync is queued or running.
@@ -28,11 +32,13 @@ export type ZListSubscription = z.infer<typeof zListSubscriptionSchema>;
 export const zNewListSubscriptionSchema = z.object({
   listId: z.string(),
   url: z.string().min(1),
+  wholeCarousel: z.boolean().default(true),
 });
 
 export const zUpdateListSubscriptionSchema = z.object({
   subscriptionId: z.string(),
-  enabled: z.boolean(),
+  enabled: z.boolean().optional(),
+  wholeCarousel: z.boolean().optional(),
 });
 
 /** Your Instagram connection (Settings → List subscriptions). */

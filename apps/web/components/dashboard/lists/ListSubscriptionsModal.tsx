@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Trash2 } from "lucide-react";
 
@@ -25,6 +26,40 @@ import {
   SubscriptionStatus,
   useRefreshWhenSynced,
 } from "./ListSubscriptionStatus";
+
+/**
+ * Every picture of a carousel post (and every page of a Pinterest idea pin),
+ * or only the first. A change applies to the posts that sync from then on.
+ */
+function WholeCarouselCheckbox({
+  checked,
+  onChange,
+  className,
+  children,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex w-fit cursor-pointer select-none items-center gap-2 text-muted-foreground",
+        className,
+      )}
+      title="Every picture of a post with several (and every page of a Pinterest idea pin), not just the first. Applies to posts that sync from now on; what's already in the list stays as it is."
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-3.5 shrink-0 cursor-pointer accent-primary"
+      />
+      {children}
+    </label>
+  );
+}
 
 /**
  * A list's subscriptions: sources a worker keeps it in sync with — a public
@@ -45,6 +80,7 @@ export function ListSubscriptionsModal({
   const api = useTRPC();
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
+  const [wholeCarousel, setWholeCarousel] = useState(true);
 
   const subscriptionsQuery = api.listSubscriptions.list.queryOptions({
     listId,
@@ -105,29 +141,43 @@ export function ListSubscriptionsModal({
             Keep this list in sync with a public Pinterest board or one of your
             Instagram saved collections. Their pictures and videos are fetched
             on a schedule (Settings → List subscriptions), and nothing is ever
-            saved twice.
+            saved twice. Changing “Whole carousels” applies to the posts that
+            sync from then on.
           </DialogDescription>
         </DialogHeader>
 
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (url.trim()) {
-              add({ listId, url: url.trim() });
+              add({ listId, url: url.trim(), wholeCarousel });
             }
           }}
         >
-          <Input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Pinterest board or Instagram collection link"
-            aria-label="Pinterest board or Instagram collection link"
-            className="bg-muted"
-          />
-          <ActionButton type="submit" loading={isAdding} disabled={!url.trim()}>
-            Add
-          </ActionButton>
+          <div className="flex gap-2">
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Pinterest board or Instagram collection link"
+              aria-label="Pinterest board or Instagram collection link"
+              className="bg-muted"
+            />
+            <ActionButton
+              type="submit"
+              loading={isAdding}
+              disabled={!url.trim()}
+            >
+              Add
+            </ActionButton>
+          </div>
+          <WholeCarouselCheckbox
+            checked={wholeCarousel}
+            onChange={setWholeCarousel}
+            className="text-sm"
+          >
+            Whole carousels: every picture of a post, not just the first
+          </WholeCarouselCheckbox>
         </form>
 
         {instagram && instagram.status !== "ok" && (
@@ -169,6 +219,18 @@ export function ListSubscriptionsModal({
                   </span>
                   <SubscriptionStatus subscription={subscription} />
                 </span>
+                <WholeCarouselCheckbox
+                  checked={subscription.wholeCarousel}
+                  onChange={(checked) =>
+                    update({
+                      subscriptionId: subscription.id,
+                      wholeCarousel: checked,
+                    })
+                  }
+                  className="mt-1 text-xs"
+                >
+                  Whole carousels
+                </WholeCarouselCheckbox>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <Button

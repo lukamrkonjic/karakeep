@@ -814,6 +814,10 @@ export const listSubscriptionsTable = sqliteTable(
     // What the source calls itself (a board's name), for the UI.
     name: text("name"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    // "Whole carousels": since when every picture of a carousel (and every
+    // page of a Pinterest idea pin) is taken, not only the first. Null: only
+    // the first. A post first taken before this moment keeps what it has.
+    wholeCarouselSince: integer("wholeCarouselSince", { mode: "timestamp" }),
     lastRunAt: integer("lastRunAt", { mode: "timestamp" }),
     lastStatus: text("lastStatus", {
       enum: ["pending", "success", "failure"],

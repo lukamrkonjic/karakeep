@@ -8,17 +8,20 @@ import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
  *
  * The board page ships its first page of pins as JSON in
  * `__PWS_INITIAL_PROPS__` (BoardResource for the board itself,
- * BoardFeedResource for the pins plus a cursor). Further pages come from the
- * same endpoint the site's own front-end calls, which needs the cookies, the
+ * BoardFeedResource for the pins plus a cursor), but cut short: without
+ * carousels or idea pins' pages. So every page, the first one too, comes from
+ * the endpoint the site's own front-end calls, which needs the cookies, the
  * app version and the CSRF token that the page handed out, plus the name of
  * the handler it would have been called from — without them it answers
- * "Invalid Resource Request".
+ * "Invalid Resource Request". The page's own copy is the fallback.
  *
  * Only each pin's own media is taken (`images.orig`, or an mp4 from
  * `videos.video_list` — or, for an idea pin, from its first page), so the
  * page's avatars, favicons, logos and "more like this" thumbnails never enter
- * the picture. A feed also carries "story" modules (related interests and the
- * like); those are skipped.
+ * the picture. The rest of a carousel pin's pictures, and of an idea pin's
+ * pages, follow it as items of their own (`partOf` it), for subscriptions
+ * that take whole carousels. A feed also carries "story" modules (related
+ * interests and the like); those are skipped.
  */
 
 import type {
@@ -39,7 +42,10 @@ const PAGE_DELAY_MS = 250;
 
 interface PinImage {
   url?: unknown;
+  width?: unknown;
 }
+type PinImages = Record<string, PinImage | undefined> | null;
+
 export interface Pin {
   id?: string;
   /** "pin" for a real pin; a board feed also carries "story" modules. */
@@ -51,7 +57,7 @@ export interface Pin {
   grid_title?: unknown;
   title?: unknown;
   description?: unknown;
-  images?: Record<string, PinImage | undefined> | null;
+  images?: PinImages;
   videos?: { video_list?: VideoList } | null;
   /**
    * An idea pin ("story pin"): its video is on its pages, not in `videos`
@@ -61,12 +67,35 @@ export interface Pin {
     pages?: StoryPage[] | null;
     pages_preview?: StoryPage[] | null;
   } | null;
+  /**
+   * A carousel pin: its pictures in order, sized up to 736 px. The pin's
+   * own picture is the one at `cover_index`, though not always the same
+   * file of it.
+   */
+  carousel_data?: {
+    cover_index?: unknown;
+    carousel_slots?: CarouselSlot[] | null;
+  } | null;
 }
 
-type VideoList = Record<string, { url?: unknown; width?: number } | undefined>;
+type VideoList = Record<
+  string,
+  { url?: unknown; width?: number; thumbnail?: unknown } | undefined
+>;
 
 interface StoryPage {
-  blocks?: { video?: { video_list?: VideoList } | null }[] | null;
+  blocks?:
+    | {
+        video?: { video_list?: VideoList } | null;
+        image?: { images?: PinImages } | null;
+      }[]
+    | null;
+}
+
+interface CarouselSlot {
+  title?: unknown;
+  images?: PinImages;
+  videos?: { video_list?: VideoList } | null;
 }
 
 // An idea pin's video is also served as plain mp4s next to its playlist
@@ -193,31 +222,110 @@ function videoUrls(list: VideoList | undefined): string[] {
   );
 }
 
-/** An idea pin's video: the first one on its pages. */
-function ideaPinVideo(pin: Pin): VideoList | undefined {
+/** An idea pin's pages (the preview's, when the feed sends only those). */
+function storyPages(pin: Pin): StoryPage[] {
   const story = pin.story_pin_data;
-  for (const pages of [story?.pages, story?.pages_preview]) {
-    for (const page of pages ?? []) {
-      for (const block of page.blocks ?? []) {
-        if (block.video?.video_list) {
-          return block.video.video_list;
-        }
+  return story?.pages?.length ? story.pages : (story?.pages_preview ?? []);
+}
+
+/** An idea pin's video: the first one on its pages, and which page it is. */
+function ideaPinVideo(pin: Pin): { list: VideoList; page: number } | null {
+  for (const [page, { blocks } = {}] of storyPages(pin).entries()) {
+    for (const block of blocks ?? []) {
+      if (block?.video?.video_list) {
+        return { list: block.video.video_list, page };
       }
     }
   }
-  return undefined;
+  return null;
 }
 
-export function itemOf(pin: Pin): SubscriptionItem | null {
+/**
+ * Where a resized copy's original is: `/736x/…` → `/originals/…`. The
+ * copies are always .jpg; an original can be a .png.
+ */
+function originalsOf(copy: string): string[] {
+  const url = new URL(copy);
+  const [, size, ...path] = url.pathname.split("/");
+  if (!/^\d+x\d*$/.test(size ?? "") || path.length === 0) {
+    return [];
+  }
+  url.pathname = ["", "originals", ...path].join("/");
+  const original = url.toString();
+  return original.endsWith(".jpg")
+    ? [original, original.replace(/\.jpg$/, ".png")]
+    : [original];
+}
+
+/** A picture's files, best first: its original, then its biggest copy. */
+function pictureUrls(images: PinImages | undefined): string[] {
+  const original =
+    mediaUrl(images?.orig?.url) ?? mediaUrl(images?.originals?.url);
+  let copy: { url: string; width: number } | null = null;
+  for (const [size, image] of Object.entries(images ?? {})) {
+    const url = mediaUrl(image?.url);
+    const width = typeof image?.width === "number" ? image.width : 0;
+    if (
+      url &&
+      size !== "orig" &&
+      size !== "originals" &&
+      (!copy || width > copy.width)
+    ) {
+      copy = { url, width };
+    }
+  }
+  const urls = original ? [original] : copy ? originalsOf(copy.url) : [];
+  if (copy && !urls.includes(copy.url)) {
+    urls.push(copy.url);
+  }
+  return urls;
+}
+
+/** A carousel slot's, or an idea pin page's, video before its picture. */
+function partMedia(
+  videoList: VideoList | undefined,
+  images: PinImages | undefined,
+): SubscriptionMedia[] {
+  const pictures = pictureUrls(images);
+  if (pictures.length === 0) {
+    // A video's first frame stands in for the picture it has none of.
+    const frame = Object.values(videoList ?? {})
+      .map((v) => mediaUrl(v?.thumbnail))
+      .find((url) => url !== null);
+    if (frame) {
+      pictures.push(frame);
+    }
+  }
+  return [
+    ...videoUrls(videoList).map((url) => ({ kind: "video" as const, url })),
+    ...pictures.map((url) => ({ kind: "image" as const, url })),
+  ];
+}
+
+/** The hash Pinterest names a picture's (or a video's) files by. */
+function hashOf(url: string): string | null {
+  return /\/([0-9a-f]{32})[._]/.exec(new URL(url).pathname)?.[1] ?? null;
+}
+
+/** The pin's own item, and which of an idea pin's pages that is. */
+function ownItemOf(pin: Pin): { item: SubscriptionItem; page: number } | null {
   if (!pin.id || (pin.type && pin.type !== "pin")) {
     return null;
   }
   const media: SubscriptionMedia[] = [];
+  let page = 0;
 
   // Every variant of a video has the same size, and the HLS playlists
   // (.m3u8) come first — which can't be stored. The mp4 is the one to take.
-  const videos = videoUrls(pin.videos?.video_list);
-  for (const url of videos.length > 0 ? videos : videoUrls(ideaPinVideo(pin))) {
+  let videos = videoUrls(pin.videos?.video_list);
+  if (videos.length === 0) {
+    const idea = ideaPinVideo(pin);
+    videos = videoUrls(idea?.list);
+    if (idea && videos.length > 0) {
+      page = idea.page;
+    }
+  }
+  for (const url of videos) {
     media.push({ kind: "video", url });
   }
   // The picture itself (a video's cover, if the video can't be had).
@@ -242,12 +350,77 @@ export function itemOf(pin: Pin): SubscriptionItem | null {
       : null);
 
   return {
-    externalId: pin.id,
-    mediaKey,
-    title: firstString(pin.grid_title, pin.title, pin.description),
-    sourceUrl: `https://www.pinterest.com/pin/${pin.id}/`,
-    media,
+    item: {
+      externalId: pin.id,
+      mediaKey,
+      title: firstString(pin.grid_title, pin.title, pin.description),
+      sourceUrl: `https://www.pinterest.com/pin/${pin.id}/`,
+      media,
+    },
+    page,
   };
+}
+
+/**
+ * The rest of a carousel pin's pictures, or of an idea pin's pages: every
+ * one but the pin's own, in order, each `partOf` the pin.
+ */
+function restOf(
+  pin: Pin,
+  own: SubscriptionItem,
+  ownPage: number,
+): SubscriptionItem[] {
+  const slots = pin.carousel_data?.carousel_slots ?? [];
+  let parts: { title: unknown; media: SubscriptionMedia[] }[];
+  let skip: number;
+  if (slots.length > 1) {
+    const cover = pin.carousel_data?.cover_index;
+    skip =
+      typeof cover === "number" && cover >= 0 && cover < slots.length
+        ? cover
+        : 0;
+    parts = slots.map((slot) => ({
+      title: slot?.title,
+      media: partMedia(slot?.videos?.video_list, slot?.images),
+    }));
+  } else {
+    skip = ownPage;
+    parts = storyPages(pin).map((page) => {
+      const block = page?.blocks?.find(
+        (b) => b?.video?.video_list || b?.image?.images,
+      );
+      return {
+        title: null,
+        media: partMedia(block?.video?.video_list, block?.image?.images),
+      };
+    });
+  }
+  return parts.flatMap((part, index): SubscriptionItem[] => {
+    const mediaKey = part.media[0] ? hashOf(part.media[0].url) : null;
+    if (
+      index === skip ||
+      part.media.length === 0 ||
+      (mediaKey !== null && mediaKey === own.mediaKey)
+    ) {
+      return [];
+    }
+    return [
+      {
+        externalId: `${own.externalId}_${index + 1}`,
+        mediaKey,
+        title: firstString(part.title) ?? own.title,
+        sourceUrl: own.sourceUrl,
+        media: part.media,
+        partOf: own.externalId,
+      },
+    ];
+  });
+}
+
+/** A pin as items: its own, then the rest of a carousel or an idea pin. */
+export function itemsOf(pin: Pin): SubscriptionItem[] {
+  const own = ownItemOf(pin);
+  return own ? [own.item, ...restOf(pin, own.item, own.page)] : [];
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -307,18 +480,20 @@ export async function fetchPinterestBoard(
   const seen = new Set<string>();
   const take = (pins: Pin[]) => {
     for (const pin of pins) {
-      const item = itemOf(pin);
-      if (item && !seen.has(item.externalId)) {
-        seen.add(item.externalId);
-        items.push(item);
+      for (const item of itemsOf(pin)) {
+        if (!seen.has(item.externalId)) {
+          seen.add(item.externalId);
+          items.push(item);
+        }
       }
     }
   };
-  take((feed.value.data as Pin[] | undefined) ?? []);
-  let bookmark = feed.value.nextBookmark as string | undefined;
-  let complete = !bookmark || bookmark === "-end-";
 
-  for (let page = 2; !complete && page <= MAX_PAGES && boardId; page++) {
+  /**
+   * A page of the board's pins, asked for the way the site's own front-end
+   * does; null when Pinterest won't hand it out.
+   */
+  const feedPage = async (page: number, bookmark?: string) => {
     await sleep(PAGE_DELAY_MS);
     opts.signal?.throwIfAborted();
     const data = {
@@ -334,7 +509,7 @@ export async function fetchPinterestBoard(
         layout: "default",
         page_size: PAGE_SIZE,
         redux_normalize_feed: true,
-        bookmarks: [bookmark],
+        ...(bookmark ? { bookmarks: [bookmark] } : {}),
       },
       context: {},
     };
@@ -357,20 +532,43 @@ export async function fetchPinterestBoard(
       signal: opts.signal,
     });
     if (!resp.ok) {
-      // What was read so far is still worth importing; the next run tries
-      // the rest again.
       logger.warn(
-        `[subscription] Pinterest paging stopped at page ${page}: HTTP ${resp.status}`,
+        `[subscription] Pinterest's feed answered HTTP ${resp.status} for page ${page}`,
       );
-      break;
+      return null;
     }
     const json = (await resp.json()) as {
       resource_response?: { data?: Pin[]; bookmark?: string };
     };
-    const pins = json.resource_response?.data ?? [];
-    take(pins);
-    bookmark = json.resource_response?.bookmark;
-    complete = pins.length === 0 || !bookmark || bookmark === "-end-";
+    return {
+      pins: json.resource_response?.data ?? [],
+      bookmark: json.resource_response?.bookmark,
+    };
+  };
+
+  // The page's own copy of the first pins is cut short (no carousels, no
+  // idea pins' pages): it's only what to go on if the feed won't answer.
+  let first = boardId ? await feedPage(1) : null;
+  if (!first?.pins.length) {
+    first = {
+      pins: (feed.value.data as Pin[] | undefined) ?? [],
+      bookmark: feed.value.nextBookmark as string | undefined,
+    };
+  }
+  take(first.pins);
+  let bookmark = first.bookmark;
+  let complete = !bookmark || bookmark === "-end-";
+
+  for (let page = 2; !complete && page <= MAX_PAGES && boardId; page++) {
+    const next = await feedPage(page, bookmark);
+    if (!next) {
+      // What was read so far is still worth importing; the next run tries
+      // the rest again.
+      break;
+    }
+    take(next.pins);
+    bookmark = next.bookmark;
+    complete = next.pins.length === 0 || !bookmark || bookmark === "-end-";
   }
 
   return { name: boardData?.name ?? null, items, complete };

@@ -19,6 +19,7 @@ import {
   ListCollaboratorsIcons,
   ListPrivacyLabel,
 } from "./ListHeaderComponents";
+import { ListSubscriptionNote } from "./ListSubscriptionNote";
 
 export default function ListHeader({
   initialData,
@@ -83,6 +84,7 @@ export default function ListHeader({
               </>
             )}
             <ListPrivacyLabel list={list} />
+            <ListSubscriptionNote list={list} />
             {parsedQuery && (
               <>
                 <span aria-hidden>·</span>

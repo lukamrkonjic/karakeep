@@ -71,6 +71,14 @@ async function sourceOf(ctx: AuthedContext, raw: string) {
 
 const subscriptionsProcedure = createScopedAuthedProcedure("lists");
 
+/** A subscription as the API shows it. */
+function toApi({
+  wholeCarouselSince,
+  ...subscription
+}: typeof listSubscriptionsTable.$inferSelect) {
+  return { ...subscription, wholeCarousel: wholeCarouselSince !== null };
+}
+
 /** The list must be one you can edit: a subscription writes into it. */
 async function ensureListEditable(ctx: AuthedContext, listId: string) {
   const list = await List.fromId(ctx, listId);
@@ -113,7 +121,7 @@ export const listSubscriptionsAppRouter = router({
           eq(listSubscriptionsTable.userId, ctx.user.id),
         ),
       });
-      return { subscriptions };
+      return { subscriptions: subscriptions.map(toApi) };
     }),
 
   /** Every subscription you have, with the list each one feeds. */
@@ -136,7 +144,7 @@ export const listSubscriptionsAppRouter = router({
         .where(eq(listSubscriptionsTable.userId, ctx.user.id));
       return {
         subscriptions: rows.map((row) => ({
-          ...row.listSubscriptions,
+          ...toApi(row.listSubscriptions),
           listName: row.bookmarkLists.name,
         })),
       };
@@ -170,11 +178,12 @@ export const listSubscriptionsAppRouter = router({
           kind,
           url,
           name,
+          wholeCarouselSince: input.wholeCarousel ? new Date() : null,
         })
         .returning();
       // Fetch it straight away; the schedule takes over afterwards.
       await queueSubscriptionSync(ctx.db, subscription);
-      return { ...subscription, lastStatus: "pending" as const };
+      return { ...toApi(subscription), lastStatus: "pending" as const };
     }),
 
   update: subscriptionsProcedure
@@ -182,17 +191,32 @@ export const listSubscriptionsAppRouter = router({
     .output(zListSubscriptionSchema)
     .use(ensureSubscriptionOwnership)
     .mutation(async ({ input, ctx }) => {
+      const changes: Partial<typeof listSubscriptionsTable.$inferInsert> = {};
+      if (input.enabled !== undefined) {
+        changes.enabled = input.enabled;
+      }
+      if (input.wholeCarousel !== undefined) {
+        // It counts from when it was turned on: posts taken before that keep
+        // what they have instead of their other pictures turning up now, out
+        // of place at the top of the list.
+        changes.wholeCarouselSince = input.wholeCarousel
+          ? (ctx.subscription.wholeCarouselSince ?? new Date())
+          : null;
+      }
+      if (Object.keys(changes).length === 0) {
+        return toApi(ctx.subscription);
+      }
       const [updated] = await ctx.db
         .update(listSubscriptionsTable)
-        .set({ enabled: input.enabled })
+        .set(changes)
         .where(eq(listSubscriptionsTable.id, input.subscriptionId))
         .returning();
       if (input.enabled && !ctx.subscription.enabled) {
         // Resuming catches up on what was pinned while it was paused.
         await queueSubscriptionSync(ctx.db, updated);
-        return { ...updated, lastStatus: "pending" as const };
+        return { ...toApi(updated), lastStatus: "pending" as const };
       }
-      return updated;
+      return toApi(updated);
     }),
 
   delete: subscriptionsProcedure
