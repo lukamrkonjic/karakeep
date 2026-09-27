@@ -6,9 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
 /**
- * Fork: a picture's main colours in its details, the biggest first (the
- * workers read them: Settings → Pictures → Colours). A swatch opens
- * everything in that colour.
+ * Fork: a picture's main colours on top of its details, as one strip the way
+ * Eagle shows them, the biggest first (the workers read them: Settings →
+ * Pictures → Colours). A colour opens every picture with it.
  */
 export function PictureColours({ bookmarkId }: { bookmarkId: string }) {
   const api = useTRPC();
@@ -17,14 +17,14 @@ export function PictureColours({ bookmarkId }: { bookmarkId: string }) {
     return null;
   }
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex h-7 w-full overflow-hidden rounded-md ring-1 ring-inset ring-black/10 dark:ring-white/10">
       {data.map((colour) => (
         <Link
           key={colour.hex}
           href={`/dashboard/colour/${colour.hex.slice(1)}`}
           title={`${colour.hex} · ${Math.round(colour.share * 100)}%`}
           aria-label={`Pictures in ${colour.hex}`}
-          className="size-6 rounded-md ring-1 ring-inset ring-black/10 transition-transform hover:scale-110 dark:ring-white/15"
+          className="h-full flex-1 transition-[flex-grow] duration-150 hover:grow-[1.6]"
           style={{ backgroundColor: colour.hex }}
         />
       ))}

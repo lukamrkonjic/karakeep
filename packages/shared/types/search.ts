@@ -94,6 +94,14 @@ const zSourceMatcher = z.object({
   inverse: z.boolean(),
 });
 
+// Fork: pictures by colour — a family ("red") or a colour ("#286ff0"), as
+// shared utils/colours.ts parseColourQuery gives it.
+const zColorMatcher = z.object({
+  type: z.literal("color"),
+  color: z.string(),
+  inverse: z.boolean(),
+});
+
 const zNonRecursiveMatcher = z.union([
   zTagNameMatcher,
   zListNameMatcher,
@@ -110,6 +118,7 @@ const zNonRecursiveMatcher = z.union([
   zRssFeedNameMatcher,
   zBrokenLinksMatcher,
   zSourceMatcher,
+  zColorMatcher,
 ]);
 
 type NonRecursiveMatcher = z.infer<typeof zNonRecursiveMatcher>;
@@ -135,6 +144,7 @@ export const zMatcherSchema: z.ZodType<Matcher> = z.lazy(() => {
     zRssFeedNameMatcher,
     zBrokenLinksMatcher,
     zSourceMatcher,
+    zColorMatcher,
     z.object({
       type: z.literal("and"),
       matchers: z.array(zMatcherSchema),

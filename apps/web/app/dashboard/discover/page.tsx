@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Discover | vrana",
 };
 
-// Fork: new pictures from Pinterest, like the pins you saved.
+// Fork: your own pictures you haven't seen in a while.
 export default function Discover() {
   return <DiscoverPage />;
 }

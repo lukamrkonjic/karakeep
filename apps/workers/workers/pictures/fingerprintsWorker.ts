@@ -51,12 +51,24 @@ export const PictureFingerprintsSchedulingWorker = cron.schedule(
     const nightly = new Date().getHours() === 2;
     try {
       for (const userId of await pictureOwners()) {
-        const { fingerprintSchedule } = await getPictureSettings(db, userId);
+        const { fingerprintSchedule, palettesEnabled } =
+          await getPictureSettings(db, userId);
         const due =
           fingerprintSchedule === "hourly" ||
           (fingerprintSchedule === "nightly" && nightly);
-        if (due && (await fingerprintProgress(db, userId)).todo.length > 0) {
+        if (!due) {
+          continue;
+        }
+        if ((await fingerprintProgress(db, userId)).todo.length > 0) {
+          // The colours follow once it's done.
           await requestPictureFingerprints(db, userId);
+        } else if (
+          palettesEnabled &&
+          (await paletteProgress(db, userId)).todo.length > 0
+        ) {
+          // An index that's complete: the colours on their own (a library
+          // indexed before there were colours).
+          await requestPicturePalettes(db, userId);
         }
       }
     } catch (error) {

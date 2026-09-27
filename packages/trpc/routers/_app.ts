@@ -14,6 +14,7 @@ import { instagramAppRouter } from "./instagram";
 import { invitesAppRouter } from "./invites";
 import { listSubscriptionsAppRouter } from "./listSubscriptions";
 import { picturesAppRouter } from "./pictures";
+import { pinterestDiscoverAppRouter } from "./pinterestDiscover";
 import { uiPreferencesAppRouter } from "./uiPreferences";
 import { listsAppRouter } from "./lists";
 import { promptsAppRouter } from "./prompts";
@@ -48,8 +49,10 @@ export const appRouter = router({
   // Fork: Settings → Pictures, similar pictures, search by description,
   // list suggestions.
   pictures: picturesAppRouter,
-  // Fork: new pictures from Pinterest (routers/discover.ts).
+  // Fork: pictures of yours you haven't seen in a while (routers/discover.ts),
+  // and new ones from Pinterest — not in the app for now.
   discover: discoverAppRouter,
+  pinterestDiscover: pinterestDiscoverAppRouter,
   uiPreferences: uiPreferencesAppRouter,
   config: configAppRouter,
 });

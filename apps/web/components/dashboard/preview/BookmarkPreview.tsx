@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BookmarkTagsEditor } from "@/components/dashboard/bookmarks/BookmarkTagsEditor";
@@ -13,7 +13,7 @@ import {
   usePreviewDetailsHidden,
   useTogglePreviewDetails,
 } from "@/lib/previewDetails";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Globe, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
@@ -157,6 +157,20 @@ export default function BookmarkPreview({
     ),
   );
 
+  // Fork: opening a picture is seeing it — Discover leaves it be a while.
+  const { mutate: markOpened } = useMutation(
+    api.discover.opened.mutationOptions(),
+  );
+  const openedPicture =
+    bookmark && session?.user.id === bookmark.userId && pictureOf(bookmark)
+      ? bookmark.id
+      : null;
+  useEffect(() => {
+    if (openedPicture) {
+      markOpened({ bookmarkId: openedPicture });
+    }
+  }, [openedPicture, markOpened]);
+
   if (!bookmark) {
     if (variant === "phone") {
       return (
@@ -225,11 +239,11 @@ export default function BookmarkPreview({
   const detailsSection = (
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-2.5">
-        <BookmarkNameInput bookmark={bookmark} readOnly={!isOwner} />
-        {/* Fork: its main colours, as Eagle shows them under the name. */}
+        {/* Fork: its main colours on top, as Eagle shows them. */}
         {isOwner && pictureOf(bookmark) && (
           <PictureColours bookmarkId={bookmark.id} />
         )}
+        <BookmarkNameInput bookmark={bookmark} readOnly={!isOwner} />
         {/* A video note's text, which the media layout has no room for
             beside the video. */}
         {media && bookmark.content.type === BookmarkTypes.TEXT && (

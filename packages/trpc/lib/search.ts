@@ -24,11 +24,13 @@ import {
   bookmarks,
   bookmarksInLists,
   bookmarkTags,
+  picturePalettesTable,
   rssFeedImportsTable,
   rssFeedsTable,
   tagsOnBookmarks,
 } from "@karakeep/db/schema";
 import { Matcher } from "@karakeep/shared/types/search";
+import { colourQueryMatches } from "@karakeep/shared/utils/colours";
 import { toAbsoluteDate } from "@karakeep/shared/utils/relativeDateUtils";
 
 import { AuthedContext } from "..";
@@ -435,6 +437,31 @@ async function getIds(
               : eq(bookmarks.source, matcher.source),
           ),
         );
+    }
+    // Fork: pictures by colour (their palettes, made by the workers).
+    case "color": {
+      const matching = new Set(
+        (
+          await db
+            .select({
+              id: picturePalettesTable.bookmarkId,
+              colours: picturePalettesTable.colours,
+            })
+            .from(picturePalettesTable)
+            .where(eq(picturePalettesTable.userId, userId))
+        )
+          .filter((row) => colourQueryMatches(row.colours ?? [], matcher.color))
+          .map((row) => row.id),
+      );
+      if (!matcher.inverse) {
+        return [...matching].map((id) => ({ id }));
+      }
+      return (
+        await db
+          .select({ id: bookmarks.id })
+          .from(bookmarks)
+          .where(eq(bookmarks.userId, userId))
+      ).filter((row) => !matching.has(row.id));
     }
     case "and": {
       const vals = await Promise.all(

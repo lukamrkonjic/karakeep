@@ -33,7 +33,8 @@ import { SettingsPage } from "./SettingsPage";
  * workers) indexes every picture — gives it a fingerprint — and similar
  * pictures, search by description, list suggestions, Discover, duplicates
  * and near-duplicates skipped on import work on that; each picture's
- * colours are read too. The index on top, then one row per feature.
+ * colours are read too. The index on top, then one row per feature (Discover
+ * has no settings: it's worked out as the page opens).
  */
 
 type Settings = ZPictureSettings;
@@ -258,8 +259,7 @@ export default function PictureSettings() {
         return data &&
           (busy(data.fingerprints.status) ||
             busy(data.suggestions.status) ||
-            busy(data.palettes.status) ||
-            busy(data.discover.status))
+            busy(data.palettes.status))
           ? 3000
           : false;
       },
@@ -270,7 +270,6 @@ export default function PictureSettings() {
   }
   const suggestions = status?.suggestions;
   const palettes = status?.palettes;
-  const discover = status?.discover;
 
   return (
     <SettingsPage title="Pictures">
@@ -385,41 +384,6 @@ export default function PictureSettings() {
             onCheckedChange={(suggestionsEnabled) =>
               update({ suggestionsEnabled })
             }
-          />
-        </Row>
-        <Row
-          title="Discover"
-          hint={
-            discover && settings.discoverEnabled ? (
-              busy(discover.status) || discover.status === "failed" ? (
-                <JobState job={discover} />
-              ) : (
-                <Link
-                  href="/dashboard/discover"
-                  className="underline underline-offset-2 hover:text-foreground"
-                >
-                  {discover.fresh.toLocaleString()} waiting
-                </Link>
-              )
-            ) : (
-              "New pictures from Pinterest, like your pins"
-            )
-          }
-        >
-          <Choice
-            label="Look for new pictures"
-            value={settings.discoverSchedule}
-            disabled={!settings.discoverEnabled}
-            onChange={(discoverSchedule) => update({ discoverSchedule })}
-            options={[
-              { value: "nightly", label: "Every night" },
-              { value: "manual", label: "When I ask" },
-            ]}
-          />
-          <Switch
-            aria-label="Discover"
-            checked={settings.discoverEnabled}
-            onCheckedChange={(discoverEnabled) => update({ discoverEnabled })}
           />
         </Row>
         <Row

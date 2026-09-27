@@ -230,3 +230,204 @@ export function colourSortKey(palette: PaletteColour[]): number | null {
   const hue = (Math.atan2(telling.lab[2], telling.lab[1]) * 180) / Math.PI;
   return ((((hue - WHEEL_START) % 360) + 360) % 360) / 360;
 }
+
+/**
+ * The colour families pictures are grouped by — search (`color:red`), smart
+ * lists and the colour page's chips. A picture is in a family when enough of
+ * it is of that family's colours (FAMILY_SHARE).
+ */
+export const COLOUR_FAMILIES = [
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "teal",
+  "blue",
+  "purple",
+  "pink",
+  "brown",
+  "beige",
+  "black",
+  "white",
+  "grey",
+] as const;
+export type ColourFamily = (typeof COLOUR_FAMILIES)[number];
+
+/** How each family is shown (its chip, a smart list's icon). */
+export const FAMILY_SWATCHES: Record<ColourFamily, string> = {
+  red: "#d62828",
+  orange: "#f77f00",
+  yellow: "#f6c945",
+  green: "#3a9d4f",
+  teal: "#2a9d8f",
+  blue: "#286ff0",
+  purple: "#7b2cbf",
+  pink: "#f06ea9",
+  brown: "#8b5a2b",
+  beige: "#e8dcc4",
+  black: "#151515",
+  white: "#f7f7f5",
+  grey: "#8a8a8a",
+};
+export const FAMILY_ICONS: Record<ColourFamily, string> = {
+  red: "🔴",
+  orange: "🟠",
+  yellow: "🟡",
+  green: "🟢",
+  teal: "🩵",
+  blue: "🔵",
+  purple: "🟣",
+  pink: "🩷",
+  brown: "🟤",
+  beige: "🤍",
+  black: "⚫",
+  white: "⚪",
+  grey: "🩶",
+};
+
+// Other names for a family, as people search.
+const FAMILY_ALIASES: Record<string, ColourFamily> = {
+  gray: "grey",
+  cyan: "teal",
+  turquoise: "teal",
+  aqua: "teal",
+  navy: "blue",
+  violet: "purple",
+  lilac: "purple",
+  lavender: "purple",
+  magenta: "pink",
+  rose: "pink",
+  maroon: "red",
+  burgundy: "red",
+  crimson: "red",
+  gold: "yellow",
+  mustard: "yellow",
+  olive: "green",
+  sage: "green",
+  mint: "green",
+  cream: "beige",
+  tan: "beige",
+  sand: "beige",
+  camel: "beige",
+  chocolate: "brown",
+};
+
+const NEUTRALS = new Set<ColourFamily>(["black", "white", "grey", "beige"]);
+
+/**
+ * The family of one colour, by where it sits in CIELAB — measured on named
+ * colours: tan, camel, sand and oat are beige; sienna, chocolate and rust
+ * brown; sage and olive green; navy and denim blue.
+ */
+export function colourFamily([l, a, b]: Lab): ColourFamily {
+  const chroma = Math.hypot(a, b);
+  const hue = ((((Math.atan2(b, a) * 180) / Math.PI) % 360) + 360) % 360;
+  if (chroma < 10) {
+    return l < 25 ? "black" : l > 88 ? "white" : "grey";
+  }
+  if (l < 12) {
+    return "black";
+  }
+  if (hue >= 45 && hue < 95 && l < 50) {
+    return "brown";
+  }
+  if (hue >= 50 && hue < 110 && chroma < 32 && l >= 60) {
+    return "beige";
+  }
+  if (hue >= 20 && hue < 48) {
+    return "red";
+  }
+  if (hue >= 48 && hue < 75) {
+    return "orange";
+  }
+  // Khaki sits just past yellow, olive a little further: the light ones
+  // are yellow.
+  if (hue >= 75 && (hue < 100 || (hue < 110 && l >= 80))) {
+    return "yellow";
+  }
+  if (hue >= 100 && hue < 165) {
+    return "green";
+  }
+  if (hue >= 165 && hue < 220) {
+    return "teal";
+  }
+  if (hue >= 220 && hue < 310) {
+    return "blue";
+  }
+  if (hue >= 310 && hue < 340) {
+    return "purple";
+  }
+  // 340–20: pink, or a dark wine red.
+  return l < 40 ? "red" : "pink";
+}
+
+/** How much of a picture is of a family's colours, 0–1. */
+export function familyShare(
+  palette: PaletteColour[],
+  family: ColourFamily,
+): number {
+  let share = 0;
+  for (const colour of palette) {
+    const lab = hexToLab(colour.hex);
+    if (lab && colourFamily(lab) === family) {
+      share += colour.share;
+    }
+  }
+  return share;
+}
+
+/**
+ * At least this much of a picture for it to be in a family: a little for a
+ * colour (a red sofa in a beige room is red), most of it for black, white,
+ * grey and beige, which are in nearly every picture.
+ */
+export function familyMinimum(family: ColourFamily): number {
+  return NEUTRALS.has(family) ? 0.35 : 0.12;
+}
+
+export function isColourFamily(text: string): text is ColourFamily {
+  return (COLOUR_FAMILIES as readonly string[]).includes(text);
+}
+
+/**
+ * A colour as searched for: a family ("red", or another name for one like
+ * "navy") or an exact colour ("#286ff0", the # optional) — as "red" or
+ * "#286ff0"; null when it's neither.
+ */
+export function parseColourQuery(text: string): string | null {
+  const word = text.trim().toLowerCase();
+  if (isColourFamily(word)) {
+    return word;
+  }
+  if (FAMILY_ALIASES[word]) {
+    return FAMILY_ALIASES[word];
+  }
+  return /^#?[0-9a-f]{6}$|^#[0-9a-f]{3}$/i.test(word)
+    ? normalizeHex(word)
+    : null;
+}
+
+/**
+ * How much of a picture answers a parsed colour query (parseColourQuery), and
+ * whether that's enough for it to count.
+ */
+export function colourQueryScore(
+  palette: PaletteColour[],
+  query: string,
+): number {
+  if (isColourFamily(query)) {
+    return familyShare(palette, query);
+  }
+  const target = hexToLab(query);
+  return target ? colourMatch(palette, target) : 0;
+}
+
+export function colourQueryMatches(
+  palette: PaletteColour[],
+  query: string,
+): boolean {
+  const minimum = isColourFamily(query)
+    ? familyMinimum(query)
+    : COLOUR_MATCH_MIN;
+  return colourQueryScore(palette, query) >= minimum;
+}

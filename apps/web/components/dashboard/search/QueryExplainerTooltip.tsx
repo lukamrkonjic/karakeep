@@ -11,6 +11,10 @@ import { match } from "@/lib/utils";
 
 import { TextAndMatcher } from "@karakeep/shared/searchQueryParser";
 import { Matcher } from "@karakeep/shared/types/search";
+import {
+  FAMILY_SWATCHES,
+  isColourFamily,
+} from "@karakeep/shared/utils/colours";
 
 export default function QueryExplainerTooltip({
   parsedSearchQuery,
@@ -229,6 +233,28 @@ export default function QueryExplainerTooltip({
                 : t("search.is_from_source")}
             </TableCell>
             <TableCell>{matcher.source}</TableCell>
+          </TableRow>
+        );
+      // Fork: pictures by colour.
+      case "color":
+        return (
+          <TableRow>
+            <TableCell>
+              {matcher.inverse ? "Not in colour" : "In colour"}
+            </TableCell>
+            <TableCell>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="size-3 rounded-full ring-1 ring-inset ring-black/10"
+                  style={{
+                    backgroundColor: isColourFamily(matcher.color)
+                      ? FAMILY_SWATCHES[matcher.color]
+                      : matcher.color,
+                  }}
+                />
+                {matcher.color}
+              </span>
+            </TableCell>
           </TableRow>
         );
       default: {

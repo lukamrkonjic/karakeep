@@ -5,10 +5,10 @@ export const metadata: Metadata = {
   title: "Colour | vrana",
 };
 
-// Fork: search by colour — the pictures with a colour in them.
+// Fork: pictures by colour — a family ("red") or a colour ("286ff0").
 export default async function Colour(props: {
   params: Promise<{ hex: string }>;
 }) {
   const { hex } = await props.params;
-  return <ColourPage hex={hex} />;
+  return <ColourPage colour={decodeURIComponent(hex)} />;
 }

@@ -1,8 +1,15 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { discoverItemsTable } from "@karakeep/db/schema";
-import { vectorToBuffer } from "@karakeep/shared-server";
+import {
+  assets,
+  AssetTypes,
+  bookmarks,
+  pictureEmbeddingsTable,
+  pictureSeenTable,
+} from "@karakeep/db/schema";
+import { CLIP_MODEL_ID, vectorToBuffer } from "@karakeep/shared-server";
+import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import type { CustomTestContext } from "../testUtils";
 import { defaultBeforeEach } from "../testUtils";
@@ -12,169 +19,110 @@ beforeEach<CustomTestContext>(defaultBeforeEach(true));
 type Api = CustomTestContext["apiCallers"][number];
 type DB = CustomTestContext["db"];
 
+const DAY = 24 * 3600_000;
+
 /** A fingerprint pointing `degrees` round a circle (length 1). */
 const at = (degrees: number) => {
   const r = (degrees * Math.PI) / 180;
   return Float32Array.from([Math.cos(r), Math.sin(r)]);
 };
 
-/** A picture waiting on the Discover page. */
-async function waiting(
+/** A picture with a fingerprint, saved `daysAgo`. */
+async function picture(
   api: Api,
   db: DB,
-  pinId: string,
-  opts: {
-    score?: number;
-    degrees?: number;
-    suggestedListId?: string;
-    status?: "new" | "skipped";
-  } = {},
+  name: string,
+  degrees: number,
+  daysAgo: number,
 ) {
   const userId = (await api.users.whoami()).id;
-  const [row] = await db
-    .insert(discoverItemsTable)
-    .values({
-      userId,
-      pinId,
-      title: `pin ${pinId}`,
-      thumbUrl: `https://i.pinimg.com/474x/${pinId}.jpg`,
-      width: 474,
-      height: 600,
-      media: [
-        { kind: "image", url: `https://i.pinimg.com/originals/${pinId}.jpg` },
-      ],
-      embedding: vectorToBuffer(at(opts.degrees ?? 0)),
-      score: opts.score ?? 0.5,
-      suggestedListId: opts.suggestedListId,
-      status: opts.status ?? "new",
-    })
-    .returning();
-  return row.id;
+  await db.insert(assets).values({
+    id: `asset-${name}`,
+    assetType: AssetTypes.UNKNOWN,
+    contentType: "image/jpeg",
+    size: 1000,
+    userId,
+  });
+  const bookmark = await api.bookmarks.createBookmark({
+    type: BookmarkTypes.ASSET,
+    assetType: "image",
+    assetId: `asset-${name}`,
+    title: name,
+  });
+  await db
+    .update(bookmarks)
+    .set({ dbCreatedAt: new Date(Date.now() - daysAgo * DAY) })
+    .where(eq(bookmarks.id, bookmark.id));
+  await db.insert(pictureEmbeddingsTable).values({
+    bookmarkId: bookmark.id,
+    userId,
+    assetId: `asset-${name}`,
+    model: CLIP_MODEL_ID,
+    embedding: vectorToBuffer(at(degrees)),
+    compared: true,
+    suggested: true,
+  });
+  return bookmark.id;
 }
 
-// Fork: Discover — new pictures from Pinterest, kept or skipped.
+// Fork: Discover — your own pictures you haven't seen in a while.
 describe("Discover", () => {
-  test<CustomTestContext>("what's waiting, the best first; Keep files it in a list", async ({
+  test<CustomTestContext>("old pictures like what you save lately; not the new, opened or archived ones", async ({
     apiCallers,
     db,
   }) => {
     const api = apiCallers[0];
-    const userId = (await api.users.whoami()).id;
-    const sofas = await api.lists.create({
-      name: "Sofas",
-      icon: "🛋️",
-      type: "manual",
+    await picture(api, db, "new sofa", 0, 1);
+    await picture(api, db, "old sofa", 25, 90);
+    await picture(api, db, "old car", 150, 90);
+    const opened = await picture(api, db, "opened sofa", 60, 90);
+    const archived = await picture(api, db, "archived sofa", 45, 90);
+    await api.discover.opened({ bookmarkId: opened });
+    await api.bookmarks.updateBookmark({
+      bookmarkId: archived,
+      archived: true,
     });
-    const cars = await api.lists.create({
-      name: "Cars",
-      icon: "🚗",
-      type: "manual",
-    });
-    const best = await waiting(api, db, "1", {
-      score: 0.9,
-      suggestedListId: sofas.id,
-    });
-    const other = await waiting(api, db, "2", { score: 0.5 });
-    await waiting(api, db, "3", { score: 0.7, status: "skipped" });
 
-    const { items } = await api.discover.items();
-    expect(items.map((i) => i.id)).toEqual([best, other]);
-    expect(items[0]).toMatchObject({
-      pinUrl: "https://www.pinterest.com/pin/1/",
-      suggestedList: { id: sofas.id, name: "Sofas", icon: "🛋️" },
-      status: "new",
-    });
-    expect(items[1].suggestedList).toBeNull();
+    const first = await api.discover.items();
+    expect(first.bookmarks.map((b) => b.title)).toEqual([
+      "old sofa",
+      "old car",
+    ]);
+    expect(first.pickedAt).not.toBeNull();
 
-    const server = await import("@karakeep/shared-server");
-    const queued = vi.mocked(server.queueDiscoverKeep);
-    queued.mockClear();
-    // Into the suggested list, left to the workers.
-    await api.discover.keep({ itemId: best });
-    expect(queued).toHaveBeenCalledWith(best, userId);
-    const kept = await db.query.discoverItemsTable.findFirst({
-      where: eq(discoverItemsTable.id, best),
-    });
-    expect(kept).toMatchObject({ status: "keeping", listId: sofas.id });
-    await expect(api.discover.keep({ itemId: best })).rejects.toThrow(
-      /kept or skipped already/,
+    // The same set all day.
+    const again = await api.discover.items();
+    expect(again.pickedAt).toEqual(first.pickedAt);
+    expect(again.bookmarks.map((b) => b.id)).toEqual(
+      first.bookmarks.map((b) => b.id),
     );
-    expect((await api.discover.items()).items.map((i) => i.id)).toEqual([
-      other,
-    ]);
 
-    // Into another list — one of your own, and not a smart one.
-    const smart = await api.lists.create({
-      name: "Smart",
-      icon: "✨",
-      type: "smart",
-      query: "#sofa",
-    });
-    await expect(
-      api.discover.keep({ itemId: other, listId: smart.id }),
-    ).rejects.toThrow(/smart list/);
-    const theirs = await apiCallers[1].lists.create({
-      name: "Theirs",
-      icon: "🔒",
-      type: "manual",
-    });
-    await expect(
-      api.discover.keep({ itemId: other, listId: theirs.id }),
-    ).rejects.toThrow();
-    await expect(
-      apiCallers[1].discover.keep({ itemId: other }),
-    ).rejects.toThrow(/Not found/);
-    await api.discover.keep({ itemId: other, listId: cars.id });
-    expect(
-      (
-        await db.query.discoverItemsTable.findFirst({
-          where: eq(discoverItemsTable.id, other),
-        })
-      )?.listId,
-    ).toBe(cars.id);
+    // Shuffle: a new set (in a library this small, the same pictures).
+    await api.discover.shuffle();
+    const shuffled = await api.discover.items();
+    expect(shuffled.pickedAt!.getTime()).toBeGreaterThan(
+      first.pickedAt!.getTime(),
+    );
+    expect(shuffled.bookmarks).toHaveLength(2);
   });
 
-  test<CustomTestContext>("Skip: gone for good, with the ones like it; undone", async ({
+  test<CustomTestContext>("opened: only your own pictures; nothing to show without any", async ({
     apiCallers,
     db,
   }) => {
-    const api = apiCallers[0];
-    const skipped = await waiting(api, db, "10", { degrees: 0, score: 0.9 });
-    const alike = await waiting(api, db, "11", { degrees: 5, score: 0.8 });
-    const different = await waiting(api, db, "12", {
-      degrees: 60,
-      score: 0.7,
-    });
-
-    expect(await api.discover.skip({ itemId: skipped })).toEqual({
-      alongWith: 1,
-    });
-    expect((await api.discover.items()).items.map((i) => i.id)).toEqual([
-      different,
-    ]);
-    expect(
-      await db.query.discoverItemsTable.findFirst({
-        where: eq(discoverItemsTable.id, alike),
-      }),
-    ).toBeUndefined();
-
-    await api.discover.restore({ itemId: skipped });
-    expect((await api.discover.items()).items.map((i) => i.id)).toEqual([
-      skipped,
-      different,
-    ]);
+    const mine = await picture(apiCallers[0], db, "mine", 0, 90);
     await expect(
-      apiCallers[1].discover.skip({ itemId: different }),
+      apiCallers[1].discover.opened({ bookmarkId: mine }),
     ).rejects.toThrow(/Not found/);
-  });
+    await apiCallers[0].discover.opened({ bookmarkId: mine });
+    const seen = await db.query.pictureSeenTable.findFirst({
+      where: eq(pictureSeenTable.bookmarkId, mine),
+    });
+    expect(seen?.openedAt).toBeInstanceOf(Date);
 
-  test<CustomTestContext>("Look for more asks the workers", async ({
-    apiCallers,
-  }) => {
-    const server = await import("@karakeep/shared-server");
-    const requested = vi.mocked(server.requestDiscover);
-    requested.mockClear();
-    await apiCallers[0].discover.refresh();
-    expect(requested).toHaveBeenCalledTimes(1);
+    expect(await apiCallers[1].discover.items()).toEqual({
+      bookmarks: [],
+      pickedAt: null,
+    });
   });
 });

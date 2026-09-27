@@ -736,4 +736,41 @@ describe("Search Query Parser", () => {
       },
     });
   });
+
+  // Fork: pictures by colour.
+  test("color: a family, another name for one, or a colour", () => {
+    expect(parseSearchQuery("color:red")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "color", color: "red", inverse: false },
+    });
+    expect(parseSearchQuery("-colour:gray")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "color", color: "grey", inverse: true },
+    });
+    // Its # isn't a tag's.
+    expect(parseSearchQuery("color:#286FF0")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "color", color: "#286ff0", inverse: false },
+    });
+    expect(parseSearchQuery("sofa color:navy #living")).toEqual({
+      result: "full",
+      text: "sofa",
+      matcher: {
+        type: "and",
+        matchers: [
+          { type: "color", color: "blue", inverse: false },
+          { type: "tagName", tagName: "living", inverse: false },
+        ],
+      },
+    });
+    // Not a colour: just words.
+    expect(parseSearchQuery("color:sofa")).toEqual({
+      result: "full",
+      text: "color:sofa",
+      matcher: undefined,
+    });
+  });
 });

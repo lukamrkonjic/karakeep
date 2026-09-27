@@ -347,11 +347,39 @@ describe("Pictures", () => {
     );
 
     // The most of that blue first; a little of it counts too.
-    expect(titles(await api.pictures.byColour({ hex: "#2a6fef" }))).toEqual([
+    expect(titles(await api.pictures.byColour({ colour: "#2a6fef" }))).toEqual([
       "blue",
       "a bit of blue",
     ]);
-    expect((await api.pictures.byColour({ hex: "blue" })).total).toBe(0);
+    expect((await api.pictures.byColour({ colour: "sofa" })).total).toBe(0);
+    // A family: the pictures mostly of its colours first.
+    expect(titles(await api.pictures.byColour({ colour: "blue" }))).toEqual([
+      "blue",
+      "a bit of blue",
+    ]);
+    expect(titles(await api.pictures.byColour({ colour: "red" }))).toEqual([
+      "red",
+    ]);
+
+    // color: in a search — and so in a smart list, which groups by colour.
+    const blues = await api.lists.create({
+      name: "Blue",
+      icon: "🔵",
+      type: "smart",
+      query: "color:blue",
+    });
+    expect(
+      titles(await api.bookmarks.getBookmarks({ listId: blues.id })).sort(),
+    ).toEqual(["a bit of blue", "blue"]);
+    const notBlue = await api.lists.create({
+      name: "Not blue",
+      icon: "🎨",
+      type: "smart",
+      query: "-color:blue",
+    });
+    expect(
+      titles(await api.bookmarks.getBookmarks({ listId: notBlue.id })),
+    ).not.toContain("blue");
 
     // Round the wheel from red, then the greys, then what has no colours.
     const order = titles(
@@ -371,7 +399,7 @@ describe("Pictures", () => {
     // Turned off: none of it.
     await api.pictures.updateSettings({ palettesEnabled: false });
     expect(await api.pictures.colours({ bookmarkId: blue })).toEqual([]);
-    expect((await api.pictures.byColour({ hex: "#2a6fef" })).total).toBe(0);
+    expect((await api.pictures.byColour({ colour: "#2a6fef" })).total).toBe(0);
   });
 
   test<CustomTestContext>("colours and Discover: on by default, their jobs asked for when turned on", async ({

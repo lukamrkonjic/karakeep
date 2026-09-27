@@ -51,9 +51,6 @@ let duplicatePicturesSchedulingWorker:
 let pictureFingerprintsSchedulingWorker:
   | typeof import("./workers/pictures/fingerprintsWorker").PictureFingerprintsSchedulingWorker
   | undefined;
-let discoverSchedulingWorker:
-  | typeof import("./workers/pictures/discoverWorker").DiscoverSchedulingWorker
-  | undefined;
 
 const workerBuilders = {
   crawler: async () => {
@@ -139,10 +136,12 @@ const workerBuilders = {
     await PicturePalettesQueue.ensureInit();
     return PicturePalettesWorker.build();
   },
+  // Fork: Discover from Pinterest isn't in the app for now — its nightly run
+  // (DiscoverSchedulingWorker) isn't started; a run still happens when asked
+  // for through the API.
   discover: async () => {
-    const { DiscoverSchedulingWorker, DiscoverWorker } =
+    const { DiscoverWorker } =
       await import("./workers/pictures/discoverWorker");
-    discoverSchedulingWorker = DiscoverSchedulingWorker;
     await DiscoverQueue.ensureInit();
     return DiscoverWorker.build();
   },
@@ -236,10 +235,6 @@ async function main() {
     pictureFingerprintsSchedulingWorker?.start();
   }
 
-  if (workers.some((w) => w.name === "discover")) {
-    discoverSchedulingWorker?.start();
-  }
-
   // Start import polling worker
   let importWorker = null;
   let importWorkerPromise: Promise<void> | null = null;
@@ -279,9 +274,6 @@ async function main() {
   }
   if (workers.some((w) => w.name === "fingerprints")) {
     pictureFingerprintsSchedulingWorker?.stop();
-  }
-  if (workers.some((w) => w.name === "discover")) {
-    discoverSchedulingWorker?.stop();
   }
   if (importWorker) {
     importWorker.stop();

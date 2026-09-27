@@ -1,12 +1,16 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  colourFamily,
   colourMatch,
+  colourQueryMatches,
   colourSortKey,
   deltaE,
+  familyShare,
   hexToLab,
   labToRgb,
   normalizeHex,
+  parseColourQuery,
   parseHex,
   rgbToLab,
   toHex,
@@ -98,5 +102,70 @@ describe("colours", () => {
       ]),
     ).toBeLessThan(1);
     expect(colourSortKey([])).toBeNull();
+  });
+
+  test("colour families, as named colours are called", () => {
+    const family = (hex: string) => colourFamily(hexToLab(hex)!);
+    const expected: Record<string, string[]> = {
+      red: ["#ff0000", "#dc143c", "#800000", "#b22222"],
+      orange: ["#ff8c00", "#f77f00"],
+      yellow: ["#ffd700", "#fcbf49", "#e1ad01", "#f0e68c"],
+      green: ["#008000", "#32cd32", "#9caf88", "#808000", "#3b5323"],
+      teal: ["#008080", "#2a9d8f", "#00ffff"],
+      blue: ["#0000ff", "#286ff0", "#000080", "#87ceeb", "#1560bd"],
+      purple: ["#800080", "#7b2cbf", "#ee82ee", "#c8a2c8"],
+      pink: ["#ffc0cb", "#ff69b4", "#de5d83"],
+      brown: ["#8b4513", "#a0522d", "#5c3317", "#b7410e", "#5a3a22"],
+      beige: ["#d2b48c", "#c19a6b", "#f5f5dc", "#fffdd0", "#e8dcc4"],
+      black: ["#111111", "#000000"],
+      white: ["#fafafa", "#fbfaf7", "#ffffff"],
+      grey: ["#808080", "#c0c0c0", "#36454f"],
+    };
+    for (const [name, hexes] of Object.entries(expected)) {
+      for (const hex of hexes) {
+        expect({ hex, family: family(hex) }).toEqual({ hex, family: name });
+      }
+    }
+  });
+
+  test("searching by colour: a family, another name for one, or a colour", () => {
+    expect(parseColourQuery("Red")).toBe("red");
+    expect(parseColourQuery("gray")).toBe("grey");
+    expect(parseColourQuery("navy")).toBe("blue");
+    expect(parseColourQuery("#286FF0")).toBe("#286ff0");
+    expect(parseColourQuery("286ff0")).toBe("#286ff0");
+    expect(parseColourQuery("#abc")).toBe("#aabbcc");
+    expect(parseColourQuery("sofa")).toBeNull();
+
+    // A red sofa in a beige room is red; a speck of it isn't.
+    const room = [
+      { hex: "#e8dcc4", share: 0.7 },
+      { hex: "#b22222", share: 0.2 },
+      { hex: "#5c3317", share: 0.1 },
+    ];
+    expect(familyShare(room, "red")).toBeCloseTo(0.2, 5);
+    expect(colourQueryMatches(room, "red")).toBe(true);
+    expect(colourQueryMatches(room, "beige")).toBe(true);
+    expect(colourQueryMatches(room, "blue")).toBe(false);
+    expect(
+      colourQueryMatches(
+        [
+          { hex: "#e8dcc4", share: 0.95 },
+          { hex: "#b22222", share: 0.05 },
+        ],
+        "red",
+      ),
+    ).toBe(false);
+    // White has to be most of it.
+    expect(
+      colourQueryMatches(
+        [
+          { hex: "#fafafa", share: 0.2 },
+          { hex: "#286ff0", share: 0.8 },
+        ],
+        "white",
+      ),
+    ).toBe(false);
+    expect(colourQueryMatches(room, "#b52424")).toBe(true);
   });
 });

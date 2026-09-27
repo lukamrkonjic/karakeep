@@ -44,9 +44,9 @@ import {
   zUpdatePictureSettingsSchema,
 } from "@karakeep/shared/types/pictures";
 import {
-  COLOUR_MATCH_MIN,
-  colourMatch,
-  hexToLab,
+  colourQueryMatches,
+  colourQueryScore,
+  parseColourQuery,
 } from "@karakeep/shared/utils/colours";
 
 import type { AuthedContext } from "../index";
@@ -378,12 +378,13 @@ export const picturesAppRouter = router({
 
   /**
    * Search by colour: the user's pictures with the most of a colour (and
-   * its lighter and darker shades) first.
+   * its lighter and darker shades) — or of a family's colours, "red" —
+   * first.
    */
   byColour: picturesProcedure
     .input(
       z.object({
-        hex: z.string().max(7),
+        colour: z.string().max(20),
         cursor: z.number().int().min(0).nullish(),
         limit: z.number().int().min(1).max(60).optional(),
       }),
@@ -391,9 +392,10 @@ export const picturesAppRouter = router({
     .output(zPageOfPictures)
     .query(async ({ ctx, input }) => {
       const none = { bookmarks: [], nextCursor: null, total: 0 };
-      const target = hexToLab(input.hex);
+      // A family ("red") or a colour ("#286ff0").
+      const query = parseColourQuery(input.colour);
       const { palettesEnabled } = await getPictureSettings(ctx.db, ctx.user.id);
-      if (!target || !palettesEnabled) {
+      if (!query || !palettesEnabled) {
         return none;
       }
       const ranked = (
@@ -405,11 +407,11 @@ export const picturesAppRouter = router({
           .from(picturePalettesTable)
           .where(eq(picturePalettesTable.userId, ctx.user.id))
       )
+        .filter((row) => colourQueryMatches(row.colours ?? [], query))
         .map((row) => ({
           id: row.id,
-          match: colourMatch(row.colours ?? [], target),
+          match: colourQueryScore(row.colours ?? [], query),
         }))
-        .filter((row) => row.match >= COLOUR_MATCH_MIN)
         .sort((a, b) => b.match - a.match)
         .slice(0, MAX_COLOUR_RESULTS);
       return pageOf(

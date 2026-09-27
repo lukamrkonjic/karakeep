@@ -18,6 +18,7 @@ import { z } from "zod";
 
 import { BookmarkTypes, zBookmarkSourceSchema } from "./types/bookmarks";
 import { Matcher } from "./types/search";
+import { parseColourQuery } from "./utils/colours";
 import { parseRelativeDate } from "./utils/relativeDateUtils";
 
 enum TokenType {
@@ -41,9 +42,11 @@ const lexerRules: [RegExp, TokenType][] = [
   [/^\s+and/i, TokenType.And],
   [/^\s+or/i, TokenType.Or],
 
+  // Fork: a colour's # is part of `color:#286ff0`, not a tag's.
+  [/^colou?r:#/, TokenType.Qualifier],
   [/^#/, TokenType.Hash],
   [
-    /^(is|url|list|after|before|age|feed|title|tag|source):/,
+    /^(is|url|list|after|before|age|feed|title|tag|source|color|colour):/,
     TokenType.Qualifier,
   ],
 
@@ -284,6 +287,25 @@ MATCHER.setPattern(
                 matcher: undefined,
               };
             }
+          // Fork: pictures by colour (a family or a colour).
+          case "color:":
+          case "colour:":
+          case "color:#":
+          case "colour:#": {
+            const color = parseColourQuery(
+              (qualifier.text.endsWith("#") ? "#" : "") + ident,
+            );
+            if (!color) {
+              return {
+                text: (minus?.text ?? "") + qualifier.text + ident,
+                matcher: undefined,
+              };
+            }
+            return {
+              text: "",
+              matcher: { type: "color", color, inverse: !!minus },
+            };
+          }
           case "age:":
             try {
               const { direction, amount, unit } = parseRelativeDate(ident);

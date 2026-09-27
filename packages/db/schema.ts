@@ -1153,7 +1153,30 @@ export const picturePalettesTable = sqliteTable(
   (t) => [index("picturePalettes_userId_idx").on(t.userId)],
 );
 
-// Fork: Discover — a picture from Pinterest's "more like this" for a pin the
+// Fork: Discover (routers/discover.ts): when the user last opened a picture,
+// and when Discover last showed it — the pictures it shows now are the ones
+// with the newest `discoveredAt` (one moment for a whole set, to the
+// millisecond), in `discoverPosition` order. One seen or shown lately isn't
+// shown again for a while.
+export const pictureSeenTable = sqliteTable(
+  "pictureSeen",
+  {
+    bookmarkId: text("bookmarkId")
+      .notNull()
+      .primaryKey()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    openedAt: integer("openedAt", { mode: "timestamp" }),
+    discoveredAt: integer("discoveredAt", { mode: "timestamp_ms" }),
+    discoverPosition: integer("discoverPosition"),
+  },
+  (t) => [index("pictureSeen_userId_idx").on(t.userId, t.discoveredAt)],
+);
+
+// Fork: Discover from Pinterest (not in the app for now) — a picture from
+// Pinterest's "more like this" for a pin the
 // user saved, ranked by the picture model against their pictures
 // (apps/workers/workers/pictures/discover*.ts). Kept and skipped ones stay,
 // so nothing is offered twice; a skipped one's fingerprint keeps pictures
