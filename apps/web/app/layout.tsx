@@ -8,6 +8,7 @@ import type { Viewport } from "next";
 import React from "react";
 import PwaSupport from "@/components/PwaSupport";
 import Providers from "@/lib/providers";
+import { THEME_BACKGROUND } from "@/lib/themeColors";
 import {
   getUiPreferences,
   withAccountPreferences,
@@ -44,7 +45,11 @@ export const metadata: Metadata = {
         media: "(prefers-color-scheme: dark)",
       },
     ],
-    apple: "/apple-icon.png",
+    // Fork: the crow for a phone's home screen, at the site root too — where
+    // iOS also looks (public/apple-touch-icon.png, as app/apple-icon.png).
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   appleWebApp: {
     capable: true,
@@ -54,26 +59,48 @@ export const metadata: Metadata = {
     // iOS follows that.
     statusBarStyle: "default",
   },
+  // Fork: Next writes only the standard mobile-web-app-capable; iOS reads
+  // Apple's own tag to open the home-screen app full screen when it doesn't
+  // take the manifest (a site on plain http).
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
   formatDetection: {
     telephone: false,
   },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  // Fork: the installed app on a phone — edge to edge (the tab bar keeps
-  // clear of the home indicator with env(safe-area-inset-bottom)), and the
-  // browser's bars in the theme's background (PwaSupport follows the app's
-  // own theme setting).
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfaf7" },
-    { media: "(prefers-color-scheme: dark)", color: "#191715" },
-  ],
-};
+/**
+ * Fork: the installed app on a phone — edge to edge (the tab bar keeps clear
+ * of the home indicator with env(safe-area-inset-bottom)) — and the
+ * browser's bars (a phone's status bar, the title bar of vrana in a Mac's
+ * Dock) in the theme's background: the account's theme from the first
+ * paint, the device's light or dark when it follows the system. PwaSupport
+ * keeps them in step when the theme changes.
+ */
+export async function generateViewport(): Promise<Viewport> {
+  const { theme } = await getUiPreferences();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    viewportFit: "cover",
+    themeColor:
+      theme === "light" || theme === "dark"
+        ? THEME_BACKGROUND[theme]
+        : [
+            {
+              media: "(prefers-color-scheme: light)",
+              color: THEME_BACKGROUND.light,
+            },
+            {
+              media: "(prefers-color-scheme: dark)",
+              color: THEME_BACKGROUND.dark,
+            },
+          ],
+  };
+}
 
 export default async function RootLayout({
   children,

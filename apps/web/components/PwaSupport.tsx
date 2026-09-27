@@ -2,11 +2,8 @@
 
 import { useEffect } from "react";
 import { useClientConfig } from "@/lib/clientConfig";
+import { THEME_BACKGROUND } from "@/lib/themeColors";
 import { useTheme } from "next-themes";
-
-// The theme's --background (tooling/tailwind): light 45 33% 97.6%, dark
-// 40 7% 9%.
-const BACKGROUND = { light: "#fbfaf7", dark: "#191715" };
 
 /**
  * Fork: glue for vrana installed on a phone's home screen. Registers the
@@ -36,7 +33,8 @@ export default function PwaSupport() {
     if (!resolvedTheme) {
       return;
     }
-    const color = resolvedTheme === "dark" ? BACKGROUND.dark : BACKGROUND.light;
+    const color =
+      resolvedTheme === "dark" ? THEME_BACKGROUND.dark : THEME_BACKGROUND.light;
     for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
       meta.setAttribute("content", color);
     }
