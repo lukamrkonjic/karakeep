@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import {
   Archive,
   ClipboardList,
+  Compass,
   Highlighter,
   Home,
   LogOut,
@@ -37,12 +38,13 @@ import { useWhoAmI } from "@karakeep/shared-react/hooks/users";
 /**
  * Fork: the phone's navigation, as in a native app — a tab bar at the bottom,
  * in thumb reach: Home, the tailored feed, the lists (a sheet), search, and
- * More (everything else, from favourites to settings). From sm up the
- * sidebar does this, and the bar is hidden.
+ * More (everything else, from Discover and favourites to settings). From sm
+ * up the sidebar does this, and the bar is hidden.
  */
 
 // Pages the More sheet leads to: its tab is lit while one is open.
 const MORE_PAGES = [
+  "/dashboard/discover",
   "/dashboard/favourites",
   "/dashboard/tags",
   "/dashboard/archive",
@@ -88,6 +90,9 @@ function MoreSheet({
           </div>
         </div>
       )}
+      <SheetItem icon={<Compass />} onClick={() => go("/dashboard/discover")}>
+        Discover
+      </SheetItem>
       <SheetItem icon={<Star />} onClick={() => go("/dashboard/favourites")}>
         {t("lists.favourites")}
       </SheetItem>

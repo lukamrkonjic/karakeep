@@ -6,6 +6,8 @@ import {
   AdminMaintenanceQueue,
   AssetPreprocessingQueue,
   BackupQueue,
+  DiscoverKeepQueue,
+  DiscoverQueue,
   DuplicatePicturesQueue,
   EmbeddingsQueue,
   FeedQueue,
@@ -16,6 +18,7 @@ import {
   LowPriorityCrawlerQueue,
   OpenAIQueue,
   PictureFingerprintsQueue,
+  PicturePalettesQueue,
   PictureSuggestionsQueue,
   PictureTextQueue,
   prepareQueue,
@@ -47,6 +50,9 @@ let duplicatePicturesSchedulingWorker:
   | undefined;
 let pictureFingerprintsSchedulingWorker:
   | typeof import("./workers/pictures/fingerprintsWorker").PictureFingerprintsSchedulingWorker
+  | undefined;
+let discoverSchedulingWorker:
+  | typeof import("./workers/pictures/discoverWorker").DiscoverSchedulingWorker
   | undefined;
 
 const workerBuilders = {
@@ -126,6 +132,25 @@ const workerBuilders = {
     const { PictureTextWorker } = await import("./workers/pictures/textWorker");
     await PictureTextQueue.ensureInit();
     return PictureTextWorker.build();
+  },
+  palettes: async () => {
+    const { PicturePalettesWorker } =
+      await import("./workers/pictures/palettesWorker");
+    await PicturePalettesQueue.ensureInit();
+    return PicturePalettesWorker.build();
+  },
+  discover: async () => {
+    const { DiscoverSchedulingWorker, DiscoverWorker } =
+      await import("./workers/pictures/discoverWorker");
+    discoverSchedulingWorker = DiscoverSchedulingWorker;
+    await DiscoverQueue.ensureInit();
+    return DiscoverWorker.build();
+  },
+  discoverKeep: async () => {
+    const { DiscoverKeepWorker } =
+      await import("./workers/pictures/discoverWorker");
+    await DiscoverKeepQueue.ensureInit();
+    return DiscoverKeepWorker.build();
   },
   assetPreprocessing: async () => {
     const { AssetPreprocessingWorker } =
@@ -211,6 +236,10 @@ async function main() {
     pictureFingerprintsSchedulingWorker?.start();
   }
 
+  if (workers.some((w) => w.name === "discover")) {
+    discoverSchedulingWorker?.start();
+  }
+
   // Start import polling worker
   let importWorker = null;
   let importWorkerPromise: Promise<void> | null = null;
@@ -250,6 +279,9 @@ async function main() {
   }
   if (workers.some((w) => w.name === "fingerprints")) {
     pictureFingerprintsSchedulingWorker?.stop();
+  }
+  if (workers.some((w) => w.name === "discover")) {
+    discoverSchedulingWorker?.stop();
   }
   if (importWorker) {
     importWorker.stop();

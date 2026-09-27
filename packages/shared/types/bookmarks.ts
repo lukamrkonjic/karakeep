@@ -305,9 +305,10 @@ export const zGetBookmarksRequestSchema = z.object({
   sortOrder: zSortOrder.exclude(["relevance"]).optional().default("desc"),
   // Fork: orders beyond newest/oldest, which take over from sortOrder —
   // "random" (a shuffle; the same shuffleSeed gives the same order on every
-  // page) and "addedToList" (when each bookmark joined the list). See
+  // page), "addedToList" (when each bookmark joined the list) and "colour"
+  // (round the colour wheel, by each picture's palette). See
   // packages/trpc/models/bookmarkOrders.ts.
-  sortBy: z.enum(["random", "addedToList"]).optional(),
+  sortBy: z.enum(["random", "addedToList", "colour"]).optional(),
   shuffleSeed: z.number().int().optional(),
   includeContent: z.boolean().optional().default(false),
 });

@@ -8,9 +8,11 @@ import {
   bookmarkLists,
   bookmarks,
   bookmarksInLists,
+  discoverItemsTable,
   pictureEmbeddingsTable,
   pictureJobRunsTable,
   pictureListSuggestionsTable,
+  picturePalettesTable,
   pictureSettingsTable,
   pictureTextQueriesTable,
 } from "@karakeep/db/schema";
@@ -20,23 +22,32 @@ import {
   fingerprintProgress,
   getPictureSettings,
   normalizeDescription,
+  paletteProgress,
   pictureTextQueryId,
   PictureTextQueue,
   rankPictures,
+  requestDiscover,
   requestListSuggestions,
   requestPictureFingerprints,
+  requestPicturePalettes,
 } from "@karakeep/shared-server";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import { zBookmarkSchema } from "@karakeep/shared/types/bookmarks";
 import {
   DESCRIBE_LEVELS,
   SIMILAR_LEVELS,
+  zPaletteColourSchema,
   zPictureSettingsSchema,
   zPicturesStatusSchema,
   zSuggestedListSchema,
   zSuggestionGroupSchema,
   zUpdatePictureSettingsSchema,
 } from "@karakeep/shared/types/pictures";
+import {
+  COLOUR_MATCH_MIN,
+  colourMatch,
+  hexToLab,
+} from "@karakeep/shared/utils/colours";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
@@ -48,7 +59,8 @@ import { List, ManualList } from "../models/lists";
 /**
  * Fork: Settings → Pictures, and what rests on the pictures' fingerprints
  * (the workers make them: apps/workers/workers/pictures/) — "More like this",
- * search by description, and list suggestions ("Belongs in…").
+ * search by description, and list suggestions ("Belongs in…") — and on
+ * their colours: a picture's palette, and search by colour.
  */
 
 const picturesProcedure = createScopedAuthedProcedure("bookmarks");
@@ -56,6 +68,8 @@ const picturesProcedure = createScopedAuthedProcedure("bookmarks");
 const PAGE = 30;
 /** At most this many are ranked for a page of results. */
 const MAX_RESULTS = 600;
+/** A colour is cheap to rank by: everything in it, within reason. */
+const MAX_COLOUR_RESULTS = 3000;
 /** How long a search waits for its description's fingerprint. */
 const DESCRIBE_WAIT_MS = 8000;
 
@@ -265,6 +279,13 @@ export const picturesAppRouter = router({
           .where(eq(pictureEmbeddingsTable.userId, ctx.user.id));
         await requestListSuggestions(ctx.db, ctx.user.id);
       }
+      // Turned on: the colours, or a first look for new pictures, now.
+      if (input.palettesEnabled && !before.palettesEnabled) {
+        await requestPicturePalettes(ctx.db, ctx.user.id);
+      }
+      if (input.discoverEnabled && !before.discoverEnabled) {
+        await requestDiscover(ctx.db, ctx.user.id);
+      }
       return settingsOf(after);
     }),
 
@@ -274,7 +295,9 @@ export const picturesAppRouter = router({
       const runs = await ctx.db.query.pictureJobRunsTable.findMany({
         where: eq(pictureJobRunsTable.userId, ctx.user.id),
       });
-      const runOf = (job: "fingerprints" | "suggestions") => {
+      const runOf = (
+        job: "fingerprints" | "suggestions" | "palettes" | "discover",
+      ) => {
         const run = runs.find((r) => r.job === job);
         return {
           status: run?.status ?? ("never" as const),
@@ -292,9 +315,25 @@ export const picturesAppRouter = router({
         .select({ open: count() })
         .from(pictureListSuggestionsTable)
         .where(openSuggestions(ctx));
+      const colours = await paletteProgress(ctx.db, ctx.user.id);
+      const [{ fresh }] = await ctx.db
+        .select({ fresh: count() })
+        .from(discoverItemsTable)
+        .where(
+          and(
+            eq(discoverItemsTable.userId, ctx.user.id),
+            eq(discoverItemsTable.status, "new"),
+          ),
+        );
       return {
         fingerprints: { ...runOf("fingerprints"), done, unreadable, total },
         suggestions: { ...runOf("suggestions"), open },
+        palettes: {
+          ...runOf("palettes"),
+          done: colours.done + colours.unreadable,
+          total: colours.total,
+        },
+        discover: { ...runOf("discover"), fresh },
         models: {
           picture: await clipModelDownloaded("picture"),
           text: await clipModelDownloaded("text"),
@@ -317,6 +356,68 @@ export const picturesAppRouter = router({
     .output(z.void())
     .mutation(async ({ ctx }) => {
       await describedVector(ctx, "a picture").catch(() => null);
+    }),
+
+  /** A picture's main colours, the biggest first; none without them. */
+  colours: picturesProcedure
+    .input(z.object({ bookmarkId: z.string() }))
+    .output(z.array(zPaletteColourSchema))
+    .query(async ({ ctx, input }) => {
+      const { palettesEnabled } = await getPictureSettings(ctx.db, ctx.user.id);
+      if (!palettesEnabled) {
+        return [];
+      }
+      const row = await ctx.db.query.picturePalettesTable.findFirst({
+        where: and(
+          eq(picturePalettesTable.bookmarkId, input.bookmarkId),
+          eq(picturePalettesTable.userId, ctx.user.id),
+        ),
+      });
+      return row?.colours ?? [];
+    }),
+
+  /**
+   * Search by colour: the user's pictures with the most of a colour (and
+   * its lighter and darker shades) first.
+   */
+  byColour: picturesProcedure
+    .input(
+      z.object({
+        hex: z.string().max(7),
+        cursor: z.number().int().min(0).nullish(),
+        limit: z.number().int().min(1).max(60).optional(),
+      }),
+    )
+    .output(zPageOfPictures)
+    .query(async ({ ctx, input }) => {
+      const none = { bookmarks: [], nextCursor: null, total: 0 };
+      const target = hexToLab(input.hex);
+      const { palettesEnabled } = await getPictureSettings(ctx.db, ctx.user.id);
+      if (!target || !palettesEnabled) {
+        return none;
+      }
+      const ranked = (
+        await ctx.db
+          .select({
+            id: picturePalettesTable.bookmarkId,
+            colours: picturePalettesTable.colours,
+          })
+          .from(picturePalettesTable)
+          .where(eq(picturePalettesTable.userId, ctx.user.id))
+      )
+        .map((row) => ({
+          id: row.id,
+          match: colourMatch(row.colours ?? [], target),
+        }))
+        .filter((row) => row.match >= COLOUR_MATCH_MIN)
+        .sort((a, b) => b.match - a.match)
+        .slice(0, MAX_COLOUR_RESULTS);
+      return pageOf(
+        ctx,
+        ranked.map((r) => r.id),
+        input.cursor ?? 0,
+        input.limit ?? PAGE,
+      );
     }),
 
   /** "More like this": the user's pictures most like this one. */

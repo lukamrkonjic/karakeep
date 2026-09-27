@@ -31,9 +31,9 @@ import { SettingsPage } from "./SettingsPage";
 /**
  * Fork: Settings → Pictures. The picture model (Immich's CLIP, in the
  * workers) indexes every picture — gives it a fingerprint — and similar
- * pictures, search by description, list suggestions, duplicates and
- * near-duplicates skipped on import work on that. The index on top, then one
- * row per feature.
+ * pictures, search by description, list suggestions, Discover, duplicates
+ * and near-duplicates skipped on import work on that; each picture's
+ * colours are read too. The index on top, then one row per feature.
  */
 
 type Settings = ZPictureSettings;
@@ -256,7 +256,10 @@ export default function PictureSettings() {
       refetchInterval: (query) => {
         const data = query.state.data;
         return data &&
-          (busy(data.fingerprints.status) || busy(data.suggestions.status))
+          (busy(data.fingerprints.status) ||
+            busy(data.suggestions.status) ||
+            busy(data.palettes.status) ||
+            busy(data.discover.status))
           ? 3000
           : false;
       },
@@ -266,6 +269,8 @@ export default function PictureSettings() {
     return null;
   }
   const suggestions = status?.suggestions;
+  const palettes = status?.palettes;
+  const discover = status?.discover;
 
   return (
     <SettingsPage title="Pictures">
@@ -314,6 +319,22 @@ export default function PictureSettings() {
             aria-label="Search by description"
             checked={settings.describeEnabled}
             onCheckedChange={(describeEnabled) => update({ describeEnabled })}
+          />
+        </Row>
+        <Row
+          title="Colours"
+          hint={
+            palettes && settings.palettesEnabled && busy(palettes.status) ? (
+              <JobState job={palettes} />
+            ) : (
+              "In a picture's details · Sort: Colour"
+            )
+          }
+        >
+          <Switch
+            aria-label="Colours"
+            checked={settings.palettesEnabled}
+            onCheckedChange={(palettesEnabled) => update({ palettesEnabled })}
           />
         </Row>
         <Row
@@ -367,6 +388,41 @@ export default function PictureSettings() {
           />
         </Row>
         <Row
+          title="Discover"
+          hint={
+            discover && settings.discoverEnabled ? (
+              busy(discover.status) || discover.status === "failed" ? (
+                <JobState job={discover} />
+              ) : (
+                <Link
+                  href="/dashboard/discover"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  {discover.fresh.toLocaleString()} waiting
+                </Link>
+              )
+            ) : (
+              "New pictures from Pinterest, like your pins"
+            )
+          }
+        >
+          <Choice
+            label="Look for new pictures"
+            value={settings.discoverSchedule}
+            disabled={!settings.discoverEnabled}
+            onChange={(discoverSchedule) => update({ discoverSchedule })}
+            options={[
+              { value: "nightly", label: "Every night" },
+              { value: "manual", label: "When I ask" },
+            ]}
+          />
+          <Switch
+            aria-label="Discover"
+            checked={settings.discoverEnabled}
+            onCheckedChange={(discoverEnabled) => update({ discoverEnabled })}
+          />
+        </Row>
+        <Row
           title="Duplicates"
           hint={
             <Link
@@ -390,7 +446,7 @@ export default function PictureSettings() {
         </Row>
         <Row
           title="Skip near-duplicates"
-          hint="On import, for subscriptions that have it on"
+          hint="On import, videos too, per subscription"
         >
           <Choice
             label="Counts as the same picture"

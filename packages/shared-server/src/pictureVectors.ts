@@ -147,3 +147,38 @@ export function rankPictures(
   found.sort((a, b) => b.similarity - a.similarity);
   return opts.limit === undefined ? found : found.slice(0, opts.limit);
 }
+
+/**
+ * Two videos whose frames look alike are the same video only if they're as
+ * long too — give or take a second, or 3% of a long one. A length of 0
+ * couldn't be measured: never the same.
+ */
+export function sameLength(a: number, b: number): boolean {
+  if (a <= 0 || b <= 0) {
+    return false;
+  }
+  return Math.abs(a - b) <= Math.max(1, 0.03 * Math.max(a, b));
+}
+
+/** What a fingerprint is of: a picture, or a video (and its length). */
+export interface FingerprintKind {
+  video: boolean;
+  /** Seconds; null while not measured yet. */
+  duration: number | null;
+}
+
+/**
+ * Whether two fingerprints can be of the same thing at all: a picture only
+ * ever matches a picture, and a video a video just as long.
+ */
+export function sameKind(a: FingerprintKind, b: FingerprintKind): boolean {
+  if (a.video !== b.video) {
+    return false;
+  }
+  return (
+    !a.video ||
+    (a.duration !== null &&
+      b.duration !== null &&
+      sameLength(a.duration, b.duration))
+  );
+}

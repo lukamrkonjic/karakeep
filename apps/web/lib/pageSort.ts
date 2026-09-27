@@ -16,7 +16,13 @@ export type PageSorts = Record<string, string>;
 // How many pages' choices are kept; past it, the longest-unchanged go.
 const MAX_ENTRIES = 200;
 
-export const BOOKMARK_SORTS = ["newest", "oldest", "added", "random"] as const;
+export const BOOKMARK_SORTS = [
+  "newest",
+  "oldest",
+  "added",
+  "random",
+  "colour",
+] as const;
 export type BookmarkSort = (typeof BOOKMARK_SORTS)[number];
 
 export const BOOKMARK_SORT_LABELS: Record<BookmarkSort, string> = {
@@ -24,6 +30,8 @@ export const BOOKMARK_SORT_LABELS: Record<BookmarkSort, string> = {
   oldest: "Oldest first",
   added: "Recently added",
   random: "Random",
+  // Round the colour wheel, by each picture's colours (Settings → Pictures).
+  colour: "Colour",
 };
 
 /** `sorts` with one page's choice changed; `null` is back to the default. */
@@ -67,6 +75,8 @@ export function bookmarkSortQuery(
       return { sortOrder: "desc", sortBy: "addedToList" };
     case "random":
       return { sortOrder: "desc", sortBy: "random", shuffleSeed };
+    case "colour":
+      return { sortOrder: "desc", sortBy: "colour" };
     default:
       return { sortOrder: "desc" };
   }

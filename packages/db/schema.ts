@@ -925,6 +925,10 @@ export const pictureEmbeddingsTable = sqliteTable(
     embedding: blob("embedding", { mode: "buffer" }),
     width: integer("width"),
     height: integer("height"),
+    // A video's length in seconds (its fingerprint is of one frame, a fifth
+    // of the way in): two videos are the same only if this matches too.
+    // Null for a picture.
+    duration: real("duration"),
     // Compared with the user's other pictures yet (duplicate pictures)? A
     // check that stops halfway picks up here.
     compared: integer("compared", { mode: "boolean" }).notNull().default(false),
@@ -1036,6 +1040,15 @@ export const pictureSettingsTable = sqliteTable("pictureSettings", {
   })
     .notNull()
     .default("near"),
+  palettesEnabled: integer("palettesEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  discoverEnabled: integer("discoverEnabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  discoverSchedule: text("discoverSchedule", { enum: ["nightly", "manual"] })
+    .notNull()
+    .default("nightly"),
 });
 
 // Fork: each user's last run of a picture job (duplicate pictures keep
@@ -1046,7 +1059,9 @@ export const pictureJobRunsTable = sqliteTable(
     userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    job: text("job", { enum: ["fingerprints", "suggestions"] }).notNull(),
+    job: text("job", {
+      enum: ["fingerprints", "suggestions", "palettes", "discover"],
+    }).notNull(),
     status: text("status", {
       enum: ["waiting", "pending", "running", "done", "failed"],
     }).notNull(),
@@ -1110,6 +1125,96 @@ export const pictureTextQueriesTable = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [index("pictureTextQueries_usedAt_idx").on(t.usedAt)],
+);
+
+// Fork: a picture's main colours (apps/workers/workers/pictures/palette.ts),
+// made once from the file named here, again only when it's replaced. Its
+// details show them; search and "Sort: Colour" go by them.
+export const picturePalettesTable = sqliteTable(
+  "picturePalettes",
+  {
+    bookmarkId: text("bookmarkId")
+      .notNull()
+      .primaryKey()
+      .references(() => bookmarks.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAtField(),
+    assetId: text("assetId").notNull(),
+    // [{ hex, share }], the biggest share first; null when the picture
+    // couldn't be read (so it isn't tried again every run).
+    colours: text("colours", { mode: "json" }).$type<
+      { hex: string; share: number }[]
+    >(),
+    // Its place in "Sort: Colour" (shared utils/colours.ts); null last.
+    sortKey: real("sortKey"),
+  },
+  (t) => [index("picturePalettes_userId_idx").on(t.userId)],
+);
+
+// Fork: Discover — a picture from Pinterest's "more like this" for a pin the
+// user saved, ranked by the picture model against their pictures
+// (apps/workers/workers/pictures/discover*.ts). Kept and skipped ones stay,
+// so nothing is offered twice; a skipped one's fingerprint keeps pictures
+// like it away.
+export const discoverItemsTable = sqliteTable(
+  "discoverItems",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    createdAt: createdAtField(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pinId: text("pinId").notNull(),
+    // Pinterest's image signature: the picture itself, whoever pinned it.
+    mediaKey: text("mediaKey"),
+    title: text("title"),
+    // What the page shows: a mid-size copy on Pinterest's CDN, its size.
+    thumbUrl: text("thumbUrl").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    // What Keep downloads, best first: [{ kind, url }].
+    media: text("media", { mode: "json" })
+      .notNull()
+      .$type<{ kind: "image" | "video"; url: string }[]>(),
+    // The saved picture it was found from.
+    seedBookmarkId: text("seedBookmarkId").references(() => bookmarks.id, {
+      onDelete: "set null",
+    }),
+    // The thumbnail's fingerprint (512 little-endian float32s, length 1).
+    embedding: blob("embedding", { mode: "buffer" }),
+    // How well it fits the user's pictures; the best first.
+    score: real("score").notNull().default(0),
+    suggestedListId: text("suggestedListId").references(
+      () => bookmarkLists.id,
+      { onDelete: "set null" },
+    ),
+    // "keeping": the workers are downloading it.
+    status: text("status", { enum: ["new", "keeping", "kept", "skipped"] })
+      .notNull()
+      .default("new"),
+    // Where Keep files it, and the bookmark it became.
+    listId: text("listId").references(() => bookmarkLists.id, {
+      onDelete: "set null",
+    }),
+    bookmarkId: text("bookmarkId").references(() => bookmarks.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: integer("decidedAt", { mode: "timestamp" }),
+    // Why the last Keep didn't work.
+    error: text("error"),
+  },
+  (t) => [
+    unique().on(t.userId, t.pinId),
+    index("discoverItems_userId_status_idx").on(t.userId, t.status, t.score),
+    // Deleting a bookmark nulls its rows here without a scan.
+    index("discoverItems_seedBookmarkId_idx").on(t.seedBookmarkId),
+    index("discoverItems_bookmarkId_idx").on(t.bookmarkId),
+  ],
 );
 
 export const backupsTable = sqliteTable(

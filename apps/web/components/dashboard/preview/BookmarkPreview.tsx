@@ -32,6 +32,7 @@ import {
 import { BookmarkMarkdownComponent } from "../bookmarks/BookmarkMarkdownComponent";
 import SummarizeBookmarkArea from "../bookmarks/SummarizeBookmarkArea";
 import { ListSuggestionChips } from "../pictures/ListSuggestionChips";
+import { PictureColours } from "../pictures/PictureColours";
 import { pictureOf } from "../pictures/pictures";
 import { SimilarPictures } from "../pictures/SimilarPictures";
 import { AssetContentSection } from "./AssetContentSection";
@@ -225,6 +226,10 @@ export default function BookmarkPreview({
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-2.5">
         <BookmarkNameInput bookmark={bookmark} readOnly={!isOwner} />
+        {/* Fork: its main colours, as Eagle shows them under the name. */}
+        {isOwner && pictureOf(bookmark) && (
+          <PictureColours bookmarkId={bookmark.id} />
+        )}
         {/* A video note's text, which the media layout has no room for
             beside the video. */}
         {media && bookmark.content.type === BookmarkTypes.TEXT && (

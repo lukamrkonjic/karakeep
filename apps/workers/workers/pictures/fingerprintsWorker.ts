@@ -16,11 +16,13 @@ import {
   CLIP_MODEL_ID,
   fingerprintProgress,
   getPictureSettings,
+  paletteProgress,
   PictureFingerprintsQueue,
   queueDuplicatePicturesCompare,
   queueListSuggestions,
   readAsset,
   requestPictureFingerprints,
+  requestPicturePalettes,
   vectorToBuffer,
 } from "@karakeep/shared-server";
 import logger from "@karakeep/shared/logger";
@@ -28,14 +30,17 @@ import { DequeuedJob, getQueueClient } from "@karakeep/shared/queueing";
 
 import { errorMessage, pictureOwners, setPictureJob } from "./jobs";
 import { pictureModel } from "./models";
+import { videoLength, withAssetFile } from "./video";
 
 /**
  * Fork: picture fingerprints — the picture model's embedding of every
  * picture (a video by its first frame, whether it's a video bookmark or on a
- * note or link), made once and again only when the file is replaced. Every hour, every night or only when asked (Settings →
- * Pictures). Duplicate pictures and list suggestions work on them: asking for
- * either marks it "waiting" and asks for this job, which queues what waits
- * when it's done.
+ * note or link, and by its length: a video matches only one as long), made
+ * once and again only when the file is replaced. Every hour, every night or
+ * only when asked (Settings → Pictures). Duplicate pictures and list
+ * suggestions work on them: asking for either marks it "waiting" and asks
+ * for this job, which queues what waits when it's done — and the pictures'
+ * colours after it.
  */
 
 // On the half hour, after the hourly subscription syncs (on the hour); the
@@ -109,10 +114,41 @@ async function queueWhatWaits(userId: string, made: number) {
       eq(pictureJobRunsTable.job, "suggestions"),
     ),
   });
-  const { suggestionsEnabled } = await getPictureSettings(db, userId);
+  const { suggestionsEnabled, palettesEnabled } = await getPictureSettings(
+    db,
+    userId,
+  );
   if (suggestions?.status === "waiting" || (suggestionsEnabled && made > 0)) {
     await queueListSuggestions(db, userId);
   }
+  // Colours follow the index: new pictures get theirs after it.
+  if (palettesEnabled && (await paletteProgress(db, userId)).todo.length > 0) {
+    await requestPicturePalettes(db, userId);
+  }
+}
+
+/** A video's length, measured on its own file; 0 when it can't be. */
+async function lengthOf(userId: string, videoAssetId: string) {
+  try {
+    return await withAssetFile(userId, videoAssetId, videoLength);
+  } catch {
+    return 0;
+  }
+}
+
+/** Its duplicate pairs, which a changed fingerprint may no longer make. */
+async function forgetPairs(bookmarkId: string) {
+  await db
+    .delete(duplicatePicturesTable)
+    .where(
+      and(
+        eq(duplicatePicturesTable.status, "open"),
+        or(
+          eq(duplicatePicturesTable.bookmarkId, bookmarkId),
+          eq(duplicatePicturesTable.otherBookmarkId, bookmarkId),
+        ),
+      ),
+    );
 }
 
 async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
@@ -124,7 +160,20 @@ async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
 
   // Every picture without a fingerprint of its current file — the whole
   // library the first time (shared-server's pictureSources.ts says which).
-  const { todo } = await fingerprintProgress(db, userId);
+  const { todo: all } = await fingerprintProgress(db, userId);
+  // Videos fingerprinted before their length was kept: measured only (a
+  // look at the file's header, no model), then compared again.
+  const lengthOnly = all.filter((item) => item.lengthOnly);
+  for (const item of lengthOnly) {
+    job.abortSignal.throwIfAborted();
+    const duration = await lengthOf(userId, item.videoAssetId!);
+    await forgetPairs(item.bookmarkId);
+    await db
+      .update(pictureEmbeddingsTable)
+      .set({ duration, compared: false })
+      .where(eq(pictureEmbeddingsTable.bookmarkId, item.bookmarkId));
+  }
+  const todo = all.filter((item) => !item.lengthOnly);
   if (todo.length > 0) {
     // Loaded — downloaded, the first time — before the first picture: a
     // model that can't be had fails the run, not every picture.
@@ -180,6 +229,10 @@ async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
       embedding: looked ? vectorToBuffer(looked.vector) : null,
       width: looked?.width ?? null,
       height: looked?.height ?? null,
+      duration:
+        looked && item.videoAssetId
+          ? await lengthOf(userId, item.videoAssetId)
+          : null,
       // The duplicate-pictures check and list suggestions look at it next;
       // one that couldn't be read has nothing for them.
       compared: !looked,
@@ -203,10 +256,16 @@ async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
     }
   }
 
+  const measured =
+    lengthOnly.length > 0
+      ? `measured ${lengthOnly.length.toLocaleString()} videos`
+      : null;
   const detail =
     todo.length === 0
-      ? "Nothing new to look at"
-      : `Looked at ${todo.length.toLocaleString()} pictures${unreadable ? ` (${unreadable} unreadable)` : ""}`;
+      ? measured
+        ? `Nothing new to look at; ${measured}`
+        : "Nothing new to look at"
+      : `Looked at ${todo.length.toLocaleString()} pictures${unreadable ? ` (${unreadable} unreadable)` : ""}${measured ? `; ${measured}` : ""}`;
   await setPictureJob(userId, "fingerprints", {
     status: "done",
     finishedAt: new Date(),

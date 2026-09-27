@@ -223,7 +223,7 @@ function errorMessage(error: unknown): string {
 type Subscription = typeof listSubscriptionsTable.$inferSelect;
 type TRPCClient = Awaited<ReturnType<typeof buildImpersonatingTRPCClient>>;
 
-interface DownloadedFile {
+export interface DownloadedFile {
   path: string;
   kind: SubscriptionMedia["kind"];
   contentType: string;
@@ -356,9 +356,10 @@ async function downloadOne(
  * The item's best media that downloads. When one can never be had (a video
  * too big to keep, say), the next is tried — for a video that is its cover.
  * A passing failure (5xx, network) is not a reason to settle for less: the
- * whole item is tried again on the next sync.
+ * whole item is tried again on the next sync. (Discover's Keep downloads
+ * this way too.)
  */
-async function download(
+export async function download(
   item: SubscriptionItem,
   referer: string,
 ): Promise<DownloadedFile> {
@@ -377,7 +378,7 @@ async function download(
 }
 
 /** Stores a downloaded file as an asset of the user, the way an upload is. */
-async function storeAsset(userId: string, file: DownloadedFile) {
+export async function storeAsset(userId: string, file: DownloadedFile) {
   let quotaApproved;
   try {
     quotaApproved = await QuotaService.checkStorageQuota(db, userId, file.size);
@@ -413,7 +414,7 @@ async function storeAsset(userId: string, file: DownloadedFile) {
   return assetId;
 }
 
-async function discardAsset(userId: string, assetId: string) {
+export async function discardAsset(userId: string, assetId: string) {
   await tryCatch(deleteAsset({ userId, assetId }));
   await tryCatch(db.delete(assets).where(eq(assets.id, assetId)));
 }
@@ -513,12 +514,13 @@ async function importItem(
   let looked: Looked | null = null;
   try {
     // "Skip near-duplicates": one that looks like a picture the user has
-    // (another copy of it) is filed as that one.
-    if (nearDuplicates && file.kind === "image") {
-      const seen = await nearDuplicates.look(
-        await fs.readFile(file.path),
-        signal,
-      );
+    // (another copy of it) is filed as that one; a video, like a video of
+    // theirs just as long.
+    if (nearDuplicates) {
+      const seen =
+        file.kind === "image"
+          ? await nearDuplicates.look(await fs.readFile(file.path), signal)
+          : await nearDuplicates.lookVideo(file.path, signal);
       if (seen?.match) {
         const filed = await addToList(client, subscription, seen.match);
         await remember(subscription, item, seen.match);

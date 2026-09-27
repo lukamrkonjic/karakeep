@@ -8,6 +8,7 @@ import { configAppRouter } from "./config";
 import { feedsAppRouter } from "./feeds";
 import { highlightsAppRouter } from "./highlights";
 import { importSessionsRouter } from "./importSessions";
+import { discoverAppRouter } from "./discover";
 import { duplicatePicturesAppRouter } from "./duplicatePictures";
 import { instagramAppRouter } from "./instagram";
 import { invitesAppRouter } from "./invites";
@@ -47,6 +48,8 @@ export const appRouter = router({
   // Fork: Settings → Pictures, similar pictures, search by description,
   // list suggestions.
   pictures: picturesAppRouter,
+  // Fork: new pictures from Pinterest (routers/discover.ts).
+  discover: discoverAppRouter,
   uiPreferences: uiPreferencesAppRouter,
   config: configAppRouter,
 });

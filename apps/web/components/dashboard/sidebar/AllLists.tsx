@@ -28,6 +28,7 @@ import {
 } from "@karakeep/shared-react/hooks/lists";
 import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
 
+import { DiscoverCount } from "../discover/DiscoverCount";
 import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
 import type { OpenState } from "../lists/CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
@@ -276,6 +277,15 @@ export default function AllLists({
           className="group my-0.5"
           linkClassName="py-1.5 px-2"
           right={<TailoredFeedOptions variant="sidebar" />}
+        />
+        {/* Fork: new pictures from Pinterest, like your pins. */}
+        <SidebarItem
+          logo={null}
+          name="Discover"
+          path="/dashboard/discover"
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+          right={<DiscoverCount />}
         />
         <SidebarItem
           logo={null}

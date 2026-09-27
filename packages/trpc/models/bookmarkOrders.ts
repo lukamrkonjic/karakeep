@@ -7,6 +7,7 @@ import type { ZCursor } from "@karakeep/shared/types/pagination";
 import {
   bookmarks,
   bookmarksInLists,
+  picturePalettesTable,
   rssFeedImportsTable,
   tagsOnBookmarks,
 } from "@karakeep/db/schema";
@@ -24,6 +25,10 @@ import type { AuthedContext } from "../index";
  *   its sub-lists, or the tailored feed, the latest of its lists), newest
  *   first. Rows from before that date was recorded fall back to when the
  *   bookmark was saved.
+ * - `colour`: round the colour wheel from red by each picture's most telling
+ *   colour, then the black-and-white ones dark to light
+ *   (picturePalettes.sortKey, shared utils/colours.ts); what has no colours
+ *   (not a picture, or not looked at yet) last, newest first.
  *
  * Both need the whole matching set in order, so the ids and their sort keys
  * are read in one query, ordered here, and a page is the run after the
@@ -63,10 +68,24 @@ function compare(a: Key, b: Key): number {
   return a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
 }
 
+/** After every picture with colours: none is past 2. */
+const NO_COLOUR = 3;
+
 /** Ascending keys = the order the page shows. */
-function keyOf(row: Row, input: Input): Key {
+function keyOf(
+  row: Row,
+  input: Input,
+  colourKeys: ReadonlyMap<string, number>,
+): Key {
   if (input.sortBy === "random") {
     return [hash(row.id, input.shuffleSeed ?? 0), 0, row.id];
+  }
+  if (input.sortBy === "colour") {
+    return [
+      colourKeys.get(row.id) ?? NO_COLOUR,
+      -row.createdAt.getTime(),
+      row.id,
+    ];
   }
   const added = row.addedAt ?? row.createdAt;
   return [-added.getTime(), -row.createdAt.getTime(), row.id];
@@ -199,8 +218,30 @@ export async function loadInForkOrder<T extends { id: string }>(
   loadPage: (ids: string[]) => Promise<{ bookmarks: T[] }>,
 ): Promise<{ bookmarks: T[]; nextCursor: ZCursor | null }> {
   const limit = input.limit ?? 20;
-  const ordered = (await matchingRows(ctx, input))
-    .map((row) => ({ id: row.id, key: keyOf(row, input) }))
+  const rows = await matchingRows(ctx, input);
+  const colourKeys = new Map<string, number>();
+  if (input.sortBy === "colour") {
+    for (let i = 0; i < rows.length; i += 500) {
+      for (const palette of await ctx.db
+        .select({
+          id: picturePalettesTable.bookmarkId,
+          sortKey: picturePalettesTable.sortKey,
+        })
+        .from(picturePalettesTable)
+        .where(
+          inArray(
+            picturePalettesTable.bookmarkId,
+            rows.slice(i, i + 500).map((row) => row.id),
+          ),
+        )) {
+        if (palette.sortKey !== null) {
+          colourKeys.set(palette.id, palette.sortKey);
+        }
+      }
+    }
+  }
+  const ordered = rows
+    .map((row) => ({ id: row.id, key: keyOf(row, input, colourKeys) }))
     .sort((a, b) => compare(a.key, b.key));
 
   const after = parseCursor(input.cursor);

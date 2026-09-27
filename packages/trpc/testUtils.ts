@@ -149,6 +149,10 @@ export function defaultBeforeEach(seedDB = true) {
         // Fork: the picture jobs (Settings → Pictures, search by description).
         requestPictureFingerprints: vi.fn(async () => undefined),
         requestListSuggestions: vi.fn(async () => undefined),
+        requestPicturePalettes: vi.fn(async () => undefined),
+        // Fork: Discover (routers/discover.ts).
+        requestDiscover: vi.fn(async () => undefined),
+        queueDiscoverKeep: vi.fn(async () => undefined),
         PictureTextQueue: { enqueue: vi.fn(async () => undefined) },
       };
     });

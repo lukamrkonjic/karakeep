@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { Pin } from "./pinterest";
-import { itemsOf } from "./pinterest";
+import { discoverCandidateOf, itemsOf } from "./pinterest";
 
 // Reading a pin fetches nothing; the board fetcher's network isn't needed.
 vi.mock("network", () => ({ fetchWithProxy: vi.fn() }));
@@ -241,5 +241,69 @@ describe("Pinterest carousels and idea pins", () => {
       story_pin_data: { pages: [{ blocks: [{ image: { images: cover } }] }] },
     });
     expect(items.map((i) => i.externalId)).toEqual(["10"]);
+  });
+});
+
+describe("Discover's related pins", () => {
+  const pin = (extra: Partial<Pin> = {}): Pin => ({
+    id: "1108167052088780448",
+    type: "pin",
+    image_signature: "ef5533b3b5891a16a0b60ddd9897f76c",
+    grid_title: "A cozy corner",
+    images: {
+      "236x": {
+        url: "https://i.pinimg.com/236x/ef/55/33/ef5533b3b5891a16a0b60ddd9897f76c.jpg",
+        width: 236,
+        height: 419,
+      },
+      "474x": {
+        url: "https://i.pinimg.com/474x/ef/55/33/ef5533b3b5891a16a0b60ddd9897f76c.jpg",
+        width: 474,
+        height: 842,
+      },
+      orig: {
+        url: "https://i.pinimg.com/originals/ef/55/33/ef5533b3b5891a16a0b60ddd9897f76c.jpg",
+        width: 1440,
+        height: 2560,
+      },
+    },
+    ...extra,
+  });
+
+  test("shown by its mid-size copy, kept as its original", () => {
+    expect(discoverCandidateOf(pin())).toEqual({
+      pinId: "1108167052088780448",
+      mediaKey: "ef5533b3b5891a16a0b60ddd9897f76c",
+      title: "A cozy corner",
+      thumb: {
+        url: "https://i.pinimg.com/474x/ef/55/33/ef5533b3b5891a16a0b60ddd9897f76c.jpg",
+        width: 474,
+        height: 842,
+      },
+      media: [
+        {
+          kind: "image",
+          url: "https://i.pinimg.com/originals/ef/55/33/ef5533b3b5891a16a0b60ddd9897f76c.jpg",
+        },
+      ],
+    });
+  });
+
+  test("never an ad, nor a pin without a picture of its own", () => {
+    expect(discoverCandidateOf(pin({ is_promoted: true }))).toBeNull();
+    expect(discoverCandidateOf(pin({ images: null }))).toBeNull();
+    expect(
+      discoverCandidateOf(
+        pin({
+          images: {
+            orig: {
+              url: "https://example.com/elsewhere.jpg",
+              width: 10,
+              height: 10,
+            },
+          },
+        }),
+      ),
+    ).toBeNull();
   });
 });

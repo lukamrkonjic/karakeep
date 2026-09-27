@@ -63,8 +63,8 @@ export function BookmarkSortSubmenu({
   const setSort = useSetPageSort();
   const current = bookmarkSortOf(usePageSorts(), pageKey);
   const options: BookmarkSort[] = withRecentlyAdded
-    ? ["newest", "oldest", "added", "random"]
-    : ["newest", "oldest", "random"];
+    ? ["newest", "oldest", "added", "random", "colour"]
+    : ["newest", "oldest", "random", "colour"];
   return (
     <SortSubmenu
       current={current}

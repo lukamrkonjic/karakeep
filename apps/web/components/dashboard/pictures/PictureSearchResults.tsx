@@ -9,6 +9,8 @@ import { Loader2 } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
+import { ColourResults } from "./ColourPage";
+
 /** Typing goes to the URL at once; the text model gets the pauses. */
 function useSettled(value: string, ms: number) {
   const [settled, setSettled] = useState(value);
@@ -26,6 +28,18 @@ function useSettled(value: string, ms: number) {
  * first time); it shows so and looks again.
  */
 export function PictureSearchResults({ query }: { query: string }) {
+  // Fork: a colour typed out in full (#rrggbb) searches by colour.
+  const colour = /^#[0-9a-f]{6}$/i.test(query.trim())
+    ? query.trim().toLowerCase()
+    : null;
+  return colour ? (
+    <ColourResults colour={colour} />
+  ) : (
+    <DescriptionResults query={query} />
+  );
+}
+
+function DescriptionResults({ query }: { query: string }) {
   const api = useTRPC();
   const text = useSettled(query, 400);
   const { data, error, hasNextPage, fetchNextPage, isFetchingNextPage } =

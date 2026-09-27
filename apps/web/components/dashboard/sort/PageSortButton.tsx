@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { usePageSorts, useSetPageSort } from "@/lib/hooks/usePageSort";
 import { BOOKMARK_SORT_LABELS, bookmarkSortOf } from "@/lib/pageSort";
-import { Shuffle, SortAsc, SortDesc } from "lucide-react";
+import { Palette, Shuffle, SortAsc, SortDesc } from "lucide-react";
 
 /**
  * Fork: the header's sort button for a page with no header of its own to
@@ -20,7 +20,13 @@ export function PageSortButton({ pageKey }: { pageKey: string }) {
   const setSort = useSetPageSort();
   const current = bookmarkSortOf(usePageSorts(), pageKey);
   const Icon =
-    current === "oldest" ? SortAsc : current === "random" ? Shuffle : SortDesc;
+    current === "oldest"
+      ? SortAsc
+      : current === "random"
+        ? Shuffle
+        : current === "colour"
+          ? Palette
+          : SortDesc;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -39,7 +45,7 @@ export function PageSortButton({ pageKey }: { pageKey: string }) {
             void setSort(pageKey, sort === "newest" ? null : sort)
           }
         >
-          {(["newest", "oldest", "random"] as const).map((sort) => (
+          {(["newest", "oldest", "random", "colour"] as const).map((sort) => (
             <DropdownMenuRadioItem key={sort} value={sort}>
               {BOOKMARK_SORT_LABELS[sort]}
             </DropdownMenuRadioItem>

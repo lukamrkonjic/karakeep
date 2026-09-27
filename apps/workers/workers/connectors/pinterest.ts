@@ -43,6 +43,7 @@ const PAGE_DELAY_MS = 250;
 interface PinImage {
   url?: unknown;
   width?: unknown;
+  height?: unknown;
 }
 type PinImages = Record<string, PinImage | undefined> | null;
 
@@ -50,6 +51,8 @@ export interface Pin {
   id?: string;
   /** "pin" for a real pin; a board feed also carries "story" modules. */
   type?: string;
+  /** An ad (in "more like this"). */
+  is_promoted?: unknown;
   image_signature?: unknown;
   // Which of these exist, and whether they hold a string at all, depends on
   // the field set Pinterest rendered the feed with — the grid one carries no
@@ -572,4 +575,142 @@ export async function fetchPinterestBoard(
   }
 
   return { name: boardData?.name ?? null, items, complete };
+}
+
+// Fork: Discover (apps/workers/workers/pictures/discoverWorker.ts) —
+// Pinterest's "more like this" for a pin, read as a visitor. A pin's page
+// hands out the cookies, app version and CSRF token the front-end's
+// endpoints want, as a board's does; one session serves a whole run.
+
+const ORIGIN = "https://www.pinterest.com";
+const RELATED_PAGE_SIZE = 25;
+
+export interface PinterestSession {
+  cookies: string;
+  csrf: string;
+  appVersion: string;
+}
+
+export async function openPinterestSession(
+  pinId: string,
+  signal?: AbortSignal,
+): Promise<PinterestSession> {
+  const resp = await fetchWithProxy(
+    `${ORIGIN}/pin/${encodeURIComponent(pinId)}/`,
+    {
+      headers: {
+        "user-agent": UA,
+        accept: "text/html,application/xhtml+xml",
+        "accept-language": "en-US,en;q=0.9",
+      },
+      signal,
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(`Pinterest's pin page answered HTTP ${resp.status}`);
+  }
+  const html = await resp.text();
+  const cookies = setCookieHeaders(resp.headers)
+    .map((c) => c.split(";")[0])
+    .join("; ");
+  return {
+    cookies,
+    csrf: /csrftoken=([^;]+)/.exec(cookies)?.[1] ?? "",
+    appVersion:
+      (readBlob(html, "__PWS_DATA__") as { appVersion?: string } | null)
+        ?.appVersion ?? "",
+  };
+}
+
+/** The pins Pinterest shows under a pin ("more like this"), one page. */
+export async function fetchRelatedPins(
+  session: PinterestSession,
+  pinId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<Pin[]> {
+  const path = `/pin/${pinId}/`;
+  const data = {
+    options: {
+      field_set_key: "unauth_react",
+      pin: pinId,
+      prepend: false,
+      page_size: RELATED_PAGE_SIZE,
+      add_vase: true,
+      show_seo_canonical_pins: true,
+      source: "unknown",
+      top_level_source: "unknown",
+      top_level_source_depth: 1,
+    },
+    context: {},
+  };
+  const resp = await fetchWithProxy(
+    `${ORIGIN}/resource/RelatedPinFeedResource/get/?source_url=${encodeURIComponent(path)}&data=${encodeURIComponent(JSON.stringify(data))}`,
+    {
+      headers: {
+        "user-agent": UA,
+        accept: "application/json, text/javascript, */*, q=0.01",
+        "accept-language": "en-US,en;q=0.9",
+        "x-requested-with": "XMLHttpRequest",
+        "x-app-version": session.appVersion,
+        "x-pinterest-appstate": "active",
+        // As for a board's feed: the page its front-end would call from.
+        "x-pinterest-pws-handler": "www/pin/[id].js",
+        "x-csrftoken": session.csrf,
+        cookie: session.cookies,
+        referer: ORIGIN + path,
+      },
+      signal: opts.signal,
+    },
+  );
+  if (resp.status === 404) {
+    return []; // the pin is gone
+  }
+  if (!resp.ok) {
+    throw new Error(
+      `Pinterest's "more like this" answered HTTP ${resp.status}`,
+    );
+  }
+  const json = (await resp.json()) as {
+    resource_response?: { data?: Pin[] };
+  };
+  return (json.resource_response?.data ?? []).filter(
+    (pin) => pin?.type === "pin",
+  );
+}
+
+/** A related pin as Discover keeps it. */
+export interface DiscoverCandidate {
+  pinId: string;
+  /** The picture itself, whoever pinned it (its image signature). */
+  mediaKey: string | null;
+  title: string | null;
+  /** What the page shows: a mid-size copy, and its size. */
+  thumb: { url: string; width: number | null; height: number | null };
+  /** What Keep downloads, best first. */
+  media: SubscriptionMedia[];
+}
+
+/** What Discover keeps of a pin: null for an ad, or one with no picture. */
+export function discoverCandidateOf(pin: Pin): DiscoverCandidate | null {
+  if (pin.is_promoted === true) {
+    return null;
+  }
+  const [own] = itemsOf(pin);
+  if (!own) {
+    return null;
+  }
+  const shown =
+    pin.images?.["474x"] ?? pin.images?.["736x"] ?? pin.images?.["236x"];
+  const url = mediaUrl(shown?.url);
+  if (!url) {
+    return null;
+  }
+  const size = (v: unknown) => (typeof v === "number" && v > 0 ? v : null);
+  return {
+    pinId: own.externalId,
+    mediaKey: own.mediaKey,
+    title: own.title,
+    thumb: { url, width: size(shown?.width), height: size(shown?.height) },
+    media: own.media,
+  };
 }

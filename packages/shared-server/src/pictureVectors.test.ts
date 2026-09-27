@@ -7,6 +7,8 @@ import {
   orderedPair,
   pictureDistance,
   rankPictures,
+  sameKind,
+  sameLength,
   vectorToBuffer,
 } from "./pictureVectors";
 
@@ -82,5 +84,21 @@ describe("ranking pictures", () => {
     expect(
       rankPictures(index, Float32Array.from([1, 0, 0]), { minSimilarity: -1 }),
     ).toEqual([]);
+  });
+});
+
+describe("videos", () => {
+  test("the same video only if as long", () => {
+    expect(sameLength(30, 30.4)).toBe(true);
+    expect(sameLength(30, 31.5)).toBe(false);
+    expect(sameLength(600, 615)).toBe(true); // 3% of a long one
+    expect(sameLength(0, 0)).toBe(false); // couldn't be measured
+    const picture = { video: false, duration: null };
+    const video = (duration: number | null) => ({ video: true, duration });
+    expect(sameKind(picture, picture)).toBe(true);
+    expect(sameKind(picture, video(12))).toBe(false);
+    expect(sameKind(video(12), video(12.5))).toBe(true);
+    expect(sameKind(video(12), video(20))).toBe(false);
+    expect(sameKind(video(null), video(12))).toBe(false);
   });
 });

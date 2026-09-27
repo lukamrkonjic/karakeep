@@ -6,7 +6,9 @@ import { zDuplicateMatchLevelSchema } from "./duplicatePictures";
  * Fork: what vrana does with its picture model (Immich's CLIP). A job in the
  * workers gives every picture a fingerprint (an embedding); on those rest
  * similar pictures, search by description, list suggestions, duplicate
- * pictures, and near-duplicates skipped on import. Settings → Pictures.
+ * pictures, near-duplicates skipped on import and Discover (new pictures
+ * from Pinterest, ranked by it). Another gives each picture its main
+ * colours. Settings → Pictures.
  */
 
 export const zFingerprintScheduleSchema = z.enum([
@@ -15,6 +17,7 @@ export const zFingerprintScheduleSchema = z.enum([
   "manual",
 ]);
 export const zDuplicatesScheduleSchema = z.enum(["nightly", "manual"]);
+export const zDiscoverScheduleSchema = z.enum(["nightly", "manual"]);
 export const zSimilarLevelSchema = z.enum(["close", "related", "loose"]);
 export const zDescribeLevelSchema = z.enum(["strict", "balanced", "loose"]);
 export const zSuggestionsLevelSchema = z.enum(["sure", "likely", "hunch"]);
@@ -38,6 +41,11 @@ export const zPictureSettingsSchema = z.object({
   // How alike a picture a subscription brings in must be to one you have,
   // for a subscription with "Skip near-duplicates" ticked to skip it.
   importDuplicateLevel: zDuplicateMatchLevelSchema,
+  // Each picture's main colours: in its details, search and sort by colour.
+  palettesEnabled: z.boolean(),
+  // Discover: new pictures from Pinterest like the pins you saved.
+  discoverEnabled: z.boolean(),
+  discoverSchedule: zDiscoverScheduleSchema,
 });
 export type ZPictureSettings = z.infer<typeof zPictureSettingsSchema>;
 
@@ -54,6 +62,9 @@ export const DEFAULT_PICTURE_SETTINGS: ZPictureSettings = {
   suggestionsScope: "new",
   duplicatesSchedule: "nightly",
   importDuplicateLevel: "near",
+  palettesEnabled: true,
+  discoverEnabled: true,
+  discoverSchedule: "nightly",
 };
 
 /**
@@ -112,6 +123,15 @@ export const zPicturesStatusSchema = z.object({
   suggestions: zPictureJobStatusSchema.extend({
     open: z.number(),
   }),
+  // Of all the pictures, how many have their colours.
+  palettes: zPictureJobStatusSchema.extend({
+    done: z.number(),
+    total: z.number(),
+  }),
+  // Pictures waiting on the Discover page.
+  discover: zPictureJobStatusSchema.extend({
+    fresh: z.number(),
+  }),
   // Downloaded yet (once, into the data folder)?
   models: z.object({ picture: z.boolean(), text: z.boolean() }),
 });
@@ -144,3 +164,33 @@ export const zSuggestionGroupSchema = z.object({
   ),
 });
 export type ZSuggestionGroup = z.infer<typeof zSuggestionGroupSchema>;
+
+/** A picture's main colours, the biggest first. */
+export const zPaletteColourSchema = z.object({
+  hex: z.string(),
+  share: z.number(),
+});
+export type ZPaletteColour = z.infer<typeof zPaletteColourSchema>;
+
+/**
+ * Discover: a picture from Pinterest's "more like this" for a pin you saved,
+ * waiting for Keep or Skip.
+ */
+export const zDiscoverItemSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable(),
+  // A mid-size copy on Pinterest's own CDN, and its size.
+  thumbUrl: z.string(),
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  // The pin's page.
+  pinUrl: z.string(),
+  // The list it's suggested for, where Keep files it.
+  suggestedList: z
+    .object({ id: z.string(), name: z.string(), icon: z.string() })
+    .nullable(),
+  status: z.enum(["new", "keeping", "kept", "skipped"]),
+  // Why the last Keep didn't work.
+  error: z.string().nullable(),
+});
+export type ZDiscoverItem = z.infer<typeof zDiscoverItemSchema>;

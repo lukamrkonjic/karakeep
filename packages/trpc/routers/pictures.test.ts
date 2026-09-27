@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   assets,
   AssetTypes,
   pictureEmbeddingsTable,
   pictureListSuggestionsTable,
+  picturePalettesTable,
   pictureSettingsTable,
   pictureTextQueriesTable,
 } from "@karakeep/db/schema";
@@ -16,6 +17,7 @@ import {
   vectorToBuffer,
 } from "@karakeep/shared-server";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
+import { colourSortKey } from "@karakeep/shared/utils/colours";
 
 import type { CustomTestContext } from "../testUtils";
 import { defaultBeforeEach } from "../testUtils";
@@ -286,6 +288,124 @@ describe("Pictures", () => {
     expect((await caller.pictures.status()).models).toEqual({
       picture: false,
       text: false,
+    });
+  });
+
+  test<CustomTestContext>("colours: a picture's palette, search and sort by colour", async ({
+    apiCallers,
+    db,
+  }) => {
+    const api = apiCallers[0];
+    const userId = (await api.users.whoami()).id;
+    const blue = await picture(api, db, "blue", 0);
+    const bitOfBlue = await picture(api, db, "a bit of blue", 10);
+    const red = await picture(api, db, "red", 20);
+    const grey = await picture(api, db, "grey", 30);
+    const note = await api.bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "no colours",
+    });
+    const coloured = [
+      [
+        "blue",
+        blue,
+        [
+          { hex: "#286ff0", share: 0.8 },
+          { hex: "#ffffff", share: 0.2 },
+        ],
+      ],
+      [
+        "a bit of blue",
+        bitOfBlue,
+        [
+          { hex: "#777777", share: 0.85 },
+          { hex: "#2f73ee", share: 0.15 },
+        ],
+      ],
+      ["red", red, [{ hex: "#d62828", share: 1 }]],
+      ["grey", grey, [{ hex: "#888888", share: 1 }]],
+    ] as const;
+    for (const [name, bookmarkId, colours] of coloured) {
+      await db.insert(picturePalettesTable).values({
+        bookmarkId,
+        userId,
+        // Of the file the picture is now.
+        assetId: `asset-${name}`,
+        colours: [...colours],
+        sortKey: colourSortKey([...colours]),
+      });
+    }
+
+    expect(await api.pictures.colours({ bookmarkId: blue })).toEqual([
+      { hex: "#286ff0", share: 0.8 },
+      { hex: "#ffffff", share: 0.2 },
+    ]);
+    expect(await api.pictures.colours({ bookmarkId: note.id })).toEqual([]);
+    // Another user's picture has none for them.
+    expect(await apiCallers[1].pictures.colours({ bookmarkId: blue })).toEqual(
+      [],
+    );
+
+    // The most of that blue first; a little of it counts too.
+    expect(titles(await api.pictures.byColour({ hex: "#2a6fef" }))).toEqual([
+      "blue",
+      "a bit of blue",
+    ]);
+    expect((await api.pictures.byColour({ hex: "blue" })).total).toBe(0);
+
+    // Round the wheel from red, then the greys, then what has no colours.
+    const order = titles(
+      await api.bookmarks.getBookmarks({ sortBy: "colour", limit: 10 }),
+    );
+    expect(order.indexOf("red")).toBeLessThan(order.indexOf("blue"));
+    expect(order.indexOf("blue")).toBeLessThan(order.indexOf("grey"));
+    expect(order.indexOf("grey")).toBe(order.length - 2);
+    expect(order[order.length - 1]).toBeNull(); // the note: no title
+
+    // Status: of the pictures, those with their colours.
+    expect((await api.pictures.status()).palettes).toMatchObject({
+      done: 4,
+      total: 4,
+    });
+
+    // Turned off: none of it.
+    await api.pictures.updateSettings({ palettesEnabled: false });
+    expect(await api.pictures.colours({ bookmarkId: blue })).toEqual([]);
+    expect((await api.pictures.byColour({ hex: "#2a6fef" })).total).toBe(0);
+  });
+
+  test<CustomTestContext>("colours and Discover: on by default, their jobs asked for when turned on", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0];
+    expect(await api.pictures.settings()).toMatchObject({
+      palettesEnabled: true,
+      discoverEnabled: true,
+      discoverSchedule: "nightly",
+    });
+    // The router's (mocked) ones: testUtils mocks shared-server once it's
+    // loaded, after this file's own imports.
+    const server = await import("@karakeep/shared-server");
+    const palettes = vi.mocked(server.requestPicturePalettes);
+    const discover = vi.mocked(server.requestDiscover);
+    await api.pictures.updateSettings({
+      palettesEnabled: false,
+      discoverEnabled: false,
+    });
+    palettes.mockClear();
+    discover.mockClear();
+    await api.pictures.updateSettings({ discoverSchedule: "manual" });
+    expect(palettes).not.toHaveBeenCalled();
+    expect(discover).not.toHaveBeenCalled();
+    await api.pictures.updateSettings({
+      palettesEnabled: true,
+      discoverEnabled: true,
+    });
+    expect(palettes).toHaveBeenCalledTimes(1);
+    expect(discover).toHaveBeenCalledTimes(1);
+    expect((await api.pictures.status()).discover).toMatchObject({
+      status: "never",
+      fresh: 0,
     });
   });
 });

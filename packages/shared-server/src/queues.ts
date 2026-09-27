@@ -431,11 +431,42 @@ export const PictureTextQueue = createDeferredQueue<ZPictureTextRequest>(
   },
 );
 
+// Fork: the pictures' colours — a run over one user's pictures without
+// them (after the fingerprints job, or when Colours is turned on).
+export const PicturePalettesQueue = createDeferredQueue<ZPictureJobRequest>(
+  "picture_palettes_queue",
+  {
+    defaultJobArgs: { numRetries: 1 },
+    keepFailedJobs: false,
+  },
+);
+
+// Fork: Discover — a run that looks for new pictures on Pinterest (nightly,
+// or "Look for more"), and one picked to keep.
+export const DiscoverQueue = createDeferredQueue<ZPictureJobRequest>(
+  "picture_discover_queue",
+  {
+    defaultJobArgs: { numRetries: 1 },
+    keepFailedJobs: false,
+  },
+);
+export const zDiscoverKeepRequestSchema = z.object({
+  itemId: z.string(),
+});
+export type ZDiscoverKeepRequest = z.infer<typeof zDiscoverKeepRequestSchema>;
+export const DiscoverKeepQueue = createDeferredQueue<ZDiscoverKeepRequest>(
+  "discover_keep_queue",
+  {
+    defaultJobArgs: { numRetries: 2 },
+    keepFailedJobs: false,
+  },
+);
+
 /** Marks a picture job pending or waiting, unless it's running now. */
 async function markPictureJob(
   db: DB,
   userId: string,
-  job: "fingerprints" | "suggestions",
+  job: "fingerprints" | "suggestions" | "palettes" | "discover",
   status: "waiting" | "pending",
 ) {
   await db
@@ -464,6 +495,32 @@ export async function requestPictureFingerprints(db: DB, userId: string) {
 export async function requestListSuggestions(db: DB, userId: string) {
   await markPictureJob(db, userId, "suggestions", "waiting");
   await requestPictureFingerprints(db, userId);
+}
+
+/** The colours of the user's pictures that have none, now. */
+export async function requestPicturePalettes(db: DB, userId: string) {
+  await markPictureJob(db, userId, "palettes", "pending");
+  await PicturePalettesQueue.enqueue(
+    { userId },
+    { idempotencyKey: `picture-palettes:${userId}`, groupId: userId },
+  );
+}
+
+/** Discover: look for new pictures now. */
+export async function requestDiscover(db: DB, userId: string) {
+  await markPictureJob(db, userId, "discover", "pending");
+  await DiscoverQueue.enqueue(
+    { userId },
+    { idempotencyKey: `picture-discover:${userId}`, groupId: userId },
+  );
+}
+
+/** Discover: download a picked one and file it (the item says where). */
+export async function queueDiscoverKeep(itemId: string, userId: string) {
+  await DiscoverKeepQueue.enqueue(
+    { itemId },
+    { idempotencyKey: `discover-keep:${itemId}`, groupId: userId },
+  );
 }
 
 /** Queues list suggestions themselves (the fingerprints job, when done). */

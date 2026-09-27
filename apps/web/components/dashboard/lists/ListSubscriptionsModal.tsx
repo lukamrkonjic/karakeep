@@ -32,7 +32,7 @@ import {
 const WHOLE_CAROUSEL_HINT =
   "Every picture of a post with several (and every page of a Pinterest idea pin), not just the first. Applies to posts that sync from now on; what's already in the list stays as it is.";
 const NEAR_DUPLICATES_HINT =
-  "A picture that's another copy of one you have (resized, re-saved, recropped: Settings → Pictures says how alike) is linked to that one instead of downloaded again.";
+  "A picture that's another copy of one you have (resized, re-saved, recropped: Settings → Pictures says how alike) is linked to that one instead of downloaded again. A video too, when a frame of it and its length match one of yours.";
 
 /** A subscription's option: whole carousels, skipping near-duplicates. */
 function OptionCheckbox({

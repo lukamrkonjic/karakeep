@@ -5,6 +5,7 @@ import { withWorkerTracing } from "workerTracing";
 
 import type {
   AlikePair,
+  FingerprintKind,
   PictureVector,
   ZDuplicatePicturesRequest,
 } from "@karakeep/shared-server";
@@ -21,6 +22,8 @@ import {
   getPictureSettings,
   orderedPair,
   queueDuplicatePicturesCheck,
+  sameKind,
+  videoBookmarkIds,
 } from "@karakeep/shared-server";
 import logger from "@karakeep/shared/logger";
 import { DequeuedJob, getQueueClient } from "@karakeep/shared/queueing";
@@ -35,7 +38,9 @@ import { pictureOwners } from "./pictures/jobs";
  * pictures. Pairs alike enough go to Cleanups → Duplicate pictures, where the
  * user keeps one. The fingerprints are the fingerprints job's
  * (workers/pictures/fingerprintsWorker.ts): a check waits for it to look at
- * new pictures first, and it queues the check when it's done.
+ * new pictures first, and it queues the check when it's done. A video is
+ * only ever the duplicate of a video, and only of one as long (its
+ * fingerprint is of one frame: shared-server's pictureVectors.ts sameKind).
  */
 
 export const DuplicatePicturesSchedulingWorker = cron.schedule(
@@ -120,11 +125,14 @@ async function run(job: DequeuedJob<ZDuplicatePicturesRequest>) {
   // Everything with a fingerprint: each new one is compared with all of it.
   const compared: PictureVector[] = [];
   const fresh: PictureVector[] = [];
+  const videos = await videoBookmarkIds(db, userId);
+  const kinds = new Map<string, FingerprintKind>();
   for (const row of await db
     .select({
       id: pictureEmbeddingsTable.bookmarkId,
       embedding: pictureEmbeddingsTable.embedding,
       compared: pictureEmbeddingsTable.compared,
+      duration: pictureEmbeddingsTable.duration,
     })
     .from(pictureEmbeddingsTable)
     .where(
@@ -135,9 +143,12 @@ async function run(job: DequeuedJob<ZDuplicatePicturesRequest>) {
     )) {
     const picture = { id: row.id, vector: bufferToVector(row.embedding!) };
     (row.compared ? compared : fresh).push(picture);
+    kinds.set(row.id, { video: videos.has(row.id), duration: row.duration });
   }
 
-  const pairs = alikePairs(fresh, compared, MAX_DUPLICATE_DISTANCE);
+  const pairs = alikePairs(fresh, compared, MAX_DUPLICATE_DISTANCE).filter(
+    (pair) => sameKind(kinds.get(pair.a)!, kinds.get(pair.b)!),
+  );
   await savePairs(userId, pairs);
   // By id: a fingerprint made while this ran is compared next time.
   for (let i = 0; i < fresh.length; i += 400) {
