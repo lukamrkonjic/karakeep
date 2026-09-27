@@ -101,7 +101,8 @@ function OwnerIndicator({ bookmark }: { bookmark: ZBookmark }) {
   if (!owner) return null;
 
   return (
-    <div className="absolute right-2 top-2 z-40 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+    // Fork: not there by touch — see-through, it took the tap off the card.
+    <div className="absolute right-2 top-2 z-40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 touch:hidden">
       <BookmarkOwnerIcon ownerName={owner.name} ownerAvatar={owner.image} />
     </div>
   );

@@ -45,11 +45,16 @@ export function ImagePeek({
         href={`/dashboard/preview/${bookmarkId}`}
         aria-label="Peek at the image"
         draggable={false}
-        onPointerEnter={show}
+        onPointerEnter={(e) => {
+          // A finger on a touch screen beside the mouse doesn't peek.
+          if (e.pointerType !== "touch") {
+            show();
+          }
+        }}
         onPointerLeave={hide}
         onClick={hide}
         // A bare white icon on the dimmed tile, like the "…" above it.
-        className="absolute bottom-2 right-2 z-20 hidden p-1.5 text-white opacity-0 drop-shadow transition-opacity duration-200 hover:text-white/80 group-hover:opacity-100 [@media(hover:hover)]:flex"
+        className="absolute bottom-2 right-2 z-20 flex p-1.5 text-white opacity-0 drop-shadow transition-opacity duration-200 hover:text-white/80 group-hover:opacity-100 touch:hidden"
       >
         <Search className="size-5" />
       </Link>

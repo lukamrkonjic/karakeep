@@ -53,8 +53,10 @@ function StyledBookmarkCard({
     <Slot
       className={cn(
         // Fork: tighter on a phone; no iOS long-press callout on a card
-        // (a long press opens its actions), no text selection by touch.
-        "mb-2 [-webkit-touch-callout:none] sm:mb-5 [@media(pointer:coarse)]:select-none",
+        // (a long press opens its actions), no text selection by touch —
+        // Safari reads only the prefixed user-select, which the build drops
+        // from select-none (see tooling/tailwind/globals.css).
+        "mb-2 [-webkit-touch-callout:none] sm:mb-5 [@media(pointer:coarse)]:select-none [@media(pointer:coarse)]:[-webkit-user-select:none]",
         layout === "masonry" ? "bg-transparent" : "bg-card",
         className,
       )}

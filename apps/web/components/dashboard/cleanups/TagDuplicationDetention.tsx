@@ -161,7 +161,8 @@ function SuggestionRow({
                 size="none"
                 className={cn(
                   "-translate-1/2 absolute -right-1.5 -top-1.5 rounded-full p-0.5",
-                  selected ? null : "hidden group-hover:block",
+                  // Fork: always there by touch, which has no hover.
+                  selected ? null : "hidden group-hover:block touch:block",
                 )}
                 onClick={() => updateMergeInto(suggestion, tag.id)}
               >

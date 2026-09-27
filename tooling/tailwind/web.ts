@@ -1,12 +1,20 @@
 import type { Config } from "tailwindcss";
 import typography from "@tailwindcss/typography";
 import animate from "tailwindcss-animate";
+import plugin from "tailwindcss/plugin";
 
 import base from "./base";
 
 export default {
   content: base.content,
   presets: [base],
+  // Fork: hover styles (hover:, group-hover:, peer-hover:) only where there
+  // is a real hover, a mouse or a trackpad: Tailwind puts them in
+  // @media (hover: hover) and (pointer: fine). A tap on a phone "hovers"
+  // too, and when that reveals something clickable (a picture's title and
+  // buttons, a shared card's owner) iOS takes the tap for the hover and
+  // drops the click, so it took a second tap to open anything.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       borderRadius: {
@@ -39,5 +47,18 @@ export default {
       },
     },
   },
-  plugins: [animate, typography],
+  plugins: [
+    animate,
+    typography,
+    // Fork: `touch:` is every other device (phones, tablets): the exact
+    // opposite of the hover above. What a hover reveals is either always
+    // there by touch or not there at all: see-through, it would still take
+    // the tap.
+    plugin(({ addVariant }) => {
+      addVariant(
+        "touch",
+        "@media not all and (hover: hover) and (pointer: fine)",
+      );
+    }),
+  ],
 } satisfies Config;

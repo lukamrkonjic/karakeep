@@ -17,7 +17,8 @@ export function PictureColours({ bookmarkId }: { bookmarkId: string }) {
     return null;
   }
   return (
-    <div className="flex h-7 w-full overflow-hidden rounded-md ring-1 ring-inset ring-black/10 dark:ring-white/10">
+    // Taller by touch: a colour is something to tap there.
+    <div className="flex h-7 w-full overflow-hidden rounded-md ring-1 ring-inset ring-black/10 touch:h-9 dark:ring-white/10">
       {data.map((colour) => (
         <Link
           key={colour.hex}

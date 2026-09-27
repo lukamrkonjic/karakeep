@@ -83,6 +83,11 @@ export default function ColourPage({ colour: param }: { colour: string }) {
   const shown = family ? FAMILY_SWATCHES[family] : query;
   const [picked, setPicked] = useState(shown);
   useEffect(() => setPicked(shown), [shown]);
+  // The family chip just tapped takes the ring at once, before its page
+  // has loaded — a tap is answered where the finger is.
+  const [tapped, setTapped] = useState<string | null>(null);
+  useEffect(() => setTapped(null), [query]);
+  const ringed = tapped ?? family;
   // A picker sends colours while it's dragged: the page follows the pauses.
   useEffect(() => {
     if (picked === shown) {
@@ -153,9 +158,17 @@ export default function ColourPage({ colour: param }: { colour: string }) {
             href={`/dashboard/colour/${f}`}
             title={nameOf(f)}
             aria-label={nameOf(f)}
+            onClick={(e) => {
+              // Not when it opens in another tab.
+              if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
+                setTapped(f);
+              }
+            }}
             className={cn(
-              "size-7 rounded-full ring-1 ring-inset ring-black/10 transition-transform hover:scale-110 dark:ring-white/15",
-              f === family &&
+              // A finger gets the gap around a chip too (after:), so the
+              // chips are 36px to aim at, not 28.
+              "relative size-7 rounded-full ring-1 ring-inset ring-black/10 transition-transform after:absolute after:-inset-1 after:rounded-full hover:scale-110 dark:ring-white/15",
+              f === ringed &&
                 "ring-2 ring-foreground ring-offset-2 ring-offset-background",
             )}
             style={{ backgroundColor: FAMILY_SWATCHES[f] }}

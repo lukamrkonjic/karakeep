@@ -141,7 +141,7 @@ export function BookmarkVideo({
             // The play mark until a hover preview is actually playing.
             !hoverPlaying && "group-hover/video:opacity-100",
             // Fork: by touch there's no hover — the mark is always there.
-            "[@media(hover:none)]:opacity-100",
+            "touch:opacity-100",
           )}
         >
           <span className="flex size-14 items-center justify-center rounded-full bg-black/50">

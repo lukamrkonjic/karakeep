@@ -86,7 +86,8 @@ function BookmarkCard({ bookmark }: { bookmark: ZPublicBookmark }) {
                 }}
               </BookmarkMarkdownComponent>
               <Dialog>
-                <DialogTrigger className="absolute bottom-2 right-2 z-50 h-4 w-4 opacity-0 group-hover:opacity-100">
+                {/* Fork: always there by touch, which has no hover. */}
+                <DialogTrigger className="absolute bottom-2 right-2 z-50 h-4 w-4 opacity-0 group-hover:opacity-100 touch:opacity-100">
                   <Expand className="h-4 w-4" />
                 </DialogTrigger>
                 <DialogContent className="max-h-96 max-w-3xl overflow-auto">

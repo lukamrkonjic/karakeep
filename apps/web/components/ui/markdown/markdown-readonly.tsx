@@ -11,8 +11,9 @@ function PreWithCopyBtn({ className, ...props }: React.ComponentProps<"pre">) {
   const ref = React.useRef<HTMLPreElement>(null);
   return (
     <span className="group relative">
+      {/* Fork: always there by touch, which has no hover. */}
       <CopyBtn
-        className="absolute right-1 top-1 m-1 hidden text-white group-hover:block"
+        className="absolute right-1 top-1 m-1 hidden text-white group-hover:block touch:block"
         getStringToCopy={() => {
           return ref.current?.textContent ?? "";
         }}
