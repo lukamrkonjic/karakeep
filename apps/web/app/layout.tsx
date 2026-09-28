@@ -8,7 +8,6 @@ import type { Viewport } from "next";
 import React from "react";
 import PwaSupport from "@/components/PwaSupport";
 import Providers from "@/lib/providers";
-import { THEME_BACKGROUND } from "@/lib/themeColors";
 import {
   getUiPreferences,
   withAccountPreferences,
@@ -72,35 +71,18 @@ export const metadata: Metadata = {
 
 /**
  * Fork: the installed app on a phone — edge to edge (the tab bar keeps clear
- * of the home indicator with env(safe-area-inset-bottom)) — and the
- * browser's bars (a phone's status bar, the title bar of vrana in a Mac's
- * Dock) in the theme's background: the account's theme from the first
- * paint, the device's light or dark when it follows the system. PwaSupport
- * keeps them in step when the theme changes.
+ * of the home indicator with env(safe-area-inset-bottom)). The browser's
+ * bars (theme-color) aren't here but in PwaSupport: Next replaces these
+ * tags on every navigation, and for a frame the bars had no colour — the
+ * title bar of vrana in a Mac's Dock flashed white while typing a search.
  */
-export async function generateViewport(): Promise<Viewport> {
-  const { theme } = await getUiPreferences();
-  return {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-    themeColor:
-      theme === "light" || theme === "dark"
-        ? THEME_BACKGROUND[theme]
-        : [
-            {
-              media: "(prefers-color-scheme: light)",
-              color: THEME_BACKGROUND.light,
-            },
-            {
-              media: "(prefers-color-scheme: dark)",
-              color: THEME_BACKGROUND.dark,
-            },
-          ],
-  };
-}
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export default async function RootLayout({
   children,

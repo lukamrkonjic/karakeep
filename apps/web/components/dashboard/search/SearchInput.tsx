@@ -34,9 +34,8 @@ import QueryExplainerTooltip from "./QueryExplainerTooltip";
 import { useSearchAutocomplete } from "./useSearchAutocomplete";
 
 // Fork: one search, no modes — the words, what's in the pictures, colours
-// (routers/pictures.ts search).
-const PLACEHOLDER =
-  "Search words, what's in a picture, or a colour like #c8a27a…";
+// (routers/pictures.ts search) — so one quiet word says it.
+const PLACEHOLDER = "Search";
 
 function useFocusSearchOnKeyPress(
   inputRef: React.RefObject<HTMLInputElement | null>,
@@ -227,7 +226,7 @@ const SearchInput = React.forwardRef<
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 className={cn(
-                  "h-10 pr-10",
+                  "h-10 pr-10 placeholder:text-muted-foreground/70",
                   canSaveSearch && "pr-24",
                   className,
                 )}
