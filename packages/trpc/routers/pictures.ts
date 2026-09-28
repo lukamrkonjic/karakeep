@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { and, count, eq, inArray, notExists, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -15,17 +14,13 @@ import {
   pictureListSuggestionsTable,
   picturePalettesTable,
   pictureSettingsTable,
-  pictureTextQueriesTable,
 } from "@karakeep/db/schema";
 import {
-  bufferToVector,
   clipModelDownloaded,
   fingerprintProgress,
   getPictureSettings,
   normalizeDescription,
   paletteProgress,
-  pictureTextQueryId,
-  PictureTextQueue,
   rankPictures,
   requestDiscover,
   requestListSuggestions,
@@ -58,6 +53,7 @@ import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
 import { userPictureIndex, vectorOf } from "../lib/pictureIndex";
+import { describedVector } from "../lib/pictureText";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
 import { reciprocalRankFusion } from "../lib/searchRanking";
 import { Bookmark } from "../models/bookmarks";
@@ -77,9 +73,6 @@ const PAGE = 30;
 const MAX_RESULTS = 600;
 /** A colour is cheap to rank by: everything in it, within reason. */
 const MAX_COLOUR_RESULTS = 3000;
-/** How long a search waits for its description's fingerprint. */
-const DESCRIBE_WAIT_MS = 8000;
-
 function chunks<T>(items: T[], size = 400): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -121,68 +114,6 @@ async function pageOf(
 function settingsOf(row: typeof pictureSettingsTable.$inferSelect) {
   const { userId: _userId, suggestionsSince: _since, ...settings } = row;
   return settings;
-}
-
-/**
- * A description's fingerprint: from the cache, or asked of the workers and
- * waited for a while. Null while the workers are on it (the first search
- * loads the text model — downloads it, the very first time).
- */
-async function describedVector(
-  ctx: AuthedContext,
-  description: string,
-  waitMs = DESCRIBE_WAIT_MS,
-): Promise<Float32Array | null> {
-  const id = pictureTextQueryId(description);
-  const find = () =>
-    ctx.db.query.pictureTextQueriesTable.findFirst({
-      where: eq(pictureTextQueriesTable.id, id),
-    });
-  let row = await find();
-  if (row?.embedding) {
-    await ctx.db
-      .update(pictureTextQueriesTable)
-      .set({ usedAt: new Date() })
-      .where(eq(pictureTextQueriesTable.id, id));
-    return bufferToVector(row.embedding);
-  }
-  if (row?.error) {
-    // Tried again after a minute.
-    if (Date.now() - row.usedAt.getTime() < 60_000) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: `Couldn't search by description: ${row.error}`,
-      });
-    }
-    await ctx.db
-      .update(pictureTextQueriesTable)
-      .set({ error: null, usedAt: new Date() })
-      .where(eq(pictureTextQueriesTable.id, id));
-  } else if (!row) {
-    await ctx.db
-      .insert(pictureTextQueriesTable)
-      .values({ id, text: description })
-      .onConflictDoNothing();
-  }
-  await PictureTextQueue.enqueue(
-    { queryId: id },
-    { idempotencyKey: `picture-text:${id}` },
-  );
-  const until = Date.now() + waitMs;
-  while (Date.now() < until) {
-    await new Promise((r) => setTimeout(r, 150));
-    row = await find();
-    if (row?.embedding) {
-      return bufferToVector(row.embedding);
-    }
-    if (row?.error) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: `Couldn't search by description: ${row.error}`,
-      });
-    }
-  }
-  return null;
 }
 
 /**

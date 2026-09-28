@@ -15,6 +15,7 @@ import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 import { useListDrop } from "@/lib/hooks/useListDrop";
 import { cn } from "@/lib/utils";
 import {
+  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   MoreHorizontal,
@@ -26,13 +27,17 @@ import {
   augmentBookmarkListsWithInitialData,
   useBookmarkLists,
 } from "@karakeep/shared-react/hooks/lists";
-import { ZBookmarkListTreeNode } from "@karakeep/shared/utils/listUtils";
+import {
+  listsToTree,
+  ZBookmarkListTreeNode,
+} from "@karakeep/shared/utils/listUtils";
 
 import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
 import type { OpenState } from "../lists/CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
+import { SmartListDialog } from "../lists/smart/SmartListDialog";
 import { BookmarkPageOptions } from "../PageOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
 
@@ -155,6 +160,24 @@ export default function AllLists({
     initialData.lists,
   );
 
+  // Fork: your smart lists in a section of their own (above the lists), your
+  // other lists below. Each is its own tree: a list whose parent is in the
+  // other section shows at the top of its own.
+  const [smartTree, manualTree] = useMemo(() => {
+    const treeOf = (type: ZBookmarkList["type"]) => {
+      const own = lists.data.filter(
+        (l) => l.userRole === "owner" && l.type === type,
+      );
+      const ids = new Set(own.map((l) => l.id));
+      const data = own.map((l) =>
+        l.parentId && !ids.has(l.parentId) ? { ...l, parentId: null } : l,
+      );
+      return { data, ...listsToTree(data) };
+    };
+    return [treeOf("smart"), treeOf("manual")];
+  }, [lists.data]);
+  const smartFolded = !!usePreference("smartListsFolded");
+
   // Check if any shared list is currently being viewed
   const isViewingSharedList = useMemo(() => {
     return lists.data.some(
@@ -240,10 +263,10 @@ export default function AllLists({
     }
   }, [pathName, lists.data, openSet, updatePreferences]);
 
-  // Fork: only the lists scroll; the pages and the heading stay put. The
-  // lists' scrollbar is always there (invisible until hovered), so rows don't
-  // narrow when unfolding makes them overflow, and the parts above reserve the
-  // same gutter so everything lines up.
+  // Fork: only the lists scroll; the pages stay put. The lists' scrollbar is
+  // always there (invisible until hovered), so rows don't narrow when
+  // unfolding makes them overflow, and the pages reserve the same gutter so
+  // everything lines up.
   const fixedPart =
     "sidebar-scrollbar shrink-0 overflow-hidden [scrollbar-gutter:stable]";
   return (
@@ -317,104 +340,194 @@ export default function AllLists({
         />
       </ul>
 
-      {/* Fork: the pages above, the lists below their own heading. */}
-      <div
-        className={cn(
-          fixedPart,
-          "flex items-center justify-between pb-2",
-          pages ? "pt-6" : "pt-1",
-        )}
-      >
-        <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
-          Lists
-        </p>
-        <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
-          {(foldable.length > 0 || hasSharedLists) && (
+      {/* Fork: the pages above; your smart lists, then your lists, below —
+          scrolling together, each section's heading staying in view while
+          its rows scroll (and pushed up by the next section's). */}
+      <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-scroll">
+        <section aria-label="Smart lists">
+          {pages && <div aria-hidden className="h-4" />}
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-background py-2">
             <button
               type="button"
-              onClick={foldAll}
-              title={anyOpen ? "Collapse all" : "Expand all"}
-              aria-label={anyOpen ? "Collapse all" : "Expand all"}
-              className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {anyOpen ? (
-                <ChevronsDownUp className="size-4" strokeWidth={1.5} />
-              ) : (
-                <ChevronsUpDown className="size-4" strokeWidth={1.5} />
-              )}
-            </button>
-          )}
-          <EditListModal>
-            <button
-              type="button"
-              title="New list"
-              aria-label="New list"
-              className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Plus className="size-4" strokeWidth={1.5} />
-            </button>
-          </EditListModal>
-        </div>
-      </div>
-
-      <ul className="sidebar-scrollbar min-h-0 flex-1 overflow-y-scroll">
-        {/* Owned Lists */}
-        <CollapsibleBookmarkLists
-          listsData={lists}
-          filter={(node) => node.item.userRole === "owner"}
-          openState={openState}
-          reorderable
-          render={({ node, level, open, onOpenChange, numBookmarks }) => (
-            <DroppableListSidebarItem
-              node={node}
-              level={level}
-              open={open}
-              onOpenChange={onOpenChange}
-              numBookmarks={numBookmarks}
-              selectedListId={selectedListId}
-              setSelectedListId={setSelectedListId}
-            />
-          )}
-        />
-
-        {/* Shared Lists */}
-        {hasSharedLists && (
-          <Collapsible open={sharedListsOpen} onOpenChange={setSharedListsOpen}>
-            <SidebarItem
-              collapseButton={
-                <CollapsibleTriggerChevron
-                  className="size-4"
-                  open={sharedListsOpen}
-                />
+              onClick={() =>
+                void updatePreferences({ smartListsFolded: !smartFolded })
               }
-              logo={<span className="text-lg">👥</span>}
-              name={t("lists.shared_lists")}
-              path="#"
-              className="my-0.5"
-              linkClassName="py-1.5 px-2"
-            />
-            <CollapsibleContent>
-              <CollapsibleBookmarkLists
-                listsData={lists}
-                filter={(node) => node.item.userRole !== "owner"}
-                openState={openState}
-                indentOffset={1}
-                render={({ node, level, open, onOpenChange, numBookmarks }) => (
-                  <DroppableListSidebarItem
-                    node={node}
-                    level={level}
-                    open={open}
-                    onOpenChange={onOpenChange}
-                    numBookmarks={numBookmarks}
-                    selectedListId={selectedListId}
-                    setSelectedListId={setSelectedListId}
-                  />
+              aria-expanded={!smartFolded}
+              title={smartFolded ? "Show smart lists" : "Hide smart lists"}
+              className="group/heading flex items-center gap-1 rounded-md pl-2 pr-1 text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Smart lists
+              <ChevronRight
+                className={cn(
+                  "size-3 transition-transform",
+                  !smartFolded && "rotate-90",
+                  // Folded, it shows (something's hidden); else on hover.
+                  smartFolded
+                    ? "opacity-100"
+                    : "opacity-0 group-hover/heading:opacity-100",
                 )}
               />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-      </ul>
+            </button>
+            <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
+              <SmartListDialog>
+                <button
+                  type="button"
+                  title="New smart list"
+                  aria-label="New smart list"
+                  className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Plus className="size-4" strokeWidth={1.5} />
+                </button>
+              </SmartListDialog>
+            </div>
+          </div>
+          {!smartFolded && (
+            <ul>
+              {smartTree.data.length > 0 ? (
+                <CollapsibleBookmarkLists
+                  listsData={smartTree}
+                  allLists={lists.data}
+                  openState={openState}
+                  reorderable
+                  render={({
+                    node,
+                    level,
+                    open,
+                    onOpenChange,
+                    numBookmarks,
+                  }) => (
+                    <DroppableListSidebarItem
+                      node={node}
+                      level={level}
+                      open={open}
+                      onOpenChange={onOpenChange}
+                      numBookmarks={numBookmarks}
+                      selectedListId={selectedListId}
+                      setSelectedListId={setSelectedListId}
+                    />
+                  )}
+                />
+              ) : (
+                <li className="px-2 py-1.5">
+                  <SmartListDialog>
+                    <button
+                      type="button"
+                      className="text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Lists that fill themselves — by colour, what&apos;s in the
+                      picture, tags…
+                    </button>
+                  </SmartListDialog>
+                </li>
+              )}
+            </ul>
+          )}
+        </section>
+
+        <section aria-label="Lists">
+          <div aria-hidden className="h-4" />
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-background py-2">
+            <p className="pl-2 text-xs uppercase tracking-wider text-muted-foreground">
+              Lists
+            </p>
+            <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
+              {(foldable.length > 0 || hasSharedLists) && (
+                <button
+                  type="button"
+                  onClick={foldAll}
+                  title={anyOpen ? "Collapse all" : "Expand all"}
+                  aria-label={anyOpen ? "Collapse all" : "Expand all"}
+                  className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {anyOpen ? (
+                    <ChevronsDownUp className="size-4" strokeWidth={1.5} />
+                  ) : (
+                    <ChevronsUpDown className="size-4" strokeWidth={1.5} />
+                  )}
+                </button>
+              )}
+              <EditListModal>
+                <button
+                  type="button"
+                  title="New list"
+                  aria-label="New list"
+                  className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Plus className="size-4" strokeWidth={1.5} />
+                </button>
+              </EditListModal>
+            </div>
+          </div>
+
+          <ul>
+            {/* Owned Lists */}
+            <CollapsibleBookmarkLists
+              listsData={manualTree}
+              allLists={lists.data}
+              openState={openState}
+              reorderable
+              render={({ node, level, open, onOpenChange, numBookmarks }) => (
+                <DroppableListSidebarItem
+                  node={node}
+                  level={level}
+                  open={open}
+                  onOpenChange={onOpenChange}
+                  numBookmarks={numBookmarks}
+                  selectedListId={selectedListId}
+                  setSelectedListId={setSelectedListId}
+                />
+              )}
+            />
+
+            {/* Shared Lists */}
+            {hasSharedLists && (
+              <Collapsible
+                open={sharedListsOpen}
+                onOpenChange={setSharedListsOpen}
+              >
+                <SidebarItem
+                  collapseButton={
+                    <CollapsibleTriggerChevron
+                      className="size-4"
+                      open={sharedListsOpen}
+                    />
+                  }
+                  logo={<span className="text-lg">👥</span>}
+                  name={t("lists.shared_lists")}
+                  path="#"
+                  className="my-0.5"
+                  linkClassName="py-1.5 px-2"
+                />
+                <CollapsibleContent>
+                  <CollapsibleBookmarkLists
+                    listsData={lists}
+                    filter={(node) => node.item.userRole !== "owner"}
+                    openState={openState}
+                    indentOffset={1}
+                    render={({
+                      node,
+                      level,
+                      open,
+                      onOpenChange,
+                      numBookmarks,
+                    }) => (
+                      <DroppableListSidebarItem
+                        node={node}
+                        level={level}
+                        open={open}
+                        onOpenChange={onOpenChange}
+                        numBookmarks={numBookmarks}
+                        selectedListId={selectedListId}
+                        setSelectedListId={setSelectedListId}
+                      />
+                    )}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }

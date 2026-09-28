@@ -20,6 +20,7 @@ import { listsAppRouter } from "./lists";
 import { promptsAppRouter } from "./prompts";
 import { publicBookmarks } from "./publicBookmarks";
 import { rulesAppRouter } from "./rules";
+import { smartListsAppRouter } from "./smartLists";
 import { subscriptionsRouter } from "./subscriptions";
 import { tagsAppRouter } from "./tags";
 import { usersAppRouter } from "./users";
@@ -54,6 +55,8 @@ export const appRouter = router({
   discover: discoverAppRouter,
   pinterestDiscover: pinterestDiscoverAppRouter,
   uiPreferences: uiPreferencesAppRouter,
+  // Fork: smart lists made of rules (Eagle's smart folders).
+  smartLists: smartListsAppRouter,
   config: configAppRouter,
 });
 // export type definition of API

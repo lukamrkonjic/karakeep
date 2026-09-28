@@ -34,6 +34,7 @@ import { ListSubscriptionsModal } from "./ListSubscriptionsModal";
 import { ManageCollaboratorsModal } from "./ManageCollaboratorsModal";
 import { MergeListModal } from "./MergeListModal";
 import { ShareListModal } from "./ShareListModal";
+import { SmartListDialog } from "./smart/SmartListDialog";
 
 // The view toggles and the leave/delete actions come after "Sort".
 const AFTER_SORT = new Set([
@@ -108,7 +109,13 @@ export function ListOptions({
     },
     {
       id: "new-nested-list",
-      title: t("lists.new_nested_list"),
+      // Fork: a smart list's nested lists are smart lists (its section).
+      title:
+        list.type === "smart"
+          ? t("lists.new_nested_smart_list", {
+              defaultValue: "New nested smart list",
+            })
+          : t("lists.new_nested_list"),
       icon: <Plus className="size-4" />,
       visible: isOwner,
       disabled: false,
@@ -118,7 +125,8 @@ export function ListOptions({
       id: "merge-list",
       title: t("lists.merge_list"),
       icon: <FolderInput className="size-4" />,
-      visible: isOwner,
+      // Fork: a smart list can't be merged (the server refuses).
+      visible: isOwner && list.type === "manual",
       disabled: false,
       onClick: () => setMergeListModalOpen(true),
     },
@@ -211,18 +219,36 @@ export function ListOptions({
         list={list}
         readOnly={!isOwner}
       />
-      <EditListModal
-        open={newNestedListModalOpen}
-        setOpen={setNewNestedListModalOpen}
-        prefill={{
-          parentId: list.id,
-        }}
-      />
-      <EditListModal
-        open={editModalOpen}
-        setOpen={setEditModalOpen}
-        list={list}
-      />
+      {/* Fork: a smart list is made and changed with its rules. */}
+      {list.type === "smart" ? (
+        <>
+          <SmartListDialog
+            open={newNestedListModalOpen}
+            setOpen={setNewNestedListModalOpen}
+            parentId={list.id}
+          />
+          <SmartListDialog
+            open={editModalOpen}
+            setOpen={setEditModalOpen}
+            list={list}
+          />
+        </>
+      ) : (
+        <>
+          <EditListModal
+            open={newNestedListModalOpen}
+            setOpen={setNewNestedListModalOpen}
+            prefill={{
+              parentId: list.id,
+            }}
+          />
+          <EditListModal
+            open={editModalOpen}
+            setOpen={setEditModalOpen}
+            list={list}
+          />
+        </>
+      )}
       <MergeListModal
         open={mergeListModalOpen}
         setOpen={setMergeListModalOpen}

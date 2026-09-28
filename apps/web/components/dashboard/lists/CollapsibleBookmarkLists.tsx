@@ -52,6 +52,43 @@ function DropIndicatorLine({ position }: { position: "top" | "bottom" }) {
 }
 
 /**
+ * Fork: where a list dropped between two rows goes among ALL its siblings —
+ * the server's index. The sidebar shows smart lists and lists in sections of
+ * their own, so a row's neighbours on screen aren't all of its siblings:
+ * it goes just above the row below the drop (or just below the one above).
+ * Null when those rows aren't its siblings (a list shown at the top of its
+ * section whose parent is in the other one).
+ */
+function serverIndex(
+  allLists: ZBookmarkList[],
+  listId: string,
+  above: string | undefined,
+  below: string | undefined,
+): number | null {
+  const list = allLists.find((l) => l.id === listId);
+  if (!list) {
+    return null;
+  }
+  const siblings = allLists
+    .filter(
+      (l) =>
+        l.userRole === "owner" &&
+        l.parentId === list.parentId &&
+        l.id !== listId,
+    )
+    .sort((a, b) => b.position - a.position);
+  const at = (id: string | undefined) =>
+    id === undefined ? -1 : siblings.findIndex((l) => l.id === id);
+  if (at(below) >= 0) {
+    return at(below);
+  }
+  if (at(above) >= 0) {
+    return at(above) + 1;
+  }
+  return above === undefined && below === undefined ? 0 : null;
+}
+
+/**
  * Wraps a list of already-position-sorted siblings (same parent) with
  * drag-and-drop reordering. Only enabled for lists the user owns —
  * reordering a shared list's row would silently reorder it for the owner
@@ -62,10 +99,12 @@ function ReorderableSiblings({
   nodes,
   reorderable,
   renderNode,
+  allLists,
 }: {
   nodes: ZBookmarkListTreeNode[];
   reorderable: boolean;
   renderNode: (node: ZBookmarkListTreeNode) => React.ReactNode;
+  allLists?: ZBookmarkList[];
 }) {
   const { mutate: reorder } = useReorderBookmarkList();
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -154,8 +193,23 @@ function ReorderableSiblings({
             }
             const adjustedIndex =
               targetIndex > draggedIndex ? targetIndex - 1 : targetIndex;
-            if (adjustedIndex !== draggedIndex) {
+            if (adjustedIndex === draggedIndex) {
+              return;
+            }
+            if (!allLists) {
               reorder({ listId: draggedListId, index: adjustedIndex });
+              return;
+            }
+            // Fork: the rows shown may not be all of its siblings.
+            const others = nodes.filter((n) => n.item.id !== draggedListId);
+            const index = serverIndex(
+              allLists,
+              draggedListId,
+              others[adjustedIndex - 1]?.item.id,
+              others[adjustedIndex]?.item.id,
+            );
+            if (index !== null) {
+              reorder({ listId: draggedListId, index });
             }
           }}
         >
@@ -180,6 +234,7 @@ function ListItem({
   indentOffset,
   reorderable,
   openState,
+  allLists,
 }: {
   node: ZBookmarkListTreeNode;
   render: RenderFunc;
@@ -190,6 +245,7 @@ function ListItem({
   className?: string;
   reorderable: boolean;
   openState?: OpenState;
+  allLists?: ZBookmarkList[];
 }) {
   // Not the most efficient way to do this, but it works for now
   const isAnyChildOpen = (
@@ -229,6 +285,7 @@ function ListItem({
         <ReorderableSiblings
           nodes={sortedChildren}
           reorderable={reorderable}
+          allLists={allLists}
           renderNode={(l) => (
             <ListItem
               isOpenFunc={isOpenFunc}
@@ -240,6 +297,7 @@ function ListItem({
               className={className}
               reorderable={reorderable}
               openState={openState}
+              allLists={allLists}
             />
           )}
         />
@@ -258,6 +316,7 @@ export function CollapsibleBookmarkLists({
   indentOffset = 0,
   reorderable = false,
   openState,
+  allLists,
 }: {
   initialData?: ZBookmarkList[];
   listsData?: {
@@ -274,6 +333,11 @@ export function CollapsibleBookmarkLists({
   /** Enable drag-and-drop reordering among siblings. Owned lists only. */
   reorderable?: boolean;
   openState?: OpenState;
+  /**
+   * Fork: every list, when `listsData` shows only some of them (the
+   * sidebar's sections): a reorder is placed among all the siblings.
+   */
+  allLists?: ZBookmarkList[];
 }) {
   const api = useTRPC();
   // If listsData is provided, use it directly. Otherwise, fetch it.
@@ -303,6 +367,7 @@ export function CollapsibleBookmarkLists({
       <ReorderableSiblings
         nodes={filteredRoots}
         reorderable={reorderable}
+        allLists={allLists}
         renderNode={(node) => (
           <ListItem
             node={node}
@@ -314,6 +379,7 @@ export function CollapsibleBookmarkLists({
             isOpenFunc={isOpenFunc ?? (() => false)}
             reorderable={reorderable}
             openState={openState}
+            allLists={allLists}
           />
         )}
       />

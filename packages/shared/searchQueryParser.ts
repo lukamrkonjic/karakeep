@@ -17,7 +17,7 @@ import {
 import { z } from "zod";
 
 import { BookmarkTypes, zBookmarkSourceSchema } from "./types/bookmarks";
-import { Matcher } from "./types/search";
+import { BookmarkKind, Matcher } from "./types/search";
 import { parseColourQuery } from "./utils/colours";
 import { parseRelativeDate } from "./utils/relativeDateUtils";
 
@@ -45,8 +45,9 @@ const lexerRules: [RegExp, TokenType][] = [
   // Fork: a colour's # is part of `color:#286ff0`, not a tag's.
   [/^colou?r:#/, TokenType.Qualifier],
   [/^#/, TokenType.Hash],
+  // Fork: listid: and shows: (smart list rules).
   [
-    /^(is|url|list|after|before|age|feed|title|tag|source|color|colour):/,
+    /^(is|url|list|after|before|age|feed|title|tag|source|color|colour|listid|shows):/,
     TokenType.Qualifier,
   ],
 
@@ -182,6 +183,22 @@ MATCHER.setPattern(
               text: "",
               matcher: { type: "brokenLinks", brokenLinks: !minus },
             };
+          // Fork: what it is, finer than link/text/media.
+          case "picture":
+          case "image":
+          case "video":
+          case "pdf":
+          case "note":
+            return {
+              text: "",
+              matcher: {
+                type: "kind",
+                kind: (ident.text === "image"
+                  ? "picture"
+                  : ident.text) as BookmarkKind,
+                inverse: !!minus,
+              },
+            };
           default:
             // If the token is not known, emit it as pure text
             return {
@@ -250,6 +267,18 @@ MATCHER.setPattern(
             return {
               text: "",
               matcher: { type: "listName", listName: ident, inverse: !!minus },
+            };
+          // Fork: a list and everything under it, by id.
+          case "listid:":
+            return {
+              text: "",
+              matcher: { type: "listId", listId: ident, inverse: !!minus },
+            };
+          // Fork: pictures that show what the words describe.
+          case "shows:":
+            return {
+              text: "",
+              matcher: { type: "shows", description: ident, inverse: !!minus },
             };
           case "feed:":
             return {

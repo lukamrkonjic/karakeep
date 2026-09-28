@@ -9,7 +9,9 @@ import {
 import { useTranslation } from "@/lib/i18n/client";
 import { match } from "@/lib/utils";
 
+import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 import { TextAndMatcher } from "@karakeep/shared/searchQueryParser";
+import { SMART_KINDS } from "@karakeep/shared/smartListRules";
 import { Matcher } from "@karakeep/shared/types/search";
 import {
   FAMILY_SWATCHES,
@@ -28,6 +30,8 @@ export default function QueryExplainerTooltip({
   trigger?: React.ReactNode;
 }) {
   const { t } = useTranslation();
+  // Fork: listid: names its list.
+  const { data: lists } = useBookmarkLists();
   if (parsedSearchQuery.result == "invalid") {
     return null;
   }
@@ -255,6 +259,42 @@ export default function QueryExplainerTooltip({
                 {matcher.color}
               </span>
             </TableCell>
+          </TableRow>
+        );
+      // Fork: smart list rules.
+      case "listId":
+        return (
+          <TableRow>
+            <TableCell>
+              {matcher.inverse
+                ? t("search.is_not_in_list")
+                : t("search.is_in_list")}
+            </TableCell>
+            <TableCell>
+              {lists?.data.find((l) => l.id === matcher.listId)?.name ??
+                "A list that's gone"}{" "}
+              <span className="text-muted-foreground">(and its lists)</span>
+            </TableCell>
+          </TableRow>
+        );
+      case "kind":
+        return (
+          <TableRow>
+            <TableCell>
+              {matcher.inverse ? t("search.type_is_not") : t("search.type_is")}
+            </TableCell>
+            <TableCell>
+              {SMART_KINDS.find((k) => k.id === matcher.kind)?.label}
+            </TableCell>
+          </TableRow>
+        );
+      case "shows":
+        return (
+          <TableRow>
+            <TableCell>
+              {matcher.inverse ? "Picture doesn't show" : "Picture shows"}
+            </TableCell>
+            <TableCell>{matcher.description}</TableCell>
           </TableRow>
         );
       default: {

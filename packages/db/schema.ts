@@ -18,6 +18,7 @@ import type { ZApiKeyScope } from "@karakeep/shared/types/apiKeys";
 import { API_KEY_FULL_ACCESS_SCOPE } from "@karakeep/shared/types/apiKeys";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import type { ZReaderViewReason } from "@karakeep/shared/types/bookmarks";
+import type { ZSmartListRules } from "@karakeep/shared/types/smartLists";
 
 function createdAtField(colName = "createdAt") {
   return integer(colName, { mode: "timestamp" })
@@ -1239,6 +1240,24 @@ export const discoverItemsTable = sqliteTable(
     index("discoverItems_bookmarkId_idx").on(t.bookmarkId),
   ],
 );
+
+// Fork: how a smart list was put together in its rule editor — groups of
+// rules, as the dialog shows them (packages/shared/smartListRules.ts). The
+// list's query stays what it matches by; these are only used while they
+// still print as it (a query changed through the API is read back instead).
+export const smartListRulesTable = sqliteTable("smartListRules", {
+  listId: text("listId")
+    .notNull()
+    .primaryKey()
+    .references(() => bookmarkLists.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  rules: text("rules", { mode: "json" }).notNull().$type<ZSmartListRules>(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
 
 export const backupsTable = sqliteTable(
   "backups",

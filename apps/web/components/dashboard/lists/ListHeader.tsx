@@ -1,25 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { isEmojiIcon } from "@/lib/emoji";
 import { useTranslation } from "@/lib/i18n/client";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { MoreHorizontal, Sparkles } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
-import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
 import NewBookmarkDialog from "../bookmarks/NewBookmarkDialog";
-import QueryExplainerTooltip from "../search/QueryExplainerTooltip";
 import { ListOptions } from "./ListOptions";
 import {
   ListCollaboratorsIcons,
   ListPrivacyLabel,
 } from "./ListHeaderComponents";
 import { ListSubscriptionNote } from "./ListSubscriptionNote";
+import { SmartListNote } from "./smart/SmartListNote";
 
 export default function ListHeader({
   initialData,
@@ -46,13 +44,6 @@ export default function ListHeader({
     }),
   );
   const itemCount = statsData?.stats.get(list.id);
-
-  const parsedQuery = useMemo(() => {
-    if (!list.query) {
-      return null;
-    }
-    return parseSearchQuery(list.query);
-  }, [list.query]);
 
   if (error) {
     // This is usually exercised during list deletions.
@@ -85,21 +76,11 @@ export default function ListHeader({
             )}
             <ListPrivacyLabel list={list} />
             <ListSubscriptionNote list={list} />
-            {parsedQuery && (
+            {/* Fork: its rules in words; its owner changes them from here. */}
+            {list.type === "smart" && list.query && (
               <>
                 <span aria-hidden>·</span>
-                <QueryExplainerTooltip
-                  parsedSearchQuery={parsedQuery}
-                  trigger={
-                    <button
-                      type="button"
-                      className="inline-flex cursor-help items-center gap-1 transition-colors hover:text-foreground"
-                    >
-                      <Sparkles className="size-3.5" />
-                      {t("lists.smart_list")}
-                    </button>
-                  }
-                />
+                <SmartListNote list={list} />
               </>
             )}
             <ListCollaboratorsIcons list={list} />

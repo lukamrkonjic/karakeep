@@ -28,8 +28,9 @@ import { cn } from "@/lib/utils";
 
 import { useSearchHistory } from "@karakeep/shared-react/hooks/search-history";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
+import { smartRulesFromQuery } from "@karakeep/shared/smartListRules";
 
-import { EditListModal } from "../lists/EditListModal";
+import { SmartListDialog } from "../lists/smart/SmartListDialog";
 import QueryExplainerTooltip from "./QueryExplainerTooltip";
 import { useSearchAutocomplete } from "./useSearchAutocomplete";
 
@@ -178,13 +179,11 @@ const SearchInput = React.forwardRef<
 
   return (
     <div className={cn("relative min-w-0 flex-1", className)}>
-      <EditListModal
+      {/* Fork: saved as a smart list made of rules (the query's). */}
+      <SmartListDialog
         open={newNestedListModalOpen}
         setOpen={setNewNestedListModalOpen}
-        prefill={{
-          type: "smart",
-          query: value,
-        }}
+        rules={canSaveSearch ? smartRulesFromQuery(value) : undefined}
       />
       <div className="absolute inset-y-0 right-1.5 z-50 flex items-center gap-1">
         {canSaveSearch ? (

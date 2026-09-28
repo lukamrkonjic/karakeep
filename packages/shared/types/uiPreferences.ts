@@ -33,6 +33,8 @@ export const zUiPreferencesSchema = z.object({
   sidebarCollapsed: z.boolean().optional(),
   // The sidebar's lists that are unfolded (Collapse all / Expand all).
   sidebarOpenLists: z.array(z.string()).max(5000).optional(),
+  // The sidebar's Smart lists section is folded away.
+  smartListsFolded: z.boolean().optional(),
   // Feed videos: play on hover, and whether with sound.
   hoverVideoAutoplay: z.boolean().optional(),
   hoverVideoSound: z.boolean().optional(),

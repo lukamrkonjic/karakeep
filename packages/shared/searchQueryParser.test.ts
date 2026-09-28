@@ -807,4 +807,51 @@ describe("Search Query Parser", () => {
       });
     }
   });
+
+  // Fork: smart list rules.
+  test("is:picture, is:video, is:pdf, is:note", () => {
+    for (const kind of ["picture", "video", "pdf", "note"]) {
+      expect(parseSearchQuery(`is:${kind}`)).toEqual({
+        result: "full",
+        text: "",
+        matcher: { type: "kind", kind, inverse: false },
+      });
+    }
+    expect(parseSearchQuery("-is:image").matcher).toEqual({
+      type: "kind",
+      kind: "picture",
+      inverse: true,
+    });
+  });
+
+  test("listid: and shows:", () => {
+    expect(parseSearchQuery("listid:abc123 -listid:def")).toEqual({
+      result: "full",
+      text: "",
+      matcher: {
+        type: "and",
+        matchers: [
+          { type: "listId", listId: "abc123", inverse: false },
+          { type: "listId", listId: "def", inverse: true },
+        ],
+      },
+    });
+    // list: is still the list by name.
+    expect(parseSearchQuery("list:abc").matcher).toEqual({
+      type: "listName",
+      listName: "abc",
+      inverse: false,
+    });
+    expect(parseSearchQuery('shows:"red bag" or -shows:car')).toEqual({
+      result: "full",
+      text: "",
+      matcher: {
+        type: "or",
+        matchers: [
+          { type: "shows", description: "red bag", inverse: false },
+          { type: "shows", description: "car", inverse: true },
+        ],
+      },
+    });
+  });
 });

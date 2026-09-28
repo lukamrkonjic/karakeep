@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import {
   and,
   eq,
@@ -18,6 +19,8 @@ import {
 } from "drizzle-orm";
 
 import {
+  assets,
+  AssetTypes,
   bookmarkAssets,
   bookmarkLinks,
   bookmarkLists,
@@ -29,11 +32,35 @@ import {
   rssFeedsTable,
   tagsOnBookmarks,
 } from "@karakeep/db/schema";
+import logger from "@karakeep/shared/logger";
+import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { Matcher } from "@karakeep/shared/types/search";
 import { colourQueryMatches } from "@karakeep/shared/utils/colours";
 import { toAbsoluteDate } from "@karakeep/shared/utils/relativeDateUtils";
 
 import { AuthedContext } from "..";
+import { picturesShowing } from "./pictureText";
+
+/**
+ * Fork: how long a smart list's "Picture shows" waits for a new
+ * description's fingerprint before answering without it (the next look has
+ * it). The editor's count waits longer (routers/smartLists.ts).
+ */
+const SHOWS_WAIT_MS = 1500;
+
+/** Fork: the user's bookmarks that are these (or, inverse, aren't). */
+async function ownBookmarks(
+  ctx: AuthedContext,
+  ids: Iterable<string>,
+  inverse: boolean,
+): Promise<BookmarkQueryReturnType[]> {
+  const matching = new Set(ids);
+  const own = await ctx.db
+    .select({ id: bookmarks.id })
+    .from(bookmarks)
+    .where(eq(bookmarks.userId, ctx.user.id));
+  return own.filter((row) => matching.has(row.id) !== inverse);
+}
 
 interface BookmarkQueryReturnType {
   id: string;
@@ -298,11 +325,14 @@ async function getIds(
     }
     case "title": {
       const comp = matcher.inverse ? notLike : like;
+      // Fork: an untitled picture or file is called by its file name.
+      const untitled = or(isNull(bookmarks.title), eq(bookmarks.title, ""));
       if (matcher.inverse) {
         return db
           .select({ id: bookmarks.id })
           .from(bookmarks)
           .leftJoin(bookmarkLinks, eq(bookmarks.id, bookmarkLinks.id))
+          .leftJoin(bookmarkAssets, eq(bookmarks.id, bookmarkAssets.id))
           .where(
             and(
               eq(bookmarks.userId, userId),
@@ -313,6 +343,11 @@ async function getIds(
               or(
                 isNull(bookmarkLinks.title),
                 comp(bookmarkLinks.title, `%${matcher.title}%`),
+              ),
+              or(
+                isNull(bookmarkAssets.fileName),
+                comp(bookmarkAssets.fileName, `%${matcher.title}%`),
+                and(isNotNull(bookmarks.title), ne(bookmarks.title, "")),
               ),
             ),
           );
@@ -336,6 +371,19 @@ async function getIds(
               and(
                 eq(bookmarks.userId, userId),
                 comp(bookmarkLinks.title, `%${matcher.title}%`),
+              ),
+            ),
+        )
+        .union(
+          db
+            .select({ id: bookmarkAssets.id })
+            .from(bookmarkAssets)
+            .innerJoin(bookmarks, eq(bookmarks.id, bookmarkAssets.id))
+            .where(
+              and(
+                eq(bookmarks.userId, userId),
+                untitled,
+                comp(bookmarkAssets.fileName, `%${matcher.title}%`),
               ),
             ),
         );
@@ -462,6 +510,90 @@ async function getIds(
           .from(bookmarks)
           .where(eq(bookmarks.userId, userId))
       ).filter((row) => !matching.has(row.id));
+    }
+    // Fork: a list and every list under it, by id (smart list rules).
+    case "listId": {
+      const { List } = await import("../models/lists");
+      let ids: string[] = [];
+      try {
+        const list = await List.fromId(ctx, matcher.listId);
+        const lists = [list, ...(await list.getChildren())];
+        ids = (
+          await Promise.all(lists.map((l) => l.getBookmarkIds(visitedListIds)))
+        ).flat();
+      } catch (e) {
+        // A list that's gone (or was never yours) holds nothing.
+        if (!(e instanceof TRPCError && e.code === "NOT_FOUND")) {
+          throw e;
+        }
+      }
+      return ownBookmarks(ctx, ids, matcher.inverse);
+    }
+    // Fork: what it is, finer than link/text/media. A video is a video
+    // bookmark or a note carrying one (how imported videos arrive), and such
+    // a note is a video, not a note.
+    case "kind": {
+      const carriesVideo = exists(
+        db
+          .select({ id: assets.id })
+          .from(assets)
+          .where(
+            and(
+              eq(assets.bookmarkId, bookmarks.id),
+              eq(assets.assetType, AssetTypes.LINK_VIDEO),
+            ),
+          ),
+      );
+      const note = eq(bookmarks.type, BookmarkTypes.TEXT);
+      const condition = {
+        picture: eq(bookmarkAssets.assetType, "image"),
+        pdf: eq(bookmarkAssets.assetType, "pdf"),
+        video: or(
+          eq(bookmarkAssets.assetType, "video"),
+          and(note, carriesVideo),
+        ),
+        note: and(
+          note,
+          notExists(
+            db
+              .select({ id: assets.id })
+              .from(assets)
+              .where(
+                and(
+                  eq(assets.bookmarkId, bookmarks.id),
+                  eq(assets.assetType, AssetTypes.LINK_VIDEO),
+                ),
+              ),
+          ),
+        ),
+      }[matcher.kind];
+      const matching = await db
+        .select({ id: bookmarks.id })
+        .from(bookmarks)
+        .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
+        .where(and(eq(bookmarks.userId, userId), condition));
+      return matcher.inverse
+        ? ownBookmarks(
+            ctx,
+            matching.map((row) => row.id),
+            true,
+          )
+        : matching;
+    }
+    // Fork: pictures that show what the words describe (the picture model).
+    // While a new description's fingerprint is being made, nothing does.
+    case "shows": {
+      let showing: string[] | null = null;
+      try {
+        showing = await picturesShowing(
+          ctx,
+          matcher.description,
+          SHOWS_WAIT_MS,
+        );
+      } catch (e) {
+        logger.warn(`[search] "Picture shows" couldn't be answered: ${e}`);
+      }
+      return ownBookmarks(ctx, showing ?? [], matcher.inverse);
     }
     case "and": {
       const vals = await Promise.all(

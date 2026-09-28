@@ -29,13 +29,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n/client";
 import data from "@emoji-mart/data";
@@ -339,37 +332,8 @@ export function EditListModal({
                 );
               }}
             />
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => {
-                return (
-                  <FormItem className="grow pb-4">
-                    <FormLabel>{t("lists.list_type")}</FormLabel>
-                    <FormControl>
-                      <Select
-                        disabled={isEdit}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="manual">
-                            {t("lists.manual_list")}
-                          </SelectItem>
-                          <SelectItem value="smart">
-                            {t("lists.smart_list")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
+            {/* Fork: no list type to choose — smart lists have a section and
+                a dialog of their own (lists/smart/SmartListDialog.tsx). */}
             {listType === "smart" && (
               <FormField
                 control={form.control}

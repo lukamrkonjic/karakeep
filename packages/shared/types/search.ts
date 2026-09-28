@@ -102,6 +102,33 @@ const zColorMatcher = z.object({
   inverse: z.boolean(),
 });
 
+// Fork: in a list or anywhere under it, by its id — a smart list's rule
+// (`listid:`) survives the list being renamed, and a name can repeat.
+const zListIdMatcher = z.object({
+  type: z.literal("listId"),
+  listId: z.string(),
+  inverse: z.boolean(),
+});
+
+// Fork: what a bookmark is, finer than `type` (`is:picture`, `is:video`,
+// `is:pdf`, `is:note`): a video is a video bookmark or a note carrying one
+// (how imported videos arrive), and such a note isn't a note.
+export const BOOKMARK_KINDS = ["picture", "video", "pdf", "note"] as const;
+export type BookmarkKind = (typeof BOOKMARK_KINDS)[number];
+const zKindMatcher = z.object({
+  type: z.literal("kind"),
+  kind: z.enum(BOOKMARK_KINDS),
+  inverse: z.boolean(),
+});
+
+// Fork: pictures (and videos, by a frame) that show what the words describe
+// (`shows:"red bag"`), by the picture model — as search by description.
+const zShowsMatcher = z.object({
+  type: z.literal("shows"),
+  description: z.string(),
+  inverse: z.boolean(),
+});
+
 const zNonRecursiveMatcher = z.union([
   zTagNameMatcher,
   zListNameMatcher,
@@ -119,6 +146,9 @@ const zNonRecursiveMatcher = z.union([
   zBrokenLinksMatcher,
   zSourceMatcher,
   zColorMatcher,
+  zListIdMatcher,
+  zKindMatcher,
+  zShowsMatcher,
 ]);
 
 type NonRecursiveMatcher = z.infer<typeof zNonRecursiveMatcher>;
@@ -145,6 +175,9 @@ export const zMatcherSchema: z.ZodType<Matcher> = z.lazy(() => {
     zBrokenLinksMatcher,
     zSourceMatcher,
     zColorMatcher,
+    zListIdMatcher,
+    zKindMatcher,
+    zShowsMatcher,
     z.object({
       type: z.literal("and"),
       matchers: z.array(zMatcherSchema),
