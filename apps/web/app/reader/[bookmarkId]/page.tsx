@@ -54,8 +54,13 @@ export default function ReaderViewPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
-        <div className="flex h-14 items-center justify-between px-4">
+      {/* Fork: the Mac app's title bar (apps/desktop), right of its
+          window buttons. */}
+      <header
+        data-tauri-drag-region="deep"
+        className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden"
+      >
+        <div className="flex h-14 items-center justify-between px-4 mac-app:pl-[88px]">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-4 w-4" />

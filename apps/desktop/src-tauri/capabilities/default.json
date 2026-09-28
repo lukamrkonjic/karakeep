@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The app's own page (src/index.html: connecting, or the server's address). The server's pages get theirs in lib.rs, once its address is known.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "allow-startup",
+    "allow-connect",
+    "allow-remember-theme"
+  ]
+}

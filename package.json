@@ -15,6 +15,8 @@
     "seed:snapshot": "pnpm --filter @karakeep/seed-snapshot run snapshot",
     "workers": "pnpm --filter @karakeep/workers run start",
     "web": "pnpm --filter @karakeep/web run dev",
+    "desktop": "pnpm --filter @karakeep/desktop run app:dev",
+    "desktop:build": "pnpm --filter @karakeep/desktop run app:build",
     "web:portless": "pnpm --filter @karakeep/web run dev:portless",
     "android": "pnpm --filter @karakeep/mobile android",
     "ios": "pnpm --filter @karakeep/mobile ios",

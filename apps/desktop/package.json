@@ -1,0 +1,15 @@
+{
+  "name": "@karakeep/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "vrana as a Mac or Windows app: a Tauri window around the web app on your server",
+  "scripts": {
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "app:icons": "tauri icon icons/icon-macos.png --output src-tauri/icons && tauri icon icons/icon-full.png --output src-tauri/icons/full && cp src-tauri/icons/full/icon.ico src-tauri/icons/icon.ico && rm -rf src-tauri/icons/full src-tauri/icons/android src-tauri/icons/ios"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0"
+  }
+}

@@ -59,6 +59,13 @@ export default {
         "touch",
         "@media not all and (hover: hover) and (pointer: fine)",
       );
+      // Fork: `mac-app:` is vrana's Mac app (apps/desktop), whose window
+      // buttons sit in the page's top-left corner — the app marks <html>
+      // with data-shell="macos"; full screen hides them.
+      addVariant(
+        "mac-app",
+        'html[data-shell="macos"]:not([data-fullscreen]) &',
+      );
     }),
   ],
 } satisfies Config;

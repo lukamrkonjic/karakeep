@@ -22,6 +22,7 @@ The project is organized into `apps` and `packages`:
 - **`cli`:** A command-line interface for interacting with the service.
 - **`landing`:** A landing page for the project.
 - **`mobile`:** A mobile application (details unknown).
+- **`desktop`:** vrana as a Mac/Windows app (Tauri): a native window around the web app on the server. See `apps/desktop/README.md`. (The root `desktop/` folder is something else: Electron tools that save through the API.)
 - **`mcp`:** The Model Context Protocol (MCP) server to communicate with Karakeep.
 - **`workers`:** Background workers for processing tasks.
 

@@ -113,6 +113,14 @@ export default async function RootLayout({
             uiPreferences={uiPreferences}
           >
             {children}
+            {/* Fork: in the Mac app (apps/desktop), the top edge of every
+                page moves the window, as a title bar would — above the
+                header's buttons, and on pages without it (sign-in…). */}
+            <div
+              aria-hidden
+              data-tauri-drag-region
+              className="fixed inset-x-0 top-0 z-[60] hidden h-5 mac-app:block"
+            />
             <PwaSupport />
             <ReactQueryDevtools initialIsOpen={false} />
           </Providers>

@@ -1,0 +1,3 @@
+# Rust's build output, and what tauri-build generates.
+/target/
+/gen/schemas

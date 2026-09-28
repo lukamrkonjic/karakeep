@@ -18,7 +18,9 @@ export default function HeaderLogo() {
   return (
     <div
       className={cn(
-        "hidden min-w-max shrink-0 items-center justify-between gap-3 pl-4 transition-[width] duration-200 ease-in-out sm:flex",
+        // In the Mac app, right of the window's buttons (at about 14–76px): the
+        // gap narrower, so it still fits the 240px sidebar.
+        "hidden min-w-max shrink-0 items-center justify-between gap-3 pl-4 transition-[width] duration-200 ease-in-out mac-app:gap-2 mac-app:pl-[88px] sm:flex",
         collapsed ? "w-0" : "w-60 xl:w-72",
       )}
     >
