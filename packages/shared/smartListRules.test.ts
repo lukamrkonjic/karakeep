@@ -109,6 +109,63 @@ describe("Smart list rules", () => {
     ).toEqual("-is:fav -tag:work");
   });
 
+  test("a Lists rule of several lists: in any of them, or in none", () => {
+    const lists = (op: string, value: string): ZSmartRule => ({
+      field: "lists",
+      op,
+      value,
+    });
+    const red: ZSmartRule = { field: "colour", op: "is", value: "red" };
+    const any = (...rules: ZSmartRule[]): ZSmartListRules => ({
+      groups: [{ match: "any", negate: false, rules }],
+    });
+    const q = (rules: ZSmartListRules) => compileSmartRules(rules).query;
+    const cases: [ZSmartListRules, string][] = [
+      [all(lists("contains", "l1,l2")), "listid:l1 or listid:l2"],
+      [all(lists("not_contains", "l1,l2")), "-listid:l1 -listid:l2"],
+      [
+        all(lists("contains", "l1,l2"), red),
+        "(listid:l1 or listid:l2) color:red",
+      ],
+      [
+        all(red, lists("not_contains", "l1,l2,l3")),
+        "color:red -listid:l1 -listid:l2 -listid:l3",
+      ],
+      [
+        any(lists("contains", "l1,l2"), red),
+        "listid:l1 or listid:l2 or color:red",
+      ],
+    ];
+    for (const [rules, query] of cases) {
+      expect(q(rules)).toEqual(query);
+      // The query made elsewhere reads back as the one rule.
+      expect(smartRulesFromQuery(query), query).toEqual(rules);
+    }
+    // "…are false": in none of them.
+    expect(
+      q({
+        groups: [
+          {
+            match: "all",
+            negate: true,
+            rules: [lists("contains", "l1,l2")],
+          },
+        ],
+      }),
+    ).toEqual("-listid:l1 -listid:l2");
+    // Spaces, repeats and gaps don't count; no list at all isn't a rule yet.
+    expect(q(all(lists("contains", " l1 , l1,,l2 ")))).toEqual(
+      "listid:l1 or listid:l2",
+    );
+    expect(compileSmartRules(all(lists("contains", " , "))).incomplete).toEqual(
+      [{ group: 0, rule: 0 }],
+    );
+    // In both lists is two rules still: one rule means any of them.
+    expect(smartRulesFromQuery("listid:l1 listid:l2")).toEqual(
+      all(lists("contains", "l1"), lists("contains", "l2")),
+    );
+  });
+
   test("rules that aren't complete are left out, and said", () => {
     const compiled = compileSmartRules({
       groups: [
@@ -239,5 +296,23 @@ describe("A smart list's suggested name", () => {
       ),
     ).toEqual("Favourites");
     expect(name({ field: "tags", op: "empty" })).toEqual("");
+  });
+
+  test("of several lists, from their names", () => {
+    const names: Record<string, string> = {
+      l1: "Art",
+      l2: "Cars",
+      l3: "Bikes",
+      l4: "Boats",
+    };
+    const name = (value: string) =>
+      suggestSmartListName(all({ field: "lists", op: "contains", value }), {
+        listName: (id) => names[id],
+      });
+    expect(name("l1,l2")).toEqual("Art & Cars");
+    expect(name("l1,l2,l3")).toEqual("Art, Cars & Bikes");
+    expect(name("l1,l2,l3,l4")).toEqual("Art, Cars & 2 more");
+    // A list that's gone isn't named.
+    expect(name("gone,l2")).toEqual("Cars");
   });
 });

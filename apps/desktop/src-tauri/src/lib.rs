@@ -47,27 +47,52 @@ const REACH_TIMEOUT: Duration = Duration::from_secs(4);
 const DARK: Color = Color(0x19, 0x17, 0x15, 0xff);
 const LIGHT: Color = Color(0xfb, 0xfa, 0xf7, 0xff);
 
+/// The theme's --foreground and --border (tooling/tailwind/globals.css): a
+/// Windows title bar's text and the window's edge.
+#[cfg(target_os = "windows")]
+const DARK_TEXT: Color = Color(0xef, 0xec, 0xe6, 0xff);
+#[cfg(target_os = "windows")]
+const DARK_BORDER: Color = Color(0x36, 0x34, 0x30, 0xff);
+#[cfg(target_os = "windows")]
+const LIGHT_TEXT: Color = Color(0x1c, 0x1a, 0x17, 0xff);
+#[cfg(target_os = "windows")]
+const LIGHT_BORDER: Color = Color(0xe7, 0xe4, 0xde, 0xff);
+
 /// In every page: tells the web app it's in the Mac app (it makes room for
 /// the window's buttons), and tells the app vrana's theme as it changes
-/// (next-themes' class on <html>), for the window's own colours.
+/// (next-themes' class on <html>), for the window's own colours. WebView2
+/// runs it before the page has its <html> (WebKit already has one), so it
+/// waits for that first.
 const PAGE_SCRIPT: &str = r#"
 (() => {
-  if (__VRANA_MAC__) document.documentElement.dataset.shell = "macos";
   const ipc = window.__TAURI_INTERNALS__;
-  if (!ipc) return;
   let last = null;
   const report = () => {
     const c = document.documentElement.classList;
     const theme = c.contains("dark") ? "dark" : c.contains("light") ? "light" : null;
-    if (theme && theme !== last) {
+    if (ipc && theme && theme !== last) {
       last = theme;
       ipc.invoke("remember_theme", { theme }).catch(() => {});
     }
   };
-  new MutationObserver(report).observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["class"],
-  });
+  const watch = (html) => {
+    if (__VRANA_MAC__) html.dataset.shell = "macos";
+    new MutationObserver(report).observe(html, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    report();
+  };
+  if (document.documentElement) {
+    watch(document.documentElement);
+  } else {
+    new MutationObserver((_, waiting) => {
+      if (document.documentElement) {
+        waiting.disconnect();
+        watch(document.documentElement);
+      }
+    }).observe(document, { childList: true });
+  }
   addEventListener("DOMContentLoaded", report);
 })();
 "#;
@@ -273,6 +298,8 @@ fn remember_theme(app: AppHandle, theme: String) {
         let _ = window.set_background_color(Some(color));
         #[cfg(target_os = "macos")]
         place_window_buttons(&window);
+        #[cfg(target_os = "windows")]
+        paint_title_bar(window.hwnd(), theme == Theme::Dark);
     }
     let state = app.state::<AppState>();
     let mut settings = state.settings.lock().unwrap();
@@ -334,6 +361,62 @@ fn place_window_buttons(window: &WebviewWindow) {
             button.setFrameOrigin(origin);
         }
     });
+}
+
+/// Windows 11 paints the title bar in vrana's colours — its background, the
+/// theme's text, the window's edge in the theme's border — and without the
+/// icon and title (the header right under it has both), so the bar reads as
+/// the top of the page. Older Windows keeps its own dark or light bar.
+#[cfg(target_os = "windows")]
+fn paint_title_bar(hwnd: tauri::Result<windows::Win32::Foundation::HWND>, dark: bool) {
+    use windows::Win32::{
+        Foundation::COLORREF,
+        Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR,
+        },
+        UI::Controls::{
+            SetWindowThemeAttribute, WTA_NONCLIENT, WTA_OPTIONS, WTNCA_NODRAWCAPTION,
+            WTNCA_NODRAWICON,
+        },
+    };
+    let Ok(hwnd) = hwnd else {
+        return;
+    };
+    let (caption, text, border) = if dark {
+        (DARK, DARK_TEXT, DARK_BORDER)
+    } else {
+        (LIGHT, LIGHT_TEXT, LIGHT_BORDER)
+    };
+    for (attribute, Color(r, g, b, _)) in [
+        (DWMWA_CAPTION_COLOR, caption),
+        (DWMWA_TEXT_COLOR, text),
+        (DWMWA_BORDER_COLOR, border),
+    ] {
+        let colour = COLORREF(u32::from(r) | u32::from(g) << 8 | u32::from(b) << 16);
+        // SAFETY: the window's own handle, and a COLORREF as DWM reads it.
+        let _ = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                attribute,
+                (&raw const colour).cast(),
+                size_of::<COLORREF>() as u32,
+            )
+        };
+    }
+    let hidden = WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON;
+    let options = WTA_OPTIONS {
+        dwFlags: hidden,
+        dwMask: hidden,
+    };
+    // SAFETY: as above, with the options uxtheme reads.
+    let _ = unsafe {
+        SetWindowThemeAttribute(
+            hwnd,
+            WTA_NONCLIENT,
+            (&raw const options).cast(),
+            size_of::<WTA_OPTIONS>() as u32,
+        )
+    };
 }
 
 /// A two-finger swipe goes back and forward, as in Safari.
@@ -558,14 +641,29 @@ fn build_window(app: &AppHandle, theme: Option<&str>) -> tauri::Result<WebviewWi
             .traffic_light_position(tauri::LogicalPosition::new(BUTTONS_AT.0, BUTTONS_AT.1));
     }
 
-    builder.build()
+    let window = builder.build()?;
+    // Before it shows: vrana's last theme, else the system's.
+    #[cfg(target_os = "windows")]
+    paint_title_bar(
+        window.hwnd(),
+        match theme {
+            Some(theme) => theme == "dark",
+            None => window.theme().is_ok_and(|t| t == Theme::Dark),
+        },
+    );
+    Ok(window)
 }
 
 /// A Mac app stays open without windows: closing hides it, and the Dock icon
 /// (or opening it again) brings it back as it was — and the window's buttons
 /// go back in the header after anything that may have moved them. Windows
-/// keeps its own ways: closing quits.
+/// keeps its own ways: closing quits; the title bar is painted again when
+/// the theme changes under it.
 fn on_window_event(window: &Window, event: &WindowEvent) {
+    #[cfg(target_os = "windows")]
+    if let WindowEvent::ThemeChanged(theme) = event {
+        paint_title_bar(window.hwnd(), *theme == Theme::Dark);
+    }
     #[cfg(target_os = "macos")]
     match event {
         WindowEvent::CloseRequested { api, .. } => {

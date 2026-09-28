@@ -15,8 +15,11 @@ export const zSmartRuleSchema = z.object({
   field: z.string().min(1).max(40),
   /** One of the field's operators: "contains", "is"… */
   op: z.string().min(1).max(40),
-  /** What the operator takes, when it takes something (always a string). */
-  value: z.string().max(1000).optional(),
+  /**
+   * What the operator takes, when it takes something (always a string; a
+   * Lists rule's lists are their ids, comma-separated — room for 200).
+   */
+  value: z.string().max(5000).optional(),
 });
 export type ZSmartRule = z.infer<typeof zSmartRuleSchema>;
 

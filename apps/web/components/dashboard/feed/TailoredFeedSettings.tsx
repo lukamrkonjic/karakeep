@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CollapsibleTriggerChevron } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -12,27 +11,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { isEmojiIcon } from "@/lib/emoji";
 import {
   useSetTailoredFeedExcluded,
   useTailoredFeedExcluded,
 } from "@/lib/tailoredFeed";
-import { cn } from "@/lib/utils";
-import { Square, SquareCheck, SquareMinus } from "lucide-react";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 
+import type { Tick } from "../lists/ListTickRow";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
+import { ListTickRow } from "../lists/ListTickRow";
 
 /** The lists a tailored feed can draw from: your own manual lists. */
 export function feedCandidates(lists: ZBookmarkList[]): ZBookmarkList[] {
   return lists.filter((l) => l.type === "manual" && l.userRole === "owner");
 }
-
-type Tick = "on" | "off" | "mixed";
-
-const TICK_ICON = { on: SquareCheck, off: Square, mixed: SquareMinus };
 
 /**
  * The tailored feed's settings: every list as the sidebar's tree, each with a
@@ -128,61 +122,19 @@ export function TailoredFeedSettings({
             filter={(node) =>
               node.item.type === "manual" && node.item.userRole === "owner"
             }
-            render={({ node, level, open: expanded, numBookmarks }) => {
-              if (node.item.type !== "manual") {
-                return null;
-              }
-              const tick = tickOf(node.item.id);
-              const Icon = TICK_ICON[tick];
-              return (
-                <div
-                  className="flex items-center gap-2 rounded-md py-1 pr-2 hover:bg-muted"
-                  style={{ paddingLeft: `${level * 1.25}rem` }}
-                >
-                  {node.children.length > 0 ? (
-                    <CollapsibleTriggerChevron
-                      open={expanded}
-                      className="size-4 shrink-0 cursor-pointer text-muted-foreground"
-                    />
-                  ) : (
-                    <span className="size-4 shrink-0" />
-                  )}
-                  <button
-                    type="button"
-                    aria-pressed={
-                      tick === "on" ? true : tick === "mixed" ? "mixed" : false
-                    }
-                    onClick={() => toggle(node.item.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
-                  >
-                    <Icon
-                      className={cn(
-                        "size-4 shrink-0",
-                        tick === "off"
-                          ? "text-muted-foreground"
-                          : "text-foreground",
-                      )}
-                    />
-                    {isEmojiIcon(node.item.icon) && (
-                      <span>{node.item.icon}</span>
-                    )}
-                    <span
-                      className={cn(
-                        "truncate",
-                        tick === "off" && "text-muted-foreground",
-                      )}
-                    >
-                      {node.item.name}
-                    </span>
-                  </button>
-                  {numBookmarks !== undefined && (
-                    <span className="text-xs text-muted-foreground">
-                      {numBookmarks}
-                    </span>
-                  )}
-                </div>
-              );
-            }}
+            render={({ node, level, open: expanded, numBookmarks }) =>
+              node.item.type === "manual" ? (
+                <ListTickRow
+                  list={node.item}
+                  level={level}
+                  tick={tickOf(node.item.id)}
+                  onToggle={() => toggle(node.item.id)}
+                  folder={node.children.length > 0}
+                  open={expanded}
+                  numBookmarks={numBookmarks}
+                />
+              ) : null
+            }
           />
         </div>
         <DialogFooter>

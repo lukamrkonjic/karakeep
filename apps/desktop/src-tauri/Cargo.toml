@@ -1,6 +1,6 @@
 [package]
 name = "vrana"
-version = "0.1.0"
+version = "0.1.1"
 description = "vrana as a Mac or Windows app: a Tauri window around the web app"
 edition = "2021"
 publish = false
@@ -29,6 +29,10 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 # A second launch on Windows focuses the open window (a Mac does that itself).
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2.5"
+
+# The title bar in vrana's colours (the version Tauri's window uses).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Controls"] }
 
 [profile.release]
 codegen-units = 1

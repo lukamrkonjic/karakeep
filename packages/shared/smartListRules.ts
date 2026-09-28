@@ -38,7 +38,7 @@ export type SmartValueKind =
   | "text"
   /** A tag's name. */
   | "tag"
-  /** A list's id. */
+  /** Lists' ids, comma-separated (smartListIds): one list, or several. */
   | "list"
   /** A colour family ("red") or a colour ("#286ff0"). */
   | "colour"
@@ -120,6 +120,35 @@ const words = (value: string) => {
   return trimmed || null;
 };
 
+/** A "list" value's lists: "id1,id2" → ["id1", "id2"]. */
+export function smartListIds(value: string | undefined): string[] {
+  const ids = (value ?? "").split(",").map((id) => id.trim());
+  return [...new Set(ids.filter(Boolean))];
+}
+
+/** Lists as a "list" value. */
+export const smartListValue = (ids: string[]) => ids.join(",");
+
+/**
+ * The lists a matcher is about, when it's what a Lists rule makes: a list,
+ * "in any of these" (an or) or "in none of these" (an and of -listid:).
+ */
+function listIdsOf(m: Matcher): { ids: string[]; inverse: boolean } | null {
+  if (m.type === "listId") {
+    return { ids: [m.listId], inverse: m.inverse };
+  }
+  if (m.type === "and" || m.type === "or") {
+    const inverse = m.type === "and";
+    const ids = m.matchers.flatMap((c) =>
+      c.type === "listId" && c.inverse === inverse ? [c.listId] : [],
+    );
+    if (ids.length > 0 && ids.length === m.matchers.length) {
+      return { ids, inverse };
+    }
+  }
+  return null;
+}
+
 /** contains / doesn't contain, for fields that search words. */
 const CONTAINS: SmartOperator[] = [
   { id: "contains", label: "contains", value: "text" },
@@ -193,6 +222,7 @@ export const SMART_FIELDS: SmartField[] = [
   },
   {
     // A list and everything under it, as its row in the sidebar counts it.
+    // Several lists: in any of them ("contains"), in none ("doesn't").
     id: "lists",
     label: "Lists",
     operators: [
@@ -205,17 +235,30 @@ export const SMART_FIELDS: SmartField[] = [
       if (op === "empty" || op === "not_empty") {
         return { type: "inlist", inList: op === "not_empty" };
       }
-      const listId = value.trim();
-      return /^[\w-]+$/.test(listId)
-        ? { type: "listId", listId, inverse: op === "not_contains" }
-        : null;
+      const ids = smartListIds(value);
+      if (ids.length === 0 || !ids.every((id) => /^[\w-]+$/.test(id))) {
+        return null;
+      }
+      const inverse = op === "not_contains";
+      const matchers: Matcher[] = ids.map((listId) => ({
+        type: "listId",
+        listId,
+        inverse,
+      }));
+      return matchers.length === 1
+        ? matchers[0]
+        : { type: inverse ? "and" : "or", matchers };
     },
     fromMatcher: (m) => {
       if (m.type === "inlist") {
         return { op: m.inList ? "not_empty" : "empty" };
       }
-      return m.type === "listId"
-        ? { op: m.inverse ? "not_contains" : "contains", value: m.listId }
+      const lists = listIdsOf(m);
+      return lists
+        ? {
+            op: lists.inverse ? "not_contains" : "contains",
+            value: smartListValue(lists.ids),
+          }
         : null;
     },
   },
@@ -480,6 +523,33 @@ function ruleOf(matcher: Matcher): ZSmartRule {
 
 const isLeaf = (m: Matcher) => m.type !== "and" && m.type !== "or";
 
+/** A field reads this and / or as one rule of its own (a Lists rule's). */
+const isOneRule = (m: Matcher) =>
+  SMART_FIELDS.some((field) => field.fromMatcher(m) !== null);
+
+/**
+ * An and's / or's parts, its lists taken together as one Lists rule makes
+ * them: "in none of these" in an and, "in any of these" in an or — where the
+ * first of them was.
+ */
+function withListsTogether(
+  matcher: Extract<Matcher, { type: "and" | "or" }>,
+): Matcher[] {
+  const inverse = matcher.type === "and";
+  const lists = matcher.matchers.filter(
+    (m) => m.type === "listId" && m.inverse === inverse,
+  );
+  if (lists.length < 2) {
+    return matcher.matchers;
+  }
+  return matcher.matchers.flatMap((m) => {
+    if (!lists.includes(m)) {
+      return [m];
+    }
+    return m === lists[0] ? [{ type: matcher.type, matchers: lists }] : [];
+  });
+}
+
 /**
  * A smart list's query as rules, for one that wasn't made in the rule editor
  * (or was changed since, through the API): the plain conditions together in
@@ -500,10 +570,19 @@ export function smartRulesFromQuery(query: string): ZSmartListRules {
     };
   }
   const matcher = parsed.matcher;
+  if (isLeaf(matcher) || isOneRule(matcher)) {
+    return {
+      groups: [{ match: "all", negate: false, rules: [ruleOf(matcher)] }],
+    };
+  }
   if (matcher.type === "or") {
     return {
       groups: [
-        { match: "any", negate: false, rules: matcher.matchers.map(ruleOf) },
+        {
+          match: "any",
+          negate: false,
+          rules: withListsTogether(matcher).map(ruleOf),
+        },
       ],
     };
   }
@@ -514,12 +593,16 @@ export function smartRulesFromQuery(query: string): ZSmartListRules {
   }
   const all: ZSmartRule[] = [];
   const anyGroups: ZSmartRuleGroup[] = [];
-  for (const child of matcher.matchers) {
-    if (child.type === "or" && child.matchers.every(isLeaf)) {
+  for (const child of withListsTogether(matcher)) {
+    if (
+      child.type === "or" &&
+      child.matchers.every(isLeaf) &&
+      !isOneRule(child)
+    ) {
       anyGroups.push({
         match: "any",
         negate: false,
-        rules: child.matchers.map(ruleOf),
+        rules: withListsTogether(child).map(ruleOf),
       });
     } else {
       all.push(ruleOf(child));
@@ -551,6 +634,17 @@ export function smartRulesFor(
 
 const nameOf = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** "Art", "Art & Cars", "Art, Cars & Bikes", "Art, Cars & 3 more". */
+function listNames(names: string[]): string {
+  if (names.length <= 1) {
+    return names[0] ?? "";
+  }
+  if (names.length <= 3) {
+    return `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+  }
+  return `${names.slice(0, 2).join(", ")} & ${names.length - 2} more`;
+}
+
 /** A rule's value in words: "Red", "7 days", “bag”… */
 export function describeSmartValue(
   kind: SmartValueKind,
@@ -559,7 +653,11 @@ export function describeSmartValue(
 ): string {
   switch (kind) {
     case "list":
-      return lookup?.listName?.(value) ?? "a list that's gone";
+      return listNames(
+        smartListIds(value).map(
+          (id) => lookup?.listName?.(id) ?? "a list that's gone",
+        ),
+      );
     case "colour":
       return isColourFamily(value) ? nameOf(value) : value;
     case "kind":
@@ -618,7 +716,12 @@ export function suggestSmartListName(
         case "url:contains":
           return nameOf(value);
         case "lists:contains":
-          return lookup?.listName?.(value) ?? "";
+          return listNames(
+            smartListIds(value).flatMap((id) => {
+              const name = lookup?.listName?.(id);
+              return name ? [name] : [];
+            }),
+          );
         case "type:is":
           return PLURALS[value] ?? "";
         case "favourite:is":

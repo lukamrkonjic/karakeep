@@ -1,6 +1,6 @@
 {
   "name": "@karakeep/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "vrana as a Mac or Windows app: a Tauri window around the web app on your server",
   "scripts": {

@@ -41,7 +41,7 @@ import {
   parseColourQuery,
 } from "@karakeep/shared/utils/colours";
 
-import { BookmarkListSelector } from "../BookmarkListSelector";
+import { SmartListPicker } from "./SmartListPicker";
 
 /**
  * Fork: a smart list rule's value — one input per kind of value
@@ -300,7 +300,7 @@ export function SmartRuleValue({
   kind: SmartValueKind;
   value: string;
   onChange: (value: string) => void;
-  /** The smart list being edited: not offered in "Lists contains". */
+  /** The smart list being edited: not offered in a Lists rule. */
   excludeListId?: string;
 }) {
   const placeholder = smartField(field)?.placeholder;
@@ -340,11 +340,10 @@ export function SmartRuleValue({
       return <TagName value={value} onChange={onChange} />;
     case "list":
       return (
-        <BookmarkListSelector
-          value={value || null}
+        <SmartListPicker
+          value={value}
           onChange={onChange}
-          placeholder="Choose a list"
-          hideSubtreeOf={excludeListId}
+          excludeListId={excludeListId}
           className={TRIGGER}
         />
       );

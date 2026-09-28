@@ -22,7 +22,9 @@ Mac, Edge's WebView2 on Windows.
   Explorer.
 - **Files dropped on the window** go to vrana's upload, as in the browser.
 - **Theme:** the window opens in the theme vrana was last in (no white
-  flash); on Windows the title bar follows it too.
+  flash). On Windows 11 the title bar is vrana's own background, with no
+  icon or title in it (the header has both), so it reads as the top of the
+  page; it follows the theme.
 - **The window remembers** its size and place.
 - **Keys:** back / forward ⌘[ ⌘] or a two-finger swipe (Mac), Alt+← →
   (Windows); reload ⌘R / Ctrl+R; zoom ⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0.
