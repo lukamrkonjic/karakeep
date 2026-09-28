@@ -14,7 +14,8 @@ export default async function Header() {
 
   return (
     <header className="sticky left-0 right-0 top-0 z-50 flex h-14 w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden bg-background pl-4 pr-2 sm:h-20 sm:pr-5">
-      <div className="hidden w-56 shrink-0 items-center sm:flex xl:w-[17rem]">
+      {/* As wide as the sidebar below it (pl-4 + w-56 = its w-60). */}
+      <div className="hidden w-56 shrink-0 items-center justify-between sm:flex xl:w-[17rem]">
         <Link
           href="/dashboard/bookmarks"
           aria-label="Home"
@@ -22,7 +23,14 @@ export default async function Header() {
         >
           <KarakeepLogo height={38} />
         </Link>
-        <SidebarCollapseToggle />
+        {/* Fork: at the block's right end, in line with the sidebar's New
+            list +, which sits inside the aside's p-4, the lists' heading's
+            scrollbar gutter (6px where the browser reserves one, none where
+            its scrollbars float) and the buttons' mr-1 — the same three
+            here, so the two line up in any browser (AllLists.tsx). */}
+        <div className="sidebar-scrollbar mr-4 overflow-hidden [scrollbar-gutter:stable]">
+          <SidebarCollapseToggle className="mr-1 block" />
+        </div>
       </div>
       {/* Its sm:pl-5 matches the page content's own left inset
           (SidebarLayout's p-5), so the search bar lines up with the grid. */}
