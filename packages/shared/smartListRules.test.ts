@@ -4,6 +4,7 @@ import type { ZSmartListRules, ZSmartRule } from "./types/smartLists";
 import { parseSearchQuery } from "./searchQueryParser";
 import {
   compileSmartRules,
+  describeSmartValue,
   newSmartRule,
   SMART_FIELDS,
   smartRuleMatcher,
@@ -51,6 +52,32 @@ describe("Smart list rules", () => {
         expect(back, query!).toEqual(rule);
       }
     }
+  });
+
+  test("a colour rule: how much of the picture it takes up", () => {
+    const mostly: ZSmartRule = { field: "colour", op: "is", value: "red>=40%" };
+    expect(compileSmartRules(all(mostly)).query).toEqual("color:red>=40%");
+    for (const value of ["red>=40%", "blue<=20%", "#286ff0>=10%<=60%"]) {
+      const { query } = compileSmartRules(
+        all({ field: "colour", op: "is_not", value }),
+      );
+      expect(smartRulesFromQuery(query!).groups[0].rules[0]).toEqual({
+        field: "colour",
+        op: "is_not",
+        value,
+      });
+    }
+    expect(describeSmartValue("colour", "red")).toEqual("Red");
+    expect(describeSmartValue("colour", "red>=40%")).toEqual(
+      "Red, at least 40%",
+    );
+    expect(describeSmartValue("colour", "blue<=20%")).toEqual(
+      "Blue, at most 20%",
+    );
+    expect(describeSmartValue("colour", "#286ff0>=10%<=60%")).toEqual(
+      "#286ff0, 10–60%",
+    );
+    expect(suggestSmartListName(all(mostly))).toEqual("Red");
   });
 
   test("what the groups mean", () => {

@@ -498,7 +498,10 @@ async function getIds(
             .from(picturePalettesTable)
             .where(eq(picturePalettesTable.userId, userId))
         )
-          .filter((row) => colourQueryMatches(row.colours ?? [], matcher.color))
+          // Fork: as much of the picture as asked (color:red>=40%).
+          .filter((row) =>
+            colourQueryMatches(row.colours ?? [], matcher.color, matcher),
+          )
           .map((row) => row.id),
       );
       if (!matcher.inverse) {

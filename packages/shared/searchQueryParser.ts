@@ -18,7 +18,7 @@ import { z } from "zod";
 
 import { BookmarkTypes, zBookmarkSourceSchema } from "./types/bookmarks";
 import { BookmarkKind, Matcher } from "./types/search";
-import { parseColourQuery } from "./utils/colours";
+import { parseColourQuery, parseColourRange } from "./utils/colours";
 import { parseRelativeDate } from "./utils/relativeDateUtils";
 
 enum TokenType {
@@ -345,10 +345,11 @@ MATCHER.setPattern(
           case "colour:":
           case "color:#":
           case "colour:#": {
-            const color = parseColourQuery(
+            // And how much of the picture: color:red>=40%<=80%.
+            const range = parseColourRange(
               (qualifier.text.endsWith("#") ? "#" : "") + ident,
             );
-            if (!color) {
+            if (!range) {
               return {
                 text: (minus?.text ?? "") + qualifier.text + ident,
                 matcher: undefined,
@@ -356,7 +357,13 @@ MATCHER.setPattern(
             }
             return {
               text: "",
-              matcher: { type: "color", color, inverse: !!minus },
+              matcher: {
+                type: "color",
+                color: range.colour,
+                inverse: !!minus,
+                ...(range.min === undefined ? {} : { min: range.min }),
+                ...(range.max === undefined ? {} : { max: range.max }),
+              },
             };
           }
           case "age:":

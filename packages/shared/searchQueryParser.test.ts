@@ -766,6 +766,26 @@ describe("Search Query Parser", () => {
         ],
       },
     });
+    // How much of the picture: at least, at most, between.
+    expect(parseSearchQuery("color:red>=40%")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "color", color: "red", inverse: false, min: 40 },
+    });
+    expect(parseSearchQuery("-color:#286FF0<=20%")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "color", color: "#286ff0", inverse: true, max: 20 },
+    });
+    expect(parseSearchQuery("color:navy>40<80").matcher).toEqual({
+      type: "color",
+      color: "blue",
+      inverse: false,
+      min: 40,
+      max: 80,
+    });
+    // A share that isn't one: words.
+    expect(parseSearchQuery("color:red>=lots").matcher).toBeUndefined();
     // Not a colour: just words.
     expect(parseSearchQuery("color:sofa")).toEqual({
       result: "full",

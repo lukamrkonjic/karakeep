@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { Check, ChevronsUpDown } from "lucide-react";
 
@@ -36,9 +37,11 @@ import {
 } from "@karakeep/shared/smartListRules";
 import {
   COLOUR_FAMILIES,
+  colourMinimum,
   FAMILY_SWATCHES,
+  formatColourRange,
   isColourFamily,
-  parseColourQuery,
+  parseColourRange,
 } from "@karakeep/shared/utils/colours";
 
 import { SmartListPicker } from "./SmartListPicker";
@@ -156,7 +159,57 @@ function Swatch({ colour, className }: { colour: string; className?: string }) {
   );
 }
 
-/** A colour family (the colour page's chips) or a colour of your own. */
+/**
+ * How much of the picture the colour takes up: from the least that counts
+ * as having it (its family's minimum, colourMinimum) to all of it, unless
+ * narrowed — 40% and up for a picture that's mostly red. What's left at
+ * that default stays out of the query (color:red, not color:red>=12%).
+ */
+function ColourShare({
+  colour,
+  min,
+  max,
+  onChange,
+}: {
+  colour: string;
+  min?: number;
+  max?: number;
+  onChange: (min?: number, max?: number) => void;
+}) {
+  const least = Math.round(colourMinimum(colour) * 100);
+  const low = min ?? least;
+  const high = max ?? 100;
+  return (
+    <div
+      className="flex items-center gap-3 pl-1"
+      title="How much of the picture is this colour"
+    >
+      <Slider
+        value={[low, high]}
+        min={0}
+        max={100}
+        step={1}
+        minStepsBetweenThumbs={1}
+        thumbLabels={["At least", "At most"]}
+        onValueChange={([from, to]) =>
+          onChange(
+            from === least ? undefined : from,
+            to >= 100 ? undefined : to,
+          )
+        }
+        className="flex-1"
+      />
+      <span className="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        {low}–{high}%
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A colour family (the colour page's chips) or a colour of your own, and
+ * how much of the picture it's to take up (ColourShare).
+ */
 function Colour({
   value,
   onChange,
@@ -165,65 +218,83 @@ function Colour({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const colour = parseColourQuery(value);
+  const range = parseColourRange(value);
+  const colour = range?.colour ?? null;
   const own = colour && !isColourFamily(colour) ? colour : "#286ff0";
+  // Another colour keeps the share asked for.
+  const pick = (next: string) =>
+    onChange(
+      formatColourRange({ colour: next, min: range?.min, max: range?.max }),
+    );
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn(TRIGGER, "justify-start gap-2")}
-        >
-          {colour ? (
-            <>
-              <Swatch colour={colour} className="size-4" />
-              <span className="truncate">
-                {isColourFamily(colour) ? nameOf(colour) : colour}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">Choose a colour</span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" onWheel={keepWheel}>
-        <div className="grid grid-cols-7 gap-2">
-          {COLOUR_FAMILIES.map((family) => (
-            <button
-              key={family}
-              type="button"
-              title={nameOf(family)}
-              aria-label={nameOf(family)}
-              onClick={() => {
-                onChange(family);
-                setOpen(false);
-              }}
-              className={cn(
-                "size-7 rounded-full ring-1 ring-inset ring-black/10 transition-transform hover:scale-110 dark:ring-white/15",
-                colour === family &&
-                  "ring-2 ring-foreground ring-offset-2 ring-offset-background",
-              )}
-              style={{ backgroundColor: FAMILY_SWATCHES[family] }}
-            />
-          ))}
-        </div>
-        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <span
-            className="relative size-7 shrink-0 overflow-hidden rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
-            style={{ backgroundColor: own }}
+    <div className="flex flex-col gap-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(TRIGGER, "justify-start gap-2")}
           >
-            <input
-              type="color"
-              value={own}
-              onChange={(e) => onChange(e.target.value)}
-              aria-label="A colour of your own"
-              className="absolute inset-0 size-full cursor-pointer opacity-0"
-            />
-          </span>
-          A colour of your own…
-        </label>
-      </PopoverContent>
-    </Popover>
+            {colour ? (
+              <>
+                <Swatch colour={colour} className="size-4" />
+                <span className="truncate">
+                  {isColourFamily(colour) ? nameOf(colour) : colour}
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground">Choose a colour</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-3" onWheel={keepWheel}>
+          <div className="grid grid-cols-7 gap-2">
+            {COLOUR_FAMILIES.map((family) => (
+              <button
+                key={family}
+                type="button"
+                title={nameOf(family)}
+                aria-label={nameOf(family)}
+                onClick={() => {
+                  pick(family);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "size-7 rounded-full ring-1 ring-inset ring-black/10 transition-transform hover:scale-110 dark:ring-white/15",
+                  colour === family &&
+                    "ring-2 ring-foreground ring-offset-2 ring-offset-background",
+                )}
+                style={{ backgroundColor: FAMILY_SWATCHES[family] }}
+              />
+            ))}
+          </div>
+          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+            <span
+              className="relative size-7 shrink-0 overflow-hidden rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
+              style={{ backgroundColor: own }}
+            >
+              <input
+                type="color"
+                value={own}
+                onChange={(e) => pick(e.target.value)}
+                aria-label="A colour of your own"
+                className="absolute inset-0 size-full cursor-pointer opacity-0"
+              />
+            </span>
+            A colour of your own…
+          </label>
+        </PopoverContent>
+      </Popover>
+      {colour && (
+        <ColourShare
+          colour={colour}
+          min={range?.min}
+          max={range?.max}
+          onChange={(min, max) =>
+            onChange(formatColourRange({ colour, min, max }))
+          }
+        />
+      )}
+    </div>
   );
 }
 

@@ -11,7 +11,11 @@ import {
   negateMatcher,
 } from "./searchQueryPrinter";
 import { BookmarkTypes } from "./types/bookmarks";
-import { isColourFamily, parseColourQuery } from "./utils/colours";
+import {
+  formatColourRange,
+  isColourFamily,
+  parseColourRange,
+} from "./utils/colours";
 
 /**
  * Fork: the rules a smart list is built from in its editor (Eagle's smart
@@ -40,7 +44,10 @@ export type SmartValueKind =
   | "tag"
   /** Lists' ids, comma-separated (smartListIds): one list, or several. */
   | "list"
-  /** A colour family ("red") or a colour ("#286ff0"). */
+  /**
+   * A colour family ("red") or a colour ("#286ff0"), and how much of the
+   * picture it takes up: "red>=40%<=80%" (utils/colours.ts ColourRange).
+   */
   | "colour"
   /** What a bookmark is (SMART_KINDS). */
   | "kind"
@@ -270,12 +277,27 @@ export const SMART_FIELDS: SmartField[] = [
       { id: "is_not", label: "is not", value: "colour" },
     ],
     toMatcher: (op, value) => {
-      const color = parseColourQuery(value);
-      return color ? { type: "color", color, inverse: op === "is_not" } : null;
+      const range = parseColourRange(value);
+      return range
+        ? {
+            type: "color",
+            color: range.colour,
+            inverse: op === "is_not",
+            ...(range.min === undefined ? {} : { min: range.min }),
+            ...(range.max === undefined ? {} : { max: range.max }),
+          }
+        : null;
     },
     fromMatcher: (m) =>
       m.type === "color"
-        ? { op: m.inverse ? "is_not" : "is", value: m.color }
+        ? {
+            op: m.inverse ? "is_not" : "is",
+            value: formatColourRange({
+              colour: m.color,
+              min: m.min,
+              max: m.max,
+            }),
+          }
         : null,
   },
   {
@@ -658,8 +680,22 @@ export function describeSmartValue(
           (id) => lookup?.listName?.(id) ?? "a list that's gone",
         ),
       );
-    case "colour":
-      return isColourFamily(value) ? nameOf(value) : value;
+    case "colour": {
+      const range = parseColourRange(value);
+      if (!range) {
+        return value;
+      }
+      const name = isColourFamily(range.colour)
+        ? nameOf(range.colour)
+        : range.colour;
+      const { min, max } = range;
+      if (max === undefined || max >= 100) {
+        return min === undefined ? name : `${name}, at least ${min}%`;
+      }
+      return min === undefined
+        ? `${name}, at most ${max}%`
+        : `${name}, ${min}–${max}%`;
+    }
     case "kind":
       return SMART_KINDS.find((k) => k.id === value)?.label ?? value;
     case "yesno":
@@ -708,8 +744,10 @@ export function suggestSmartListName(
       }
       const value = rule.value?.trim() ?? "";
       switch (`${rule.field}:${rule.op}`) {
-        case "colour:is":
-          return isColourFamily(value) ? nameOf(value) : value;
+        case "colour:is": {
+          const colour = parseColourRange(value)?.colour ?? value;
+          return isColourFamily(colour) ? nameOf(colour) : colour;
+        }
         case "picture:shows":
         case "tags:contains":
         case "name:contains":

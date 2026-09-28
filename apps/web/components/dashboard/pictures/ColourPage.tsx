@@ -15,7 +15,6 @@ import { useCreateBookmarkList } from "@karakeep/shared-react/hooks/lists";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import {
   COLOUR_FAMILIES,
-  FAMILY_ICONS,
   FAMILY_SWATCHES,
   isColourFamily,
   parseColourQuery,
@@ -138,7 +137,8 @@ export default function ColourPage({ colour: param }: { colour: string }) {
           onClick={() =>
             createList({
               name: family ? nameOf(family) : query,
-              icon: family ? FAMILY_ICONS[family] : "🎨",
+              // No emoji of its own: one can be picked in its settings.
+              icon: "",
               type: "smart",
               query: `color:${query}`,
             })

@@ -46,6 +46,10 @@ const leaves: Matcher[] = [
   { type: "source", source: "extension", inverse: true },
   { type: "color", color: "red", inverse: false },
   { type: "color", color: "#286ff0", inverse: true },
+  // How much of the picture.
+  { type: "color", color: "red", inverse: false, min: 40 },
+  { type: "color", color: "blue", inverse: false, max: 20 },
+  { type: "color", color: "#286ff0", inverse: true, min: 0, max: 60 },
   {
     type: "dateAfter",
     dateAfter: new Date("2026-01-01T00:00:00.000Z"),

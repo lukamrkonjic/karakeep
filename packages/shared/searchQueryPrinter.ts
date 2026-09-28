@@ -1,4 +1,5 @@
 import type { Matcher } from "./types/search";
+import { formatColourRange } from "./utils/colours";
 
 /**
  * Fork: matchers back into the search language — what a smart list built
@@ -76,7 +77,11 @@ export function matcherToQuery(matcher: Matcher): string {
       return `${not(matcher.inverse)}source:${matcher.source}`;
     // A family (red) or a colour (#286ff0, the language's own color:#).
     case "color":
-      return `${not(matcher.inverse)}color:${matcher.color}`;
+      return `${not(matcher.inverse)}color:${formatColourRange({
+        colour: matcher.color,
+        min: matcher.min,
+        max: matcher.max,
+      })}`;
     case "dateAfter":
       return `${not(matcher.inverse)}after:${day(matcher.dateAfter)}`;
     case "dateBefore":

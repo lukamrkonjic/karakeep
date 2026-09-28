@@ -269,22 +269,6 @@ export const FAMILY_SWATCHES: Record<ColourFamily, string> = {
   white: "#f7f7f5",
   grey: "#8a8a8a",
 };
-export const FAMILY_ICONS: Record<ColourFamily, string> = {
-  red: "🔴",
-  orange: "🟠",
-  yellow: "🟡",
-  green: "🟢",
-  teal: "🩵",
-  blue: "🔵",
-  purple: "🟣",
-  pink: "🩷",
-  brown: "🟤",
-  beige: "🤍",
-  black: "⚫",
-  white: "⚪",
-  grey: "🩶",
-};
-
 // Other names for a family, as people search.
 const FAMILY_ALIASES: Record<string, ColourFamily> = {
   gray: "grey",
@@ -431,12 +415,73 @@ export function colourQueryScore(
   return target ? colourMatch(palette, target) : 0;
 }
 
+/** How much of a picture a colour counts from: its family's, or a colour's. */
+export function colourMinimum(query: string): number {
+  return isColourFamily(query) ? familyMinimum(query) : COLOUR_MATCH_MIN;
+}
+
+/**
+ * How much of a picture a colour is to take up, in percent (a smart list's
+ * colour rule, `color:red>=40%`). Unset, `min` is the colour's own minimum
+ * (colourMinimum) — any of it that counts — and `max` all of the picture.
+ */
+export interface ColourShare {
+  min?: number;
+  max?: number;
+}
+
 export function colourQueryMatches(
   palette: PaletteColour[],
   query: string,
+  share: ColourShare = {},
 ): boolean {
-  const minimum = isColourFamily(query)
-    ? familyMinimum(query)
-    : COLOUR_MATCH_MIN;
-  return colourQueryScore(palette, query) >= minimum;
+  const score = colourQueryScore(palette, query);
+  const min = share.min === undefined ? colourMinimum(query) : share.min / 100;
+  // A palette's shares can add up a hair over 1.
+  const max = share.max === undefined ? Infinity : share.max / 100 + 1e-9;
+  return score >= min && score <= max;
+}
+
+/** A colour and how much of a picture it takes up (ColourShare). */
+export interface ColourRange extends ColourShare {
+  colour: string;
+}
+
+/**
+ * "red", "red>=40%" (at least), "#286ff0<=20%" (at most), "red>=40%<=80%"
+ * (between) — also with > and <, and without the % — as a colour
+ * (parseColourQuery) and its share; null when it's none of those.
+ */
+export function parseColourRange(text: string): ColourRange | null {
+  const at = text.search(/[<>]/);
+  const colour = parseColourQuery(at < 0 ? text : text.slice(0, at));
+  if (!colour) {
+    return null;
+  }
+  const range: ColourRange = { colour };
+  if (at < 0) {
+    return range;
+  }
+  const bounds = text.slice(at).replace(/\s+/g, "");
+  const bound = /([<>])=?(\d{1,3}(?:\.\d+)?)%?/y;
+  let read = 0;
+  for (let found = bound.exec(bounds); found; found = bound.exec(bounds)) {
+    const percent = Math.min(100, Number(found[2]));
+    if (found[1] === ">") {
+      range.min = percent;
+    } else {
+      range.max = percent;
+    }
+    read = bound.lastIndex;
+  }
+  return read === bounds.length ? range : null;
+}
+
+/** The other way: "red>=40%<=80%", what's unset (or all of it) left out. */
+export function formatColourRange({ colour, min, max }: ColourRange): string {
+  return (
+    colour +
+    (min === undefined ? "" : `>=${min}%`) +
+    (max === undefined || max >= 100 ? "" : `<=${max}%`)
+  );
 }

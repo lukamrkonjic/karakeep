@@ -455,6 +455,27 @@ describe("Pictures", () => {
       titles(await api.bookmarks.getBookmarks({ listId: notBlue.id })),
     ).not.toContain("blue");
 
+    // How much of the picture: mostly blue, or only a little of it.
+    const listOf = async (query: string) => {
+      const list = await api.lists.create({
+        name: query,
+        icon: "",
+        type: "smart",
+        query,
+      });
+      const found = await api.bookmarks.getBookmarks({ listId: list.id });
+      return titles(found).sort();
+    };
+    expect(await listOf("color:blue>=50%")).toEqual(["blue"]);
+    expect(await listOf("color:blue<=20%")).toEqual(["a bit of blue"]);
+    // From none at all: the pictures with no blue in them too.
+    expect(await listOf("color:blue>=0%<=20%")).toEqual([
+      "a bit of blue",
+      "grey",
+      "red",
+    ]);
+    expect(await listOf("-color:blue>=50%")).not.toContain("blue");
+
     // Round the wheel from red, then the greys, then what has no colours.
     const order = titles(
       await api.bookmarks.getBookmarks({ sortBy: "colour", limit: 10 }),

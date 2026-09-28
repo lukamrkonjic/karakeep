@@ -257,6 +257,16 @@ export default function QueryExplainerTooltip({
                   }}
                 />
                 {matcher.color}
+                {/* Fork: how much of the picture (color:red>=40%). */}
+                {(matcher.min !== undefined || matcher.max !== undefined) && (
+                  <span className="text-muted-foreground">
+                    {matcher.max === undefined || matcher.max >= 100
+                      ? `, at least ${matcher.min}%`
+                      : matcher.min === undefined
+                        ? `, at most ${matcher.max}%`
+                        : `, ${matcher.min}–${matcher.max}%`}
+                  </span>
+                )}
               </span>
             </TableCell>
           </TableRow>

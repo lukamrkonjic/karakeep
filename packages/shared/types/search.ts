@@ -100,6 +100,10 @@ const zColorMatcher = z.object({
   type: z.literal("color"),
   color: z.string(),
   inverse: z.boolean(),
+  // Fork: how much of a picture it takes up, in percent (color:red>=40%);
+  // unset, from the colour's own minimum up to all of it.
+  min: z.number().min(0).max(100).optional(),
+  max: z.number().min(0).max(100).optional(),
 });
 
 // Fork: in a list or anywhere under it, by its id — a smart list's rule

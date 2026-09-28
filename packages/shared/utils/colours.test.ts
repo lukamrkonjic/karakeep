@@ -7,16 +7,55 @@ import {
   colourSortKey,
   deltaE,
   familyShare,
+  formatColourRange,
   hexToLab,
   labToRgb,
   normalizeHex,
   parseColourQuery,
+  parseColourRange,
   parseHex,
   rgbToLab,
   toHex,
 } from "./colours";
 
 describe("colours", () => {
+  test("how much of the picture a colour is to take up", () => {
+    expect(parseColourRange("red")).toEqual({ colour: "red" });
+    expect(parseColourRange("red>=40%")).toEqual({ colour: "red", min: 40 });
+    expect(parseColourRange("Navy<20")).toEqual({ colour: "blue", max: 20 });
+    expect(parseColourRange("#286FF0 >= 40% <= 80%")).toEqual({
+      colour: "#286ff0",
+      min: 40,
+      max: 80,
+    });
+    for (const text of ["red>=", "red>=40%x", "sofa>=40%", ">=40%"]) {
+      expect(parseColourRange(text), text).toBeNull();
+    }
+    expect(formatColourRange({ colour: "red", min: 40, max: 100 })).toBe(
+      "red>=40%",
+    );
+    expect(formatColourRange({ colour: "red", min: 0, max: 20 })).toBe(
+      "red>=0%<=20%",
+    );
+
+    const mostlyRed = [
+      { hex: "#d62828", share: 0.6 },
+      { hex: "#ffffff", share: 0.4 },
+    ];
+    expect(colourQueryMatches(mostlyRed, "red")).toBe(true);
+    expect(colourQueryMatches(mostlyRed, "red", { min: 50 })).toBe(true);
+    expect(colourQueryMatches(mostlyRed, "red", { min: 70 })).toBe(false);
+    expect(colourQueryMatches(mostlyRed, "red", { max: 50 })).toBe(false);
+    expect(colourQueryMatches(mostlyRed, "red", { min: 60, max: 60 })).toBe(
+      true,
+    );
+    // From none at all: a picture without it too.
+    expect(colourQueryMatches(mostlyRed, "blue")).toBe(false);
+    expect(colourQueryMatches(mostlyRed, "blue", { min: 0, max: 10 })).toBe(
+      true,
+    );
+  });
+
   test("reads colours", () => {
     expect(parseHex("#286ff0")).toEqual([40, 111, 240]);
     expect(parseHex("286FF0")).toEqual([40, 111, 240]);

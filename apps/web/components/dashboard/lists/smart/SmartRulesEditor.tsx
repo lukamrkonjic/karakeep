@@ -262,7 +262,8 @@ export function SmartRulesEditor({
             return (
               <div
                 key={rule.key}
-                className="flex flex-wrap items-center gap-2 pl-4 sm:flex-nowrap sm:pl-6"
+                // Tops lined up: a colour's value has its share under it.
+                className="flex flex-wrap items-start gap-2 pl-4 sm:flex-nowrap sm:pl-6"
               >
                 <Pick
                   label="Field"
