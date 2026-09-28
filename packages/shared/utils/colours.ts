@@ -314,10 +314,16 @@ const FAMILY_ALIASES: Record<string, ColourFamily> = {
 
 const NEUTRALS = new Set<ColourFamily>(["black", "white", "grey", "beige"]);
 
+// The chroma (CIELAB) a warm colour needs to be red, orange or yellow.
+const WARM_VIVID = 40;
+
 /**
  * The family of one colour, by where it sits in CIELAB — measured on named
  * colours: tan, camel, sand and oat are beige; sienna, chocolate and rust
- * brown; sage and olive green; navy and denim blue.
+ * brown; sage and olive green; navy and denim blue. Only a vivid warm colour
+ * is red, orange or yellow: a muted one — skin, wood, sand, stone, a tan
+ * coat, often much of a photo — is beige, or brown when dark. (Those in
+ * between made nearly every photo orange.)
  */
 export function colourFamily([l, a, b]: Lab): ColourFamily {
   const chroma = Math.hypot(a, b);
@@ -330,6 +336,9 @@ export function colourFamily([l, a, b]: Lab): ColourFamily {
   }
   if (hue >= 45 && hue < 95 && l < 50) {
     return "brown";
+  }
+  if (hue >= 30 && hue < 100 && chroma < WARM_VIVID) {
+    return l < 50 ? "brown" : "beige";
   }
   if (hue >= 50 && hue < 110 && chroma < 32 && l >= 60) {
     return "beige";

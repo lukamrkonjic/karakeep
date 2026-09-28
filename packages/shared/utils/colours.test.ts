@@ -128,6 +128,44 @@ describe("colours", () => {
     }
   });
 
+  test("only vivid warm colours are red, orange or yellow", () => {
+    const family = (hex: string) => colourFamily(hexToLab(hex)!);
+    // Muted mid-tones from photos that all read as orange: skin in shade,
+    // wood, stone, a tan jacket, a brown check coat.
+    for (const hex of ["#b2775d", "#9f7c58", "#977051", "#9b8773", "#8c7464"]) {
+      expect({ hex, family: family(hex) }).toEqual({ hex, family: "beige" });
+    }
+    // Skin, pink and golden, isn't red or orange either.
+    expect(family("#e0a899")).toBe("beige");
+    expect(family("#d69a6e")).toBe("beige");
+    // A greyish tan street isn't yellow; a darker muted red-brown is brown.
+    expect(family("#9c8e7d")).toBe("beige");
+    expect(family("#83675e")).toBe("brown");
+    // The real thing is: an ochre poster, autumn leaves, a pumpkin.
+    for (const hex of ["#f4a637", "#e28d31", "#c26728", "#ff7518"]) {
+      expect({ hex, family: family(hex) }).toEqual({ hex, family: "orange" });
+    }
+
+    // A man in a tan jacket isn't an orange picture, autumn trees are.
+    const jacket = [
+      { hex: "#b7ab99", share: 0.25 },
+      { hex: "#9b8773", share: 0.24 },
+      { hex: "#866148", share: 0.14 },
+      { hex: "#5b3b2c", share: 0.14 },
+      { hex: "#646470", share: 0.08 },
+      { hex: "#9dbee1", share: 0.07 },
+    ];
+    expect(colourQueryMatches(jacket, "orange")).toBe(false);
+    expect(colourQueryMatches(jacket, "beige")).toBe(true);
+    const autumn = [
+      { hex: "#f3ae44", share: 0.57 },
+      { hex: "#e28d31", share: 0.25 },
+      { hex: "#c26728", share: 0.08 },
+      { hex: "#7e593e", share: 0.05 },
+    ];
+    expect(colourQueryMatches(autumn, "orange")).toBe(true);
+  });
+
   test("searching by colour: a family, another name for one, or a colour", () => {
     expect(parseColourQuery("Red")).toBe("red");
     expect(parseColourQuery("gray")).toBe("grey");
