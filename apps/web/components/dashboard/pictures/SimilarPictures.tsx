@@ -7,6 +7,7 @@ import { Play } from "lucide-react";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
+import { PreviewLink } from "../preview/PreviewLink";
 import { pictureOf } from "./pictures";
 
 /** Shown in the details; the rest are a click away. */
@@ -46,7 +47,7 @@ export function SimilarPictures({ bookmarkId }: { bookmarkId: string }) {
             return null;
           }
           return (
-            <Link
+            <PreviewLink
               key={bookmark.id}
               // Opens in the preview's place, not on top of it.
               replace
@@ -65,7 +66,7 @@ export function SimilarPictures({ bookmarkId }: { bookmarkId: string }) {
               {picture.video && (
                 <Play className="absolute bottom-1 right-1 size-3.5 fill-white text-white drop-shadow" />
               )}
-            </Link>
+            </PreviewLink>
           );
         })}
       </div>

@@ -9,6 +9,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Session, SessionProvider } from "@/lib/auth/client";
 import { LegacyPreferencesImport } from "@/lib/legacyPreferences";
+import { installMediaSizeTracking } from "@/lib/mediaSizes";
 import { UiPreferencesProvider, usePreference } from "@/lib/uiPreferences";
 import { UserLocalSettingsCtx } from "@/lib/userLocalSettings/bookmarksLayout";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -69,6 +70,9 @@ export default function Providers({
   uiPreferences: ZUiPreferences;
 }) {
   const queryClient = getQueryClient();
+  // Fork: the sizes of the pictures the page loads, so a preview opens at
+  // its final size (lib/mediaSizes.ts).
+  useEffect(() => installMediaSizeTracking(), []);
 
   const [trpcClient] = useState(() =>
     createTRPCClient<AppRouter>({

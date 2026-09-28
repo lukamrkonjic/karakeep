@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { usePreference } from "@/lib/uiPreferences";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
 
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
+import { PreviewLink } from "../preview/PreviewLink";
 import { GatedImage } from "./GatedImage";
 
 /**
@@ -38,6 +38,7 @@ export function BookmarkVideo({
   assetId,
   thumbnailAssetId,
   className,
+  style,
   thumbnail = false,
   bookmarkId,
   autoPlay = false,
@@ -46,6 +47,8 @@ export function BookmarkVideo({
   /** Generated poster-frame image, at the video's own aspect ratio. */
   thumbnailAssetId?: string;
   className?: string;
+  /** Fork: the player's box, worked out before it has loaded (the preview). */
+  style?: React.CSSProperties;
   /** Feed mode: the poster, linking to the preview, instead of a player. */
   thumbnail?: boolean;
   /** The bookmark whose preview a feed tile opens. */
@@ -152,7 +155,8 @@ export function BookmarkVideo({
     );
     const frame = cn("group/video relative block w-full", className);
     return bookmarkId ? (
-      <Link
+      // Fork: the preview's route is fetched on hover, so it opens at once.
+      <PreviewLink
         ref={frameRef as React.Ref<HTMLAnchorElement>}
         href={`/dashboard/preview/${bookmarkId}`}
         className={frame}
@@ -160,7 +164,7 @@ export function BookmarkVideo({
         aria-label="Play video"
       >
         {poster}
-      </Link>
+      </PreviewLink>
     ) : (
       <div ref={frameRef as React.Ref<HTMLDivElement>} className={frame}>
         {poster}
@@ -175,6 +179,7 @@ export function BookmarkVideo({
       src={getAssetUrl(assetId)}
       poster={thumbnailAssetId ? getAssetUrl(thumbnailAssetId) : undefined}
       className={cn("bg-black", className)}
+      style={style}
       controls
       preload="metadata"
       playsInline

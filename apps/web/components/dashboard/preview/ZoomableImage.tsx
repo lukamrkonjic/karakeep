@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Minus, Plus, RotateCcw } from "lucide-react";
@@ -67,12 +73,18 @@ export function ZoomableImage({
   src,
   className,
   imageClassName,
+  imageStyle,
+  showAtOnce = false,
   onClick,
   children,
 }: {
   src: string;
   className?: string;
   imageClassName?: string;
+  /** The picture's box, worked out before it has loaded (MediaFitPreview). */
+  imageStyle?: React.CSSProperties;
+  /** The page has this picture already (its tile): no waiting to show it. */
+  showAtOnce?: boolean;
   /** A click on the pane at the normal size, not on one of its buttons. */
   onClick?: () => void;
   children?: React.ReactNode;
@@ -88,6 +100,21 @@ export function ZoomableImage({
 
   // A new picture starts unzoomed.
   useEffect(() => setView(HOME), [src]);
+
+  // Fork: shown whole — at once when the page has it already (its tile), or
+  // when it loads within a moment; else faded in once decoded. Never drawn
+  // in pieces as it arrives.
+  const [ready, setReady] = useState<"now" | "fade" | false>(
+    showAtOnce ? "now" : false,
+  );
+  const mountedAt = useRef(0);
+  useLayoutEffect(() => {
+    mountedAt.current = performance.now();
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setReady("now");
+    }
+  }, [src]);
 
   /** Keeps the picture covering the pane: no dragging it off the edge. */
   const clamp = useCallback((v: View): View => {
@@ -211,14 +238,41 @@ export function ZoomableImage({
           src={src}
           width={0}
           height={0}
-          sizes="95vw"
+          sizes="90vw"
           unoptimized
           priority
           draggable={false}
-          className={cn("select-none will-change-transform", imageClassName)}
+          onLoad={(e) => {
+            const image = e.currentTarget;
+            // Decoded first, so it doesn't appear a frame before its pixels.
+            void image
+              .decode()
+              .catch(() => undefined)
+              .finally(() =>
+                setReady(
+                  (was) =>
+                    was ||
+                    (performance.now() - mountedAt.current < 150
+                      ? "now"
+                      : "fade"),
+                ),
+              );
+          }}
+          // A file that won't load shows as the browser shows it.
+          onError={() => setReady("now")}
+          className={cn(
+            "select-none",
+            ready === "fade" && "transition-opacity duration-150",
+            ready ? "opacity-100" : "opacity-0",
+            imageClassName,
+          )}
           style={{
+            ...imageStyle,
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
             transition: animate ? "transform 150ms ease-out" : undefined,
+            // Only while dragging: a layer kept for transforms is drawn once
+            // and scaled, so a zoomed picture stayed soft.
+            willChange: dragging ? "transform" : undefined,
           }}
         />
       </div>

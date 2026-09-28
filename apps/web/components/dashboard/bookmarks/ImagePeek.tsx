@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import Link from "next/link";
 import { Search } from "lucide-react";
 
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
+
+import { PreviewLink } from "../preview/PreviewLink";
 
 const PEEK_DELAY_MS = 120;
 
@@ -41,7 +42,7 @@ export function ImagePeek({
 
   return (
     <>
-      <Link
+      <PreviewLink
         href={`/dashboard/preview/${bookmarkId}`}
         aria-label="Peek at the image"
         draggable={false}
@@ -57,7 +58,7 @@ export function ImagePeek({
         className="absolute bottom-2 right-2 z-20 flex p-1.5 text-white opacity-0 drop-shadow transition-opacity duration-200 hover:text-white/80 group-hover:opacity-100 touch:hidden"
       >
         <Search className="size-5" />
-      </Link>
+      </PreviewLink>
       {open &&
         createPortal(
           // Never in the way: the pointer stays on the magnifier underneath.

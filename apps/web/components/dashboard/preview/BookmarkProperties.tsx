@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import useRelativeTime from "@/lib/hooks/relative-time";
 import { useTranslation } from "@/lib/i18n/client";
+import { knownMediaSize } from "@/lib/mediaSizes";
 import { formatBytes } from "@/lib/utils";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -20,12 +21,17 @@ import type { PreviewMedia } from "./MediaFitPreview";
  * header). Nothing is stored for it.
  */
 function useMediaDimensions(media: PreviewMedia | null) {
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  // Fork: known at once when the page has loaded the file (lib/mediaSizes).
+  const [size, setSize] = useState<{ w: number; h: number } | null>(() =>
+    knownMediaSize(media?.assetId),
+  );
   const src = media ? getAssetUrl(media.assetId) : null;
   const kind = media?.kind;
+  const assetId = media?.assetId;
   useEffect(() => {
-    setSize(null);
-    if (!src) {
+    const known = knownMediaSize(assetId);
+    setSize(known);
+    if (known || !src) {
       return;
     }
     if (kind === "image") {
@@ -51,7 +57,7 @@ function useMediaDimensions(media: PreviewMedia | null) {
     };
     video.src = src;
     return drop;
-  }, [src, kind]);
+  }, [src, kind, assetId]);
   return size;
 }
 

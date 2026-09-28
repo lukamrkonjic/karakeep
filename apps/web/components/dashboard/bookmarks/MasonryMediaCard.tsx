@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
 import { cn } from "@/lib/utils";
@@ -9,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
+import { PreviewLink } from "../preview/PreviewLink";
 import BookmarkActionBar from "./BookmarkActionBar";
 import { BulkEditSelectionOverlay } from "./BookmarkLayoutAdaptingCard";
 import { BookmarkVideo } from "./BookmarkVideo";
@@ -77,13 +77,15 @@ export function MasonryMediaCard({
           colors — same idea as Pinterest's hover state. */}
       <div className="transition-[filter] duration-200 group-hover:brightness-[0.6]">
         {media.type === "image" ? (
-          <Link
+          // Fork: the preview's route is fetched on hover, so a click
+          // opens it at once.
+          <PreviewLink
             href={`/dashboard/preview/${bookmark.id}`}
             className="block"
             draggable={false}
           >
             <GatedImage assetId={media.assetId} alt={title ?? "bookmark"} />
-          </Link>
+          </PreviewLink>
         ) : (
           <BookmarkVideo
             assetId={media.assetId}

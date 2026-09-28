@@ -7,6 +7,7 @@ import { BookmarkTagsEditor } from "@/components/dashboard/bookmarks/BookmarkTag
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth/client";
+import useBulkActionsStore from "@/lib/bulkActions";
 import { useIsPhone } from "@/lib/hooks/useIsPhone";
 import { useTranslation } from "@/lib/i18n/client";
 import {
@@ -56,6 +57,28 @@ function ContentLoading() {
       <p className="text-sm text-muted-foreground">
         {t("preview.crawling_in_progress")}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Fork: the modal while its bookmark loads (opened from a page that doesn't
+ * have it): unseen for a moment — most arrive sooner, and then the dialog
+ * opens as it will stay — then a spinner. (The dialog hides while
+ * `data-media-pending` is set: the preview's page.)
+ */
+function ModalLoading() {
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div
+      className="h-[50vh] w-[50vw]"
+      data-media-pending={waited ? undefined : ""}
+    >
+      <FullPageSpinner />
     </div>
   );
 }
@@ -146,6 +169,12 @@ export default function BookmarkPreview({
       },
       {
         initialData,
+        // Fork: the page's own copy (the grid has it) until the fresh one is
+        // in, so the preview is there at once instead of after a round trip.
+        placeholderData: () =>
+          useBulkActionsStore
+            .getState()
+            .visibleBookmarks.find((b) => b.id === bookmarkId),
         refetchInterval: (query) => {
           const data = query.state.data;
           if (!data) {
@@ -179,13 +208,7 @@ export default function BookmarkPreview({
         </div>
       );
     }
-    return variant === "modal" ? (
-      <div className="h-[50vh] w-[50vw]">
-        <FullPageSpinner />
-      </div>
-    ) : (
-      <FullPageSpinner />
-    );
+    return variant === "modal" ? <ModalLoading /> : <FullPageSpinner />;
   }
 
   // In the modal, a picture or a video gets a dialog that wraps it.
@@ -310,6 +333,8 @@ export default function BookmarkPreview({
       {media ? (
         <div className="hidden lg:block">
           <MediaFitPreview
+            // Another picture (Similar opens in its place) starts afresh.
+            key={media.assetId}
             media={media}
             details={detailsSection}
             onClose={onClose}
