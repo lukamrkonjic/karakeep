@@ -63,7 +63,7 @@ export default function BookmarkPreviewPage(props: {
       {/* Sized by its content: BookmarkPreview's "modal" variant wraps a
           picture or video, and gives everything else a 90% box. */}
       <DialogContent
-        className="w-auto max-w-[95vw] gap-0 overflow-hidden rounded-xl p-0"
+        className="w-auto max-w-[90vw] gap-0 overflow-hidden rounded-xl p-0"
         // Darker than other dialogs: a picture or video should sit against
         // near-black, not a half-lit feed.
         overlayClassName="bg-black/95"

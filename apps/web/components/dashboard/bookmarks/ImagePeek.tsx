@@ -71,7 +71,7 @@ export function ImagePeek({
               height={0}
               sizes="100vw"
               unoptimized
-              className="h-auto max-h-[92vh] w-auto max-w-[95vw] duration-150 animate-in zoom-in-95"
+              className="h-auto max-h-[90vh] w-auto max-w-[90vw] duration-150 animate-in zoom-in-95"
             />
           </div>,
           document.body,

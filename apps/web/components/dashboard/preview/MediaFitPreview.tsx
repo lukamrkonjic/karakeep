@@ -49,14 +49,18 @@ export function getPreviewMedia(bookmark: ZBookmark): PreviewMedia | null {
 
 /**
  * The preview modal for a picture or a video: the dialog wraps the media at
- * its own size, capped to the viewport, instead of floating it in a fixed
- * 90% box, and the details sit beside it in a panel exactly as tall as the
- * media that scrolls on its own. A small picture keeps a minimum frame so the
- * panel stays usable.
+ * its own size, within bounds, and the details sit beside it in a panel
+ * exactly as tall as the media that scrolls on its own.
+ *
+ * The bounds: never more than 90% of the screen either way, and never less
+ * than a comfortable frame (FRAME) — a small picture sits at its own size in
+ * the middle of it, on the theme's backdrop (light or dark), instead of
+ * shrinking the dialog and squeezing the details beside it. Never blown up:
+ * a small picture stays sharp.
  *
  * The panel is absolutely positioned inside its column so it never adds
- * height: the media alone decides how tall the dialog is. Hiding it is one
- * remembered setting for every preview, and a picture zooms and pans
+ * height: the media (or the frame) decides how tall the dialog is. Hiding it
+ * is one remembered setting for every preview, and a picture zooms and pans
  * (ZoomableImage). Clicking a picture closes the preview (`onClose`); its
  * open button, beside the details toggle, opens the file in a new tab. A
  * video keeps clicks for its player.
@@ -73,13 +77,20 @@ export function MediaFitPreview({
   // One remembered setting for every preview (lib/previewDetails.ts).
   const panelOpen = !usePreviewDetailsHidden();
   const togglePanel = useTogglePreviewDetails();
-  // Kept in step with the panel's w-[360px] below.
+  // At most 90% of the screen; the widths are kept in step with the panel's
+  // w-[360px] below. (Whole class names: Tailwind only sees literal ones.)
   const fit = cn(
-    "block h-auto max-h-[92vh] w-auto",
-    panelOpen ? "max-w-[calc(95vw-360px)]" : "max-w-[95vw]",
+    "block h-auto max-h-[90vh] w-auto",
+    panelOpen ? "max-w-[calc(90vw-360px)]" : "max-w-[90vw]",
   );
-  const pane =
-    "relative flex min-h-[min(420px,92vh)] min-w-[320px] items-center justify-center bg-black";
+  // FRAME: at least 560 × 720 (less on a small screen), the media centred
+  // on the theme's backdrop — a light stage by day, a dark one at night.
+  const pane = cn(
+    "relative flex min-h-[min(720px,90vh)] items-center justify-center bg-secondary dark:bg-background",
+    panelOpen
+      ? "min-w-[min(560px,calc(90vw-360px))]"
+      : "min-w-[min(560px,90vw)]",
+  );
   const button =
     "rounded-md bg-black/40 p-1.5 text-white/80 transition-colors hover:bg-black/60 hover:text-white";
   const src = getAssetUrl(media.assetId);
@@ -117,7 +128,7 @@ export function MediaFitPreview({
   );
 
   return (
-    <div className="flex max-h-[92vh]">
+    <div className="flex max-h-[90vh]">
       {media.kind === "image" ? (
         <ZoomableImage
           src={src}
