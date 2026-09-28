@@ -1,9 +1,12 @@
+import { TRPCError } from "@trpc/server";
 import { and, count, eq, inArray, notExists, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { ZPictureThumb } from "@karakeep/shared/types/pictures";
 import type { Matcher } from "@karakeep/shared/types/search";
 import {
+  assets,
+  AssetTypes,
   bookmarkAssets,
   bookmarkLists,
   bookmarks,
@@ -16,7 +19,9 @@ import {
   pictureSettingsTable,
 } from "@karakeep/db/schema";
 import {
+  AssetPreprocessingQueue,
   clipModelDownloaded,
+  deleteAsset,
   fingerprintProgress,
   getPictureSettings,
   normalizeDescription,
@@ -668,6 +673,92 @@ export const picturesAppRouter = router({
         ...(await pageOf(ctx, ranked, input.cursor ?? 0, PAGE)),
         pictures,
       };
+    }),
+
+  /**
+   * A picture's file, replaced for good by another — its crop (the web app
+   * crops in the browser and uploads the result: CropPicture.tsx). The new
+   * file takes the old one's place in the bookmark, which keeps its lists,
+   * tags and notes; the old file is deleted. What rests on the file is done
+   * again: its text, tags and summary (asset preprocessing), its fingerprint
+   * and colours (the picture jobs see a file they haven't read), the search
+   * index. A new file rather than the old one overwritten: assets are served
+   * as immutable, so a browser would keep showing what it cached.
+   */
+  replacePicture: picturesProcedure
+    .input(z.object({ bookmarkId: z.string(), assetId: z.string() }))
+    .output(z.object({ assetId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const bookmark = await ctx.db.query.bookmarks.findFirst({
+        where: and(
+          eq(bookmarks.id, input.bookmarkId),
+          eq(bookmarks.userId, ctx.user.id),
+        ),
+        with: { asset: true },
+      });
+      if (!bookmark) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Not found" });
+      }
+      if (bookmark.asset?.assetType !== "image") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only a picture's file can be replaced.",
+        });
+      }
+      const oldAssetId = bookmark.asset.assetId;
+      const [oldAsset, newAsset] = await Promise.all([
+        ctx.db.query.assets.findFirst({ where: eq(assets.id, oldAssetId) }),
+        ctx.db.query.assets.findFirst({
+          where: and(
+            eq(assets.id, input.assetId),
+            eq(assets.userId, ctx.user.id),
+          ),
+        }),
+      ]);
+      // A file of yours, just uploaded (not another bookmark's), a picture.
+      if (!newAsset || newAsset.bookmarkId || input.assetId === oldAssetId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That isn't a new upload of yours.",
+        });
+      }
+      if (!newAsset.contentType?.startsWith("image/")) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That isn't a picture.",
+        });
+      }
+      ctx.db.transaction((tx) => {
+        tx.update(bookmarkAssets)
+          // Its text was the old file's: preprocessing reads it again.
+          .set({ assetId: newAsset.id, content: null })
+          .where(eq(bookmarkAssets.id, bookmark.id))
+          .run();
+        tx.update(assets)
+          .set({
+            bookmarkId: bookmark.id,
+            assetType: oldAsset?.assetType ?? AssetTypes.BOOKMARK_ASSET,
+          })
+          .where(eq(assets.id, newAsset.id))
+          .run();
+        tx.delete(assets).where(eq(assets.id, oldAssetId)).run();
+        tx.update(bookmarks)
+          .set({ modifiedAt: new Date() })
+          .where(eq(bookmarks.id, bookmark.id))
+          .run();
+      });
+      await deleteAsset({ userId: ctx.user.id, assetId: oldAssetId }).catch(
+        () => undefined,
+      );
+      await Promise.all([
+        AssetPreprocessingQueue.enqueue(
+          { bookmarkId: bookmark.id, fixMode: false },
+          { groupId: ctx.user.id },
+        ),
+        requestPictureFingerprints(ctx.db, ctx.user.id),
+        requestPicturePalettes(ctx.db, ctx.user.id),
+      ]);
+      return { assetId: newAsset.id };
     }),
 
   /** "Belongs in…": the lists suggested for one picture. */

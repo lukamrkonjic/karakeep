@@ -35,6 +35,8 @@ use tauri::{
 use tauri_plugin_opener::OpenerExt;
 
 const WINDOW: &str = "main";
+/// vrana's own browser window, for links to other sites (open_in_app).
+const BROWSER: &str = "browser";
 
 /// Baked in at build time (`VRANA_SERVER=https://… pnpm app:build`), so a
 /// first launch opens straight onto it; otherwise the app's page asks.
@@ -58,9 +60,10 @@ const LIGHT_TEXT: Color = Color(0x1c, 0x1a, 0x17, 0xff);
 #[cfg(target_os = "windows")]
 const LIGHT_BORDER: Color = Color(0xe7, 0xe4, 0xde, 0xff);
 
-/// In every page: tells the web app it's in the Mac app (it makes room for
-/// the window's buttons), and tells the app vrana's theme as it changes
-/// (next-themes' class on <html>), for the window's own colours. WebView2
+/// In every page of vrana's window: tells the web app it's in the Mac app
+/// (it makes room for the window's buttons), tells the app vrana's theme as
+/// it changes (next-themes' class on <html>), for the window's own colours,
+/// and hands it the links to other sites (open_link). WebView2
 /// runs it before the page has its <html> (WebKit already has one), so it
 /// waits for that first.
 const PAGE_SCRIPT: &str = r#"
@@ -94,6 +97,30 @@ const PAGE_SCRIPT: &str = r#"
     }).observe(document, { childList: true });
   }
   addEventListener("DOMContentLoaded", report);
+
+  // A link to another site: vrana's own browser window, or — with ⌘, Ctrl
+  // or Shift held, or a middle click — the computer's browser (open_link).
+  const follow = (e, elsewhere) => {
+    const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+    if (!ipc || e.defaultPrevented || !a || a.hasAttribute("download")) return;
+    let url;
+    try {
+      url = new URL(a.href, location.href);
+    } catch {
+      return;
+    }
+    if (url.origin === location.origin || !/^https?:$/.test(url.protocol)) return;
+    // Only the navigation: the page's own handlers still run (a menu the
+    // link sits in closes).
+    e.preventDefault();
+    ipc.invoke("open_link", { url: url.href, elsewhere }).catch(() => {});
+  };
+  addEventListener(
+    "click",
+    (e) => e.button === 0 && follow(e, e.metaKey || e.ctrlKey || e.shiftKey),
+    true,
+  );
+  addEventListener("auxclick", (e) => e.button === 1 && follow(e, true), true);
 })();
 "#;
 
@@ -190,7 +217,8 @@ fn reachable(url: &Url) -> bool {
 }
 
 /// The server's pages may move the window by its header, double-click it to
-/// zoom, and say which theme they're in — nothing else of the app's.
+/// zoom, say which theme they're in and hand over a link — nothing else of
+/// the app's.
 fn grant(app: &AppHandle, server: &Url) -> Result<(), String> {
     let origin = server.as_str().to_string();
     let state = app.state::<AppState>();
@@ -205,7 +233,8 @@ fn grant(app: &AppHandle, server: &Url) -> Result<(), String> {
             .window(WINDOW)
             .permission("core:window:allow-start-dragging")
             .permission("core:window:allow-internal-toggle-maximize")
-            .permission("allow-remember-theme"),
+            .permission("allow-remember-theme")
+            .permission("allow-open-link"),
     )
     .map_err(|e| e.to_string())?;
     granted.push(origin);
@@ -228,6 +257,97 @@ fn show(app: &AppHandle) {
 /// Mail, for a mailto:).
 fn open_elsewhere(app: &AppHandle, url: &Url) {
     let _ = app.opener().open_url(url.as_str(), None::<&str>);
+}
+
+/// Downloads, under the name the site gave (a number added if it's taken),
+/// shown in Finder / Explorer when done — in either window.
+fn downloads(
+    app: &AppHandle,
+) -> impl Fn(tauri::webview::Webview, DownloadEvent<'_>) -> bool + Send + Sync + 'static {
+    let app = app.clone();
+    move |_webview, event| {
+        let state = app.state::<AppState>();
+        match event {
+            DownloadEvent::Requested { url, destination } => {
+                state
+                    .downloads
+                    .lock()
+                    .unwrap()
+                    .insert(url.to_string(), destination.clone());
+            }
+            DownloadEvent::Finished { url, path, success } => {
+                let went = state.downloads.lock().unwrap().remove(url.as_str());
+                if let (true, Some(path)) = (success, path.or(went)) {
+                    let _ = app.opener().reveal_item_in_dir(path);
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+}
+
+/// vrana's own browser window: a link to another site, over vrana. One
+/// window, reused — another link opens in it — titled with its page's
+/// title; everything in it may go anywhere (a link opening a new window
+/// stays in it), and its pages get nothing of the app's. Closing it closes
+/// it (vrana's window only hides), so nothing keeps playing behind.
+fn open_in_app(app: &AppHandle, url: Url) {
+    if let Some(browser) = app.get_webview_window(BROWSER) {
+        let _ = browser.navigate(url);
+        let _ = browser.unminimize();
+        let _ = browser.show();
+        let _ = browser.set_focus();
+        return;
+    }
+    let dark = {
+        let state = app.state::<AppState>();
+        let settings = state.settings.lock().unwrap();
+        settings.theme.as_deref() == Some("dark")
+    };
+    let handle = app.clone();
+    let built = WebviewWindowBuilder::new(app, BROWSER, WebviewUrl::External(url))
+        .title("vrana")
+        .inner_size(1100.0, 820.0)
+        .min_inner_size(480.0, 360.0)
+        .center()
+        .theme(Some(if dark { Theme::Dark } else { Theme::Light }))
+        .zoom_hotkeys_enabled(true)
+        .on_document_title_changed(|browser, title| {
+            let _ = browser.set_title(&title);
+        })
+        .on_new_window(move |url, _features| {
+            if let Some(browser) = handle.get_webview_window(BROWSER) {
+                let _ = browser.navigate(url);
+            }
+            NewWindowResponse::Deny
+        })
+        .on_download(downloads(app))
+        .build();
+    if let Ok(browser) = built {
+        #[cfg(target_os = "macos")]
+        swipe_to_go_back(&browser);
+        #[cfg(target_os = "windows")]
+        paint_title_bar(browser.hwnd(), dark);
+        let _ = browser.set_focus();
+    }
+}
+
+/// A link on a page of vrana's to another site (PAGE_SCRIPT): vrana's own
+/// browser window, or the computer's browser when asked (⌘ / Ctrl / Shift,
+/// a middle click).
+#[tauri::command]
+fn open_link(app: AppHandle, url: String, elsewhere: bool) -> Result<(), String> {
+    let url = Url::parse(&url).map_err(|_| "That isn't an address.".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("That isn't a web address.".into());
+    }
+    if elsewhere {
+        open_elsewhere(&app, &url);
+    } else {
+        open_in_app(&app, url);
+    }
+    Ok(())
 }
 
 fn is_own_page(url: &Url) -> bool {
@@ -488,6 +608,13 @@ fn mac_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
             // swipe goes back and forward too.
             &MenuItem::with_id(app, "back", "Back", true, Some("CmdOrCtrl+["))?,
             &MenuItem::with_id(app, "forward", "Forward", true, Some("CmdOrCtrl+]"))?,
+            &MenuItem::with_id(
+                app,
+                "elsewhere",
+                "Open in Browser",
+                true,
+                Some("CmdOrCtrl+Shift+O"),
+            )?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
@@ -508,12 +635,21 @@ fn mac_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
 
 #[cfg(target_os = "macos")]
 fn menu_action(app: &AppHandle, id: &str) {
+    // Reload, Back, Forward and Open in Browser: the window in front (vrana's
+    // or its browser window); Settings and Change Server: vrana's.
+    let front = app
+        .webview_windows()
+        .into_values()
+        .find(|w| w.is_focused().unwrap_or(false))
+        .or_else(|| window(app));
+    let Some(front) = front else { return };
     let Some(window) = window(app) else { return };
     match id {
         "settings" => {
             if let Some(mut url) = current_server(app) {
                 url.set_path("/settings");
                 let _ = window.navigate(url);
+                show(app);
             }
         }
         "server" => {
@@ -523,13 +659,20 @@ fn menu_action(app: &AppHandle, id: &str) {
             }
         }
         "reload" => {
-            let _ = window.eval("location.reload()");
+            let _ = front.eval("location.reload()");
         }
         "back" => {
-            let _ = window.eval("history.back()");
+            let _ = front.eval("history.back()");
         }
         "forward" => {
-            let _ = window.eval("history.forward()");
+            let _ = front.eval("history.forward()");
+        }
+        "elsewhere" => {
+            if let Ok(url) = front.url() {
+                if matches!(url.scheme(), "http" | "https") {
+                    open_elsewhere(app, &url);
+                }
+            }
         }
         _ => {}
     }
@@ -547,52 +690,34 @@ fn build_window(app: &AppHandle, theme: Option<&str>) -> tauri::Result<WebviewWi
                     return true;
                 }
             }
-            open_elsewhere(&app, url);
+            // A site (a link the page script didn't see), in vrana's own
+            // browser window; mail and the like, where they belong.
+            if matches!(url.scheme(), "http" | "https") {
+                open_in_app(&app, url.clone());
+            } else {
+                open_elsewhere(&app, url);
+            }
             false
         }
     };
     let on_new_window = {
         let app = app.clone();
         move |url: Url, _features| {
-            // A link in a new tab (⌘-click, target=_blank): the server's
-            // opens here, anything else in the browser.
+            // A link in a new tab (target=_blank, window.open): the server's
+            // pages open here, its files (a picture, a PDF) and other sites
+            // in vrana's own browser window, mail and the like elsewhere.
             match current_server(&app) {
-                Some(server) if same_server(&url, &server) => {
+                Some(server) if same_server(&url, &server) && !url.path().starts_with("/api/") => {
                     if let Some(window) = window(&app) {
                         let _ = window.navigate(url);
                     }
                 }
+                _ if matches!(url.scheme(), "http" | "https") => open_in_app(&app, url),
                 _ => open_elsewhere(&app, &url),
             }
             NewWindowResponse::Deny
         }
     };
-    let on_download = {
-        let app = app.clone();
-        move |_webview, event: DownloadEvent<'_>| {
-            let state = app.state::<AppState>();
-            match event {
-                // Downloads, under the name the server gave it (a number
-                // added if it's taken).
-                DownloadEvent::Requested { url, destination } => {
-                    state
-                        .downloads
-                        .lock()
-                        .unwrap()
-                        .insert(url.to_string(), destination.clone());
-                }
-                DownloadEvent::Finished { url, path, success } => {
-                    let went = state.downloads.lock().unwrap().remove(url.as_str());
-                    if let (true, Some(path)) = (success, path.or(went)) {
-                        let _ = app.opener().reveal_item_in_dir(path);
-                    }
-                }
-                _ => {}
-            }
-            true
-        }
-    };
-
     let mut builder = WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::App("index.html".into()))
         .title("vrana")
         .inner_size(1440.0, 900.0)
@@ -613,7 +738,7 @@ fn build_window(app: &AppHandle, theme: Option<&str>) -> tauri::Result<WebviewWi
         ))
         .on_navigation(on_navigation)
         .on_new_window(on_new_window)
-        .on_download(on_download)
+        .on_download(downloads(app))
         .on_page_load(|window, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 let _ = window.show();
@@ -664,6 +789,10 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
     if let WindowEvent::ThemeChanged(theme) = event {
         paint_title_bar(window.hwnd(), *theme == Theme::Dark);
     }
+    // vrana's own browser window closes as any window does.
+    if window.label() != WINDOW {
+        return;
+    }
     #[cfg(target_os = "macos")]
     match event {
         WindowEvent::CloseRequested { api, .. } => {
@@ -709,7 +838,12 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![startup, connect, remember_theme])
+        .invoke_handler(tauri::generate_handler![
+            startup,
+            connect,
+            remember_theme,
+            open_link
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = load_settings(&handle);

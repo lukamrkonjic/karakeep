@@ -805,6 +805,9 @@ importers:
       react-i18next:
         specifier: ^15.1.1
         version: 15.1.1(i18next@23.16.5)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react-image-crop:
+        specifier: ^11.1.2
+        version: 11.1.2(react@19.2.3)
       react-intersection-observer:
         specifier: ^9.13.1
         version: 9.13.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -15074,6 +15077,11 @@ packages:
         optional: true
       react-native:
         optional: true
+
+  react-image-crop@11.1.2:
+    resolution: {integrity: sha512-+0Pc2fxpwKL4u4oLmdKBw8XSwUceFbXbKEHvFOlsl/MGB1OVNic4uBlAPmEHGXYgoJIq+b63xHbc/aJMG0AVkA==}
+    peerDependencies:
+      react: 19.2.3
 
   react-intersection-observer@9.13.1:
     resolution: {integrity: sha512-tSzDaTy0qwNPLJHg8XZhlyHTgGW6drFKTtvjdL+p6um12rcnp8Z5XstE+QNBJ7c64n5o0Lj4ilUleA41bmDoMw==}
@@ -33786,6 +33794,10 @@ snapshots:
       react: 19.2.3
     optionalDependencies:
       react-dom: 19.2.3(react@19.2.3)
+
+  react-image-crop@11.1.2(react@19.2.3):
+    dependencies:
+      react: 19.2.3
 
   react-intersection-observer@9.13.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:

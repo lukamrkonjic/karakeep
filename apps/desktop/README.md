@@ -16,8 +16,13 @@ Mac, Edge's WebView2 on Windows.
 - **Mac: closing the window keeps vrana running.** Click the Dock icon to get
   it back exactly as you left it; ⌘Q quits. (On Windows, closing quits, as
   Windows apps do, and opening it again focuses the open window.)
-- **Links to other sites open in your browser.** vrana's own links, even
-  ⌘/Ctrl-clicked, open in the window.
+- **Links to other sites open in vrana's own browser window** — a picture's
+  original link, say. Hold ⌘ (Ctrl on Windows) or Shift, or middle-click,
+  to open one in your usual browser instead. The browser window is one
+  window, reused, titled with its page; links in it stay in it, its pages
+  get nothing of the app's, and closing it closes it. vrana's own links,
+  even ⌘/Ctrl-clicked, open in vrana's window; its files (a picture, a PDF)
+  opened as a new tab go to the browser window.
 - **Downloads** go to your Downloads folder and are shown in Finder or
   Explorer.
 - **Files dropped on the window** go to vrana's upload, as in the browser.
@@ -27,8 +32,10 @@ Mac, Edge's WebView2 on Windows.
   page; it follows the theme.
 - **The window remembers** its size and place.
 - **Keys:** back / forward ⌘[ ⌘] or a two-finger swipe (Mac), Alt+← →
-  (Windows); reload ⌘R / Ctrl+R; zoom ⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0.
-- **Menu (Mac):** vrana → Settings… (⌘,) and Change Server….
+  (Windows); reload ⌘R / Ctrl+R; zoom ⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0 — in
+  whichever window is in front.
+- **Menu (Mac):** vrana → Settings… (⌘,) and Change Server…; View → Open
+  in Browser (⌘⇧O) takes the page in front to your usual browser.
 - **Can't reach the server** (the NAS off, or Tailscale off on this computer):
   a page says so, with the address to try again or change.
 

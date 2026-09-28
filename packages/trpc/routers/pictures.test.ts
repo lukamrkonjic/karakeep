@@ -21,7 +21,7 @@ import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { colourSortKey } from "@karakeep/shared/utils/colours";
 
 import type { CustomTestContext } from "../testUtils";
-import { defaultBeforeEach } from "../testUtils";
+import { defaultBeforeEach, getTestQueueMocks } from "../testUtils";
 
 beforeEach<CustomTestContext>(defaultBeforeEach(true));
 
@@ -244,6 +244,88 @@ describe("Pictures", () => {
     await caller.pictures.updateSettings({ describeEnabled: false });
     expect(await search("red chair")).toMatchObject({ pictures: "off" });
     expect(titles(await search("red chair"))).toEqual(["c", "a"]);
+  });
+
+  test<CustomTestContext>("a picture's file replaced by its crop, for good", async ({
+    apiCallers,
+    db,
+  }) => {
+    const api = apiCallers[0];
+    const userId = (await api.users.whoami()).id;
+    const id = await picture(api, db, "photo", 0);
+    await api.bookmarks.updateTags({
+      bookmarkId: id,
+      attach: [{ tagName: "kept" }],
+      detach: [],
+    });
+    const oldAsset = await db.query.assets.findFirst({
+      where: eq(assets.id, "asset-photo"),
+    });
+    // What the web app uploads: a file of the user's, not a bookmark's yet.
+    const upload = (assetId: string, contentType = "image/jpeg") =>
+      db.insert(assets).values({
+        id: assetId,
+        assetType: AssetTypes.UNKNOWN,
+        contentType,
+        size: 500,
+        userId,
+      });
+    await upload("cropped");
+    const queues = getTestQueueMocks();
+    queues.assetPreprocessingEnqueue.mockClear();
+
+    expect(
+      await api.pictures.replacePicture({ bookmarkId: id, assetId: "cropped" }),
+    ).toEqual({ assetId: "cropped" });
+    const bookmark = await api.bookmarks.getBookmark({ bookmarkId: id });
+    expect(bookmark.content).toMatchObject({
+      type: BookmarkTypes.ASSET,
+      assetId: "cropped",
+    });
+    expect(bookmark.tags.map((t) => t.name)).toEqual(["kept"]);
+    // The old file is gone; the new one is the bookmark's, as the old was.
+    expect(
+      await db.query.assets.findFirst({ where: eq(assets.id, "asset-photo") }),
+    ).toBeUndefined();
+    expect(
+      await db.query.assets.findFirst({ where: eq(assets.id, "cropped") }),
+    ).toMatchObject({ bookmarkId: id, assetType: oldAsset!.assetType });
+    // Its text, tags, fingerprint and colours done again.
+    expect(queues.assetPreprocessingEnqueue).toHaveBeenCalledWith(
+      { bookmarkId: id, fixMode: false },
+      expect.anything(),
+    );
+
+    // Not someone else's picture, a note, another bookmark's file, or
+    // something that isn't a picture.
+    await upload("other-crop");
+    await expect(
+      apiCallers[1].pictures.replacePicture({
+        bookmarkId: id,
+        assetId: "other-crop",
+      }),
+    ).rejects.toThrow(/Not found/);
+    const note = await api.bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "a note",
+    });
+    await expect(
+      api.pictures.replacePicture({
+        bookmarkId: note.id,
+        assetId: "other-crop",
+      }),
+    ).rejects.toThrow(/Only a picture/);
+    await picture(api, db, "another", 10);
+    await expect(
+      api.pictures.replacePicture({
+        bookmarkId: id,
+        assetId: "asset-another",
+      }),
+    ).rejects.toThrow(/new upload/);
+    await upload("a-pdf", "application/pdf");
+    await expect(
+      api.pictures.replacePicture({ bookmarkId: id, assetId: "a-pdf" }),
+    ).rejects.toThrow(/isn't a picture/);
   });
 
   test<CustomTestContext>("list suggestions: added, dismissed, or already there", async ({

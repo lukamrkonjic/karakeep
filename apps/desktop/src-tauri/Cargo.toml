@@ -1,6 +1,6 @@
 [package]
 name = "vrana"
-version = "0.1.1"
+version = "0.1.2"
 description = "vrana as a Mac or Windows app: a Tauri window around the web app"
 edition = "2021"
 publish = false

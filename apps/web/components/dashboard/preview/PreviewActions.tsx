@@ -6,17 +6,20 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
-import { Download, Trash2 } from "lucide-react";
+import { Crop, Download, Trash2 } from "lucide-react";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
+import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import DeleteBookmarkConfirmationDialog from "../bookmarks/DeleteBookmarkConfirmationDialog";
 import { ArchivedActionIcon } from "../bookmarks/icons";
+import { CropPicture } from "./CropPicture";
 
 /**
  * Fork: the details panel's footer — Download (the picture, video or PDF the
- * bookmark is; Eagle's Export), Archive and Delete, labelled and left-aligned
+ * bookmark is; Eagle's Export), Crop (a picture's, for good: CropPicture),
+ * Archive and Delete, labelled and left-aligned
  * under a divider, like the rest of the panel. It replaced upstream's centred
  * icon row (ActionBar): every field is edited in place now, so its edit
  * button went, and the favourite star is a Properties row.
@@ -33,6 +36,13 @@ export function PreviewActions({
 }) {
   const { t } = useTranslation();
   const [deleting, setDeleting] = useState(false);
+  const [cropping, setCropping] = useState(false);
+  const picture =
+    canEdit &&
+    bookmark.content.type === BookmarkTypes.ASSET &&
+    bookmark.content.assetType === "image"
+      ? bookmark.content
+      : null;
   const { mutate: archive, isPending } = useUpdateBookmark({
     onSuccess: (resp) => {
       toast({
@@ -68,6 +78,17 @@ export function PreviewActions({
               <Download size={16} strokeWidth={1.75} />
               {t("actions.download", { defaultValue: "Download" })}
             </a>
+          </Button>
+        )}
+        {picture && (
+          <Button
+            variant="ghost"
+            size="none"
+            className={cn(button, "hover:text-foreground")}
+            onClick={() => setCropping(true)}
+          >
+            <Crop size={16} strokeWidth={1.75} />
+            Crop
           </Button>
         )}
         {canEdit && (
@@ -113,6 +134,15 @@ export function PreviewActions({
         open={deleting}
         setOpen={setDeleting}
       />
+      {picture && (
+        <CropPicture
+          bookmarkId={bookmark.id}
+          assetId={picture.assetId}
+          fileName={picture.fileName}
+          open={cropping}
+          onOpenChange={setCropping}
+        />
+      )}
     </div>
   );
 }
