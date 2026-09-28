@@ -583,32 +583,6 @@ export function describeSmartValue(
   }
 }
 
-/** A rule in words: "Colour is Red", "Picture shows “bag”". */
-export function describeSmartRule(
-  rule: ZSmartRule,
-  lookup?: { listName?: (id: string) => string | undefined },
-): string {
-  const field = FIELDS.get(rule.field);
-  const op = smartOperator(rule);
-  if (!field || !op) {
-    return "An unknown rule";
-  }
-  return [
-    field.label,
-    op.label,
-    op.value ? describeSmartValue(op.value, rule.value ?? "", lookup) : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-/** A group's header in words: "All of these are true". */
-export function describeSmartGroup(group: ZSmartRuleGroup): string {
-  return `${group.match === "all" ? "All" : "Any"} of these ${
-    group.negate ? "are false" : "are true"
-  }`;
-}
-
 const PLURALS: Record<string, string> = {
   picture: "Pictures",
   video: "Videos",

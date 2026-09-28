@@ -17,7 +17,6 @@ import {
   ListPrivacyLabel,
 } from "./ListHeaderComponents";
 import { ListSubscriptionNote } from "./ListSubscriptionNote";
-import { SmartListNote } from "./smart/SmartListNote";
 
 export default function ListHeader({
   initialData,
@@ -76,13 +75,6 @@ export default function ListHeader({
             )}
             <ListPrivacyLabel list={list} />
             <ListSubscriptionNote list={list} />
-            {/* Fork: its rules in words; its owner changes them from here. */}
-            {list.type === "smart" && list.query && (
-              <>
-                <span aria-hidden>·</span>
-                <SmartListNote list={list} />
-              </>
-            )}
             <ListCollaboratorsIcons list={list} />
           </div>
         </div>

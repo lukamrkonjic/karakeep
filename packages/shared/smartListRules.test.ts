@@ -4,7 +4,6 @@ import type { ZSmartListRules, ZSmartRule } from "./types/smartLists";
 import { parseSearchQuery } from "./searchQueryParser";
 import {
   compileSmartRules,
-  describeSmartRule,
   newSmartRule,
   SMART_FIELDS,
   smartRuleMatcher,
@@ -208,27 +207,6 @@ describe("Smart list rules", () => {
     );
     // Read back, the rules mean the same.
     expect(compileSmartRules(smartRulesFromQuery(query!)).query).toEqual(query);
-  });
-
-  test("rules in words", () => {
-    expect(
-      describeSmartRule(
-        { field: "lists", op: "contains", value: "l1" },
-        { listName: (id) => (id === "l1" ? "Art" : undefined) },
-      ),
-    ).toEqual("Lists contains Art");
-    expect(
-      describeSmartRule({ field: "picture", op: "shows", value: "bag" }),
-    ).toEqual("Picture shows “bag”");
-    expect(
-      describeSmartRule({ field: "added", op: "in_last", value: "1w" }),
-    ).toEqual("Date added is in the last 1 week");
-    expect(
-      describeSmartRule({ field: "colour", op: "is", value: "red" }),
-    ).toEqual("Colour is Red");
-    expect(describeSmartRule({ field: "tags", op: "empty" })).toEqual(
-      "Tags is empty",
-    );
   });
 });
 
