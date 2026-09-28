@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ui/action-button";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,62 @@ import {
  * Fork: a new smart list, or one to change, the way Eagle makes a smart
  * folder: a name, then rules (SmartRulesEditor), and how many bookmarks
  * they find as they're edited. The sidebar's Smart lists "+", a smart list's
- * "…" → Edit, and its header open it.
+ * "…" → Edit (and "New nested smart list") and the search bar's Save open it.
  */
+
+/**
+ * How long a smart list's rules, once read, are taken as they are. Its "…"
+ * menu reads them as it opens (PrefetchSmartListRules), so Edit opens with
+ * them in place, at its final size; saving them reads them again.
+ */
+const RULES_FRESH = { staleTime: 30_000, gcTime: 30_000 };
+
+/** Rendered in a smart list's "…" menu: reads its rules as it opens. */
+export function PrefetchSmartListRules({ listId }: { listId: string }) {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    void queryClient.prefetchQuery(
+      api.smartLists.rules.queryOptions({ listId }, RULES_FRESH),
+    );
+  }, [api, queryClient, listId]);
+  return null;
+}
+
+/** Its title and what it is — there while its rules load too. */
+function SmartListHeader({ editing }: { editing: boolean }) {
+  return (
+    <DialogHeader className="px-6 pb-4 pt-6">
+      <DialogTitle>
+        {editing ? "Edit smart list" : "New smart list"}
+      </DialogTitle>
+      <DialogDescription>
+        A smart list collects everything that meets its rules, and keeps itself
+        up to date.
+      </DialogDescription>
+    </DialogHeader>
+  );
+}
+
+/**
+ * While its rules load: unseen for a moment (they're usually there by then,
+ * and the dialog opens as it will stay), then a spinner.
+ */
+function RulesLoading() {
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div
+      className="flex h-40 items-center justify-center"
+      data-smart-pending={waited ? undefined : ""}
+    >
+      <LoadingSpinner />
+    </div>
+  );
+}
 
 function IconPicker({
   value,
@@ -227,13 +281,7 @@ function SmartListForm({
         save();
       }}
     >
-      <DialogHeader className="px-6 pb-4 pt-6">
-        <DialogTitle>{list ? "Edit smart list" : "New smart list"}</DialogTitle>
-        <DialogDescription>
-          A smart list collects everything that meets its rules, and keeps
-          itself up to date.
-        </DialogDescription>
-      </DialogHeader>
+      <SmartListHeader editing={!!list} />
       <div className="flex min-h-0 flex-col gap-5 overflow-y-auto px-6 pb-2">
         <div className="flex items-center gap-2">
           <IconPicker value={icon} onChange={setIcon} />
@@ -291,25 +339,33 @@ function EditSmartList({
   onDone: () => void;
 }) {
   const api = useTRPC();
-  const { data, error } = useQuery(
-    api.smartLists.rules.queryOptions({ listId: list.id }, { gcTime: 0 }),
+  const { data, error, isFetching } = useQuery(
+    api.smartLists.rules.queryOptions({ listId: list.id }, RULES_FRESH),
   );
-  if (error) {
-    return (
-      <p className="p-6 text-sm text-destructive">
-        Couldn&apos;t read this smart list&apos;s rules: {error.message}
-      </p>
-    );
+  // The rules as they are as it opens (read as its menu opened, or now; a
+  // read under way is waited for). From then on the form keeps its own.
+  const [initialRules, setInitialRules] = useState<ZSmartListRules | null>(
+    null,
+  );
+  if (!initialRules && data && !isFetching && !error) {
+    setInitialRules(data.rules);
   }
-  if (!data) {
+  if (!initialRules) {
     return (
-      <div className="flex h-40 items-center justify-center">
-        <LoadingSpinner />
-      </div>
+      <>
+        <SmartListHeader editing />
+        {error ? (
+          <p className="px-6 pb-6 text-sm text-destructive">
+            Couldn&apos;t read this smart list&apos;s rules: {error.message}
+          </p>
+        ) : (
+          <RulesLoading />
+        )}
+      </>
     );
   }
   return (
-    <SmartListForm list={list} initialRules={data.rules} onDone={onDone} />
+    <SmartListForm list={list} initialRules={initialRules} onDone={onDone} />
   );
 }
 
@@ -338,7 +394,18 @@ export function SmartListDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-3xl">
+      {/* Unseen while its rules are about to arrive (RulesLoading). */}
+      <DialogContent
+        className="flex max-h-[90vh] flex-col gap-0 p-0 outline-none sm:max-w-3xl [&:has([data-smart-pending])]:invisible"
+        // Editing, nothing is picked out as it opens (its first control
+        // wore a focus ring): the dialog itself has the focus.
+        onOpenAutoFocus={(e) => {
+          if (list) {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }
+        }}
+      >
         {/* Mounted while open: every opening starts from the list as it is. */}
         {list ? (
           <EditSmartList list={list} onDone={() => setOpen(false)} />

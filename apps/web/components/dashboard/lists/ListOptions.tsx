@@ -34,7 +34,10 @@ import { ListSubscriptionsModal } from "./ListSubscriptionsModal";
 import { ManageCollaboratorsModal } from "./ManageCollaboratorsModal";
 import { MergeListModal } from "./MergeListModal";
 import { ShareListModal } from "./ShareListModal";
-import { SmartListDialog } from "./smart/SmartListDialog";
+import {
+  PrefetchSmartListRules,
+  SmartListDialog,
+} from "./smart/SmartListDialog";
 
 // The view toggles and the leave/delete actions come after "Sort".
 const AFTER_SORT = new Set([
@@ -271,6 +274,10 @@ export function ListOptions({
       />
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
+        {/* Fork: Edit then opens with the rules in place. */}
+        {list.type === "smart" && isOwner && (
+          <PrefetchSmartListRules listId={list.id} />
+        )}
         <SelectMenuItem current={onThisList} />
         {visibleItems
           .filter((item) => !AFTER_SORT.has(item.id))
