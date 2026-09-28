@@ -1,87 +1,55 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useClientConfig } from "@/lib/clientConfig";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 
-import type { ZBookmarkSearchMode } from "@karakeep/shared/types/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 
 import { useInSearchPageStore } from "../store/useInSearchPageStore";
 
-const DEFAULT_SEARCH_MODE: ZBookmarkSearchMode = "fts";
-
 /**
- * Fork: "pictures" — pictures found by describing them (Settings →
- * Pictures). The web app's own mode: the search page shows it with
- * PictureSearchResults instead of searchBookmarks.
+ * Fork: one search — the words, what's in the pictures and their colours
+ * (routers/pictures.ts search), with no mode to pick. An old link's ?mode=
+ * is just left out.
  */
-export type SearchMode = ZBookmarkSearchMode | "pictures";
-
-function parseSearchMode(value: string | null): SearchMode {
-  if (value === "semantic" || value === "hybrid" || value === "pictures") {
-    return value;
-  }
-  return DEFAULT_SEARCH_MODE;
-}
-
-function buildSearchHref(query: string, mode: SearchMode) {
+function buildSearchHref(query: string) {
   const params = new URLSearchParams();
   if (query) {
     params.set("q", query);
-  }
-  if (mode !== DEFAULT_SEARCH_MODE) {
-    params.set("mode", mode);
   }
   const queryString = params.toString();
   return `/dashboard/search${queryString ? `?${queryString}` : ""}`;
 }
 
 export function useBookmarkSearchState() {
-  const { semanticSearchEnabled } = useClientConfig().search;
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("q") ?? "";
-  const searchMode = parseSearchMode(searchParams.get("mode"));
   const pathname = usePathname();
-  const lastSearch = useRef({ searchQuery, searchMode });
+  const lastSearch = useRef(searchQuery);
 
   // Only update the effective search state when on the search page.
-  // This prevents the query or mode from resetting when intercepting routes
-  // change the URL (e.g., opening a bookmark preview dialog).
+  // This prevents the query from resetting when intercepting routes change
+  // the URL (e.g., opening a bookmark preview dialog).
   if (pathname.startsWith("/dashboard/search")) {
-    lastSearch.current = { searchQuery, searchMode };
+    lastSearch.current = searchQuery;
   }
 
-  const effectiveSearch = lastSearch.current;
+  const effectiveQuery = lastSearch.current;
   const parsed = useMemo(
-    () => parseSearchQuery(effectiveSearch.searchQuery),
-    [effectiveSearch.searchQuery],
+    () => parseSearchQuery(effectiveQuery),
+    [effectiveQuery],
   );
-  const selectedSearchMode: SearchMode =
-    semanticSearchEnabled || effectiveSearch.searchMode === "pictures"
-      ? effectiveSearch.searchMode
-      : DEFAULT_SEARCH_MODE;
-
-  // A query with no text (e.g. one made up entirely of qualifiers like
-  // `is:fav`) has nothing to embed, so it can only be served by full-text
-  // search. Keep the selected mode around for the UI, but search with fts.
-  const hasQueryText = parsed.text.trim().length > 0;
 
   return {
-    searchQuery: effectiveSearch.searchQuery,
-    searchMode: selectedSearchMode,
-    effectiveSearchMode:
-      hasQueryText && selectedSearchMode !== "pictures"
-        ? selectedSearchMode
-        : DEFAULT_SEARCH_MODE,
+    searchQuery: effectiveQuery,
     parsedSearchQuery: parsed,
   };
 }
 
 export function useDoBookmarkSearch() {
   const router = useRouter();
-  const { searchQuery, searchMode } = useBookmarkSearchState();
+  const { searchQuery } = useBookmarkSearchState();
   const isInSearchPage = useInSearchPageStore((val) => val.inSearchPage);
   const timeoutId = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -94,19 +62,12 @@ export function useDoBookmarkSearch() {
     };
   }, []);
 
-  const navigateToSearch = useCallback(
-    (query: string, mode: SearchMode) => {
-      router.replace(buildSearchHref(query, mode));
-    },
-    [router],
-  );
-
   const doSearch = useCallback(
     (val: string) => {
       timeoutId.current = null;
-      navigateToSearch(val, searchMode);
+      router.replace(buildSearchHref(val));
     },
-    [navigateToSearch, searchMode],
+    [router],
   );
 
   const debounceSearch = useCallback(
@@ -121,33 +82,29 @@ export function useDoBookmarkSearch() {
     [doSearch],
   );
 
-  const setSearchMode = useCallback(
-    (mode: SearchMode, query = searchQuery) => {
-      if (timeoutId.current) {
-        clearTimeout(timeoutId.current);
-        timeoutId.current = null;
-      }
-      navigateToSearch(query, mode);
-    },
-    [navigateToSearch, searchQuery],
-  );
-
   return {
     doSearch,
     debounceSearch,
-    setSearchMode,
     searchQuery,
-    searchMode,
     isInSearchPage,
   };
 }
 
+/** Typing goes to the URL at once; the search runs on the pauses. */
+function useSettled(value: string, ms: number) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return settled;
+}
+
 export function useBookmarkSearch() {
   const api = useTRPC();
-  const { searchQuery, effectiveSearchMode } = useBookmarkSearchState();
+  const { searchQuery } = useBookmarkSearchState();
+  const text = useSettled(searchQuery, 300);
   const sortOrder = useSortOrderStore((state) => state.sortOrder);
-  const effectiveSortOrder =
-    effectiveSearchMode === "fts" ? sortOrder : ("relevance" as const);
 
   const {
     data,
@@ -158,17 +115,17 @@ export function useBookmarkSearch() {
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery(
-    api.bookmarks.searchBookmarks.infiniteQueryOptions(
-      {
-        text: searchQuery,
-        searchMode: effectiveSearchMode,
-        sortOrder: effectiveSortOrder,
-      },
+    api.pictures.search.infiniteQueryOptions(
+      { text, sortOrder },
       {
         placeholderData: keepPreviousData,
         gcTime: 0,
-        initialCursor: null,
+        initialCursor: 0,
         getNextPageParam: (lastPage) => lastPage.nextCursor,
+        // What's in the pictures follows once the workers have the
+        // description's fingerprint.
+        refetchInterval: (query) =>
+          query.state.data?.pages[0]?.pictures === "preparing" ? 1500 : false,
       },
     ),
   );
@@ -181,5 +138,6 @@ export function useBookmarkSearch() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    picturesPreparing: data?.pages[0]?.pictures === "preparing",
   };
 }

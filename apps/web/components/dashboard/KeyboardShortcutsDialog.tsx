@@ -151,6 +151,11 @@ export default function KeyboardShortcutsDialog({
           keys: [`${searchModifier} K`],
           description: t("keyboard_shortcuts.focus_search_alt"),
         },
+        // Fork: SidebarCollapseToggle.
+        {
+          keys: [`${searchModifier} B`],
+          description: t("keyboard_shortcuts.toggle_sidebar"),
+        },
       ],
     },
   ];

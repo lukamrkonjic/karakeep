@@ -3,6 +3,7 @@ import { and, count, eq, inArray, notExists, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { ZPictureThumb } from "@karakeep/shared/types/pictures";
+import type { Matcher } from "@karakeep/shared/types/search";
 import {
   bookmarkAssets,
   bookmarkLists,
@@ -31,8 +32,12 @@ import {
   requestPictureFingerprints,
   requestPicturePalettes,
 } from "@karakeep/shared-server";
+import serverConfig from "@karakeep/shared/config";
+import { EmbeddingClientFactory } from "@karakeep/shared/inference";
+import logger from "@karakeep/shared/logger";
+import { getSearchClient } from "@karakeep/shared/search";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
-import { zBookmarkSchema } from "@karakeep/shared/types/bookmarks";
+import { zBookmarkSchema, zSortOrder } from "@karakeep/shared/types/bookmarks";
 import {
   DESCRIBE_LEVELS,
   SIMILAR_LEVELS,
@@ -48,11 +53,13 @@ import {
   colourQueryScore,
   parseColourQuery,
 } from "@karakeep/shared/utils/colours";
+import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
 import { userPictureIndex, vectorOf } from "../lib/pictureIndex";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
+import { reciprocalRankFusion } from "../lib/searchRanking";
 import { Bookmark } from "../models/bookmarks";
 import { List, ManualList } from "../models/lists";
 
@@ -124,6 +131,7 @@ function settingsOf(row: typeof pictureSettingsTable.$inferSelect) {
 async function describedVector(
   ctx: AuthedContext,
   description: string,
+  waitMs = DESCRIBE_WAIT_MS,
 ): Promise<Float32Array | null> {
   const id = pictureTextQueryId(description);
   const find = () =>
@@ -160,7 +168,7 @@ async function describedVector(
     { queryId: id },
     { idempotencyKey: `picture-text:${id}` },
   );
-  const until = Date.now() + DESCRIBE_WAIT_MS;
+  const until = Date.now() + waitMs;
   while (Date.now() < until) {
     await new Promise((r) => setTimeout(r, 150));
     row = await find();
@@ -244,6 +252,196 @@ function openSuggestions(ctx: AuthedContext) {
 }
 
 const zSuggestionIds = z.array(z.string()).min(1).max(500);
+
+/** Words are looked up in at most this many bookmarks, to merge. */
+const WORD_RESULTS = 1000;
+/**
+ * How long the search bar waits for a new description's fingerprint before
+ * answering with the rest (it looks again: `pictures: "preparing"`).
+ */
+const SEARCH_DESCRIBE_WAIT_MS = 1500;
+/** By meaning: as searchBookmarks' hybrid search (routers/bookmarks.ts). */
+const MEANING_RESULTS = 100;
+const MEANING_SCORE_THRESHOLD = 0.6;
+
+/** The colours a query asks for (color:red, #c8a27a), however nested. */
+function coloursIn(matcher: Matcher | undefined): string[] {
+  switch (matcher?.type) {
+    case "color":
+      return matcher.inverse ? [] : [matcher.color];
+    case "and":
+    case "or":
+      return matcher.matchers.flatMap(coloursIn);
+    default:
+      return [];
+  }
+}
+
+/** Only these (a query's qualifiers), and only the user's. */
+function onlyOf(ctx: AuthedContext, allowed: string[] | null) {
+  return [
+    ...(allowed
+      ? [{ type: "in" as const, field: "id" as const, values: allowed }]
+      : []),
+    { type: "eq" as const, field: "userId" as const, value: ctx.user.id },
+  ];
+}
+
+/** Bookmarks with the words (the search index), best first. */
+async function byWords(
+  ctx: AuthedContext,
+  words: string,
+  allowed: string[] | null,
+): Promise<string[]> {
+  try {
+    const client = await getSearchClient();
+    if (!client) {
+      return [];
+    }
+    const found = await client.search({
+      query: words,
+      filter: onlyOf(ctx, allowed),
+      sort: [{ field: "createdAt", order: "desc" }],
+      limit: WORD_RESULTS,
+    });
+    return found.hits.map((hit) => hit.id);
+  } catch (e) {
+    logger.warn(`[search] Searching the words failed: ${e}`);
+    return [];
+  }
+}
+
+/** Bookmarks close in meaning, where the server has text embeddings. */
+async function byMeaning(
+  ctx: AuthedContext,
+  words: string,
+  allowed: string[] | null,
+): Promise<string[]> {
+  const { experimentalFeatures, embedding } = serverConfig;
+  if (
+    !experimentalFeatures.semanticSearch ||
+    !embedding.enableAutoIndexing ||
+    !embedding.isConfigured
+  ) {
+    return [];
+  }
+  try {
+    const embeddings = EmbeddingClientFactory.build();
+    const store = await getVectorStoreClient();
+    if (!embeddings || !store) {
+      return [];
+    }
+    const [vector] = (await embeddings.generateEmbeddingFromText([words]))
+      .embeddings;
+    if (!vector) {
+      return [];
+    }
+    const found = await store.search({
+      vector,
+      filter: onlyOf(ctx, allowed),
+      limit: MEANING_RESULTS,
+      rankingScoreThreshold: MEANING_SCORE_THRESHOLD,
+    });
+    return found.hits.map((hit) => hit.id);
+  } catch (e) {
+    logger.warn(`[search] Searching by meaning failed: ${e}`);
+    return [];
+  }
+}
+
+/**
+ * Pictures the words describe, best first; null while the workers make the
+ * description's fingerprint.
+ */
+async function byDescription(
+  ctx: AuthedContext,
+  words: string,
+  allowed: ReadonlySet<string> | null,
+  level: keyof typeof DESCRIBE_LEVELS,
+): Promise<string[] | null> {
+  const description = normalizeDescription(words);
+  if (!description) {
+    return [];
+  }
+  let vector: Float32Array | null;
+  try {
+    vector = await describedVector(ctx, description, SEARCH_DESCRIBE_WAIT_MS);
+  } catch (e) {
+    // It's tried again after a minute; the rest answers meanwhile.
+    logger.warn(`[search] Searching by description failed: ${e}`);
+    return [];
+  }
+  if (!vector) {
+    return null;
+  }
+  const loaded = await userPictureIndex(ctx.db, ctx.user.id);
+  return rankPictures(loaded.index, vector, {
+    minSimilarity: DESCRIBE_LEVELS[level],
+    only: allowed ? (id) => allowed.has(id) : undefined,
+    limit: MAX_RESULTS,
+  }).map((r) => r.id);
+}
+
+/** Pictures with any of the colours, the most of them first. */
+async function byColours(
+  ctx: AuthedContext,
+  colours: string[],
+  allowed: ReadonlySet<string> | null,
+): Promise<string[]> {
+  if (colours.length === 0) {
+    return [];
+  }
+  const rows = await ctx.db
+    .select({
+      id: picturePalettesTable.bookmarkId,
+      palette: picturePalettesTable.colours,
+    })
+    .from(picturePalettesTable)
+    .where(eq(picturePalettesTable.userId, ctx.user.id));
+  return rows
+    .filter((row) => !allowed || allowed.has(row.id))
+    .map((row) => {
+      const palette = row.palette ?? [];
+      const scores = colours
+        .filter((colour) => colourQueryMatches(palette, colour))
+        .map((colour) => colourQueryScore(palette, colour));
+      return { id: row.id, match: scores.length ? Math.max(...scores) : -1 };
+    })
+    .filter((row) => row.match >= 0)
+    .sort((a, b) => b.match - a.match)
+    .slice(0, MAX_COLOUR_RESULTS)
+    .map((row) => row.id);
+}
+
+/** These bookmarks (null: all the user's), by when they were saved. */
+async function byDate(
+  ctx: AuthedContext,
+  ids: string[] | null,
+  order: "asc" | "desc",
+): Promise<string[]> {
+  const rows: { id: string; createdAt: Date }[] = [];
+  for (const chunk of ids ? chunks(ids) : [null]) {
+    rows.push(
+      ...(await ctx.db
+        .select({ id: bookmarks.id, createdAt: bookmarks.createdAt })
+        .from(bookmarks)
+        .where(
+          and(
+            eq(bookmarks.userId, ctx.user.id),
+            chunk ? inArray(bookmarks.id, chunk) : undefined,
+          ),
+        )),
+    );
+  }
+  const sign = order === "asc" ? 1 : -1;
+  return rows
+    .sort(
+      (a, b) =>
+        sign * (a.createdAt.getTime() - b.createdAt.getTime()) ||
+        a.id.localeCompare(b.id),
+    )
+    .map((row) => row.id);
+}
 
 export const picturesAppRouter = router({
   settings: picturesProcedure
@@ -456,54 +654,88 @@ export const picturesAppRouter = router({
     }),
 
   /**
-   * Search → Pictures: pictures by what's in them. The search's qualifiers
-   * (list:, #tag, is:fav…) narrow it down as they do any search.
+   * The search bar's one search: bookmarks by their words (titles, text,
+   * URLs, tags — the search index), pictures by what's in them (their
+   * fingerprints), by colour (color:red, #c8a27a) and, where the server has
+   * text embeddings, by meaning — the search language's qualifiers (list:,
+   * is:fav…) narrowing all of it. Each ranks on its own and they're merged
+   * by rank, so what several find rises; newest or oldest first, it's all
+   * of them by date. A new description's fingerprint can take the workers a
+   * moment (the first time, the text model downloads): until it's there, the
+   * rest answers, with `pictures: "preparing"`.
    */
-  searchByDescription: picturesProcedure
+  search: picturesProcedure
     .input(
       z.object({
         text: z.string().max(1000),
+        sortOrder: zSortOrder.optional(),
         cursor: z.number().int().min(0).nullish(),
       }),
     )
     .output(
       zPageOfPictures.extend({
-        // "preparing": the workers are getting the text model ready.
-        status: z.enum(["ready", "preparing", "off"]),
+        pictures: z.enum(["on", "preparing", "off"]),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const none = { bookmarks: [], nextCursor: null, total: 0 };
-      const settings = await getPictureSettings(ctx.db, ctx.user.id);
-      if (!settings.describeEnabled) {
-        return { ...none, status: "off" as const };
-      }
+      const sortOrder = input.sortOrder ?? "relevance";
       const parsed = parseSearchQuery(input.text);
-      const description = normalizeDescription(parsed.text);
-      if (!description) {
-        return { ...none, status: "ready" as const };
-      }
-      const vector = await describedVector(ctx, description);
-      if (!vector) {
-        return { ...none, status: "preparing" as const };
-      }
-      const allowed = parsed.matcher
-        ? new Set(await getBookmarkIdsFromMatcher(ctx, parsed.matcher))
+      const words = parsed.text.trim();
+      const settings = await getPictureSettings(ctx.db, ctx.user.id);
+      let pictures: "on" | "preparing" | "off" = settings.describeEnabled
+        ? "on"
+        : "off";
+      const allowedIds = parsed.matcher
+        ? await getBookmarkIdsFromMatcher(ctx, parsed.matcher)
         : null;
-      const loaded = await userPictureIndex(ctx.db, ctx.user.id);
-      const ranked = rankPictures(loaded.index, vector, {
-        minSimilarity: DESCRIBE_LEVELS[settings.describeLevel],
-        only: allowed ? (id) => allowed.has(id) : undefined,
-        limit: MAX_RESULTS,
-      });
-      return {
-        ...(await pageOf(
+      const allowed = allowedIds ? new Set(allowedIds) : null;
+      const colours = settings.palettesEnabled ? coloursIn(parsed.matcher) : [];
+
+      let ranked: string[];
+      if (allowedIds?.length === 0) {
+        ranked = [];
+      } else if (words) {
+        const [wordHits, meaningHits, pictureHits, colourHits] =
+          await Promise.all([
+            byWords(ctx, words, allowedIds),
+            byMeaning(ctx, words, allowedIds),
+            settings.describeEnabled
+              ? byDescription(ctx, words, allowed, settings.describeLevel)
+              : [],
+            byColours(ctx, colours, allowed),
+          ]);
+        if (pictureHits === null) {
+          pictures = "preparing";
+        }
+        const found = [wordHits, meaningHits, pictureHits ?? []];
+        // The words find; a colour only puts the most of it first.
+        const foundIds = new Set(found.flat());
+        const colourFirst = colourHits.filter((id) => foundIds.has(id));
+        ranked =
+          sortOrder === "relevance"
+            ? reciprocalRankFusion(
+                [...found, colourFirst].map((ids) => ids.map((id) => ({ id }))),
+              ).map((hit) => hit.id)
+            : await byDate(ctx, [...foundIds], sortOrder);
+      } else {
+        // Qualifiers only (is:fav, list:…): all they match, by date — for a
+        // colour, the most of it first.
+        const dated = await byDate(
           ctx,
-          ranked.map((r) => r.id),
-          input.cursor ?? 0,
-          PAGE,
-        )),
-        status: "ready" as const,
+          allowedIds,
+          sortOrder === "asc" ? "asc" : "desc",
+        );
+        if (sortOrder === "relevance" && colours.length > 0) {
+          const first = await byColours(ctx, colours, allowed);
+          const firstIds = new Set(first);
+          ranked = [...first, ...dated.filter((id) => !firstIds.has(id))];
+        } else {
+          ranked = dated;
+        }
+      }
+      return {
+        ...(await pageOf(ctx, ranked, input.cursor ?? 0, PAGE)),
+        pictures,
       };
     }),
 

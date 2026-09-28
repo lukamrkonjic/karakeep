@@ -36,11 +36,8 @@ function useColourResults(colour: string) {
   );
 }
 
-/**
- * The pictures with a colour in them, the most of it first — also what
- * Search → Pictures shows for a colour typed as #rrggbb.
- */
-export function ColourResults({ colour }: { colour: string }) {
+/** The pictures with a colour in them, the most of it first. */
+function ColourResults({ colour }: { colour: string }) {
   const { data, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useColourResults(colour);
   if (error) {

@@ -22,26 +22,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useClientConfig } from "@/lib/clientConfig";
 import { useDoBookmarkSearch } from "@/lib/hooks/bookmark-search";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 
 import { useSearchHistory } from "@karakeep/shared-react/hooks/search-history";
-import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 
 import { EditListModal } from "../lists/EditListModal";
 import QueryExplainerTooltip from "./QueryExplainerTooltip";
-import { SearchModeSelector } from "./SearchModeSelector";
 import { useSearchAutocomplete } from "./useSearchAutocomplete";
 
-const SEARCH_PLACEHOLDERS = {
-  fts: "search.keyword_placeholder",
-  hybrid: "search.hybrid_placeholder",
-  semantic: "search.semantic_placeholder",
-} as const;
+// Fork: one search, no modes — the words, what's in the pictures, colours
+// (routers/pictures.ts search).
+const PLACEHOLDER =
+  "Search words, what's in a picture, or a colour like #c8a27a…";
 
 function useFocusSearchOnKeyPress(
   inputRef: React.RefObject<HTMLInputElement | null>,
@@ -81,22 +76,8 @@ const SearchInput = React.forwardRef<
   React.HTMLAttributes<HTMLInputElement> & { loading?: boolean }
 >(({ className, ...props }, ref) => {
   const { t } = useTranslation();
-  const { semanticSearchEnabled } = useClientConfig().search;
-  // Fork: search by description, when Settings → Pictures has it on.
-  const api = useTRPC();
-  const { data: pictureSettings } = useQuery(
-    api.pictures.settings.queryOptions(),
-  );
-  const picturesEnabled = pictureSettings?.describeEnabled ?? false;
-  const showModes = semanticSearchEnabled || picturesEnabled;
-  const {
-    debounceSearch,
-    searchQuery,
-    doSearch,
-    setSearchMode,
-    searchMode,
-    isInSearchPage,
-  } = useDoBookmarkSearch();
+  const { debounceSearch, searchQuery, doSearch, isInSearchPage } =
+    useDoBookmarkSearch();
   const { addTerm, history } = useSearchHistory({
     getItem: (k: string) => localStorage.getItem(k),
     setItem: (k: string, v: string) => localStorage.setItem(k, v),
@@ -227,14 +208,6 @@ const SearchInput = React.forwardRef<
             className="text-muted-foreground"
           />
         </Link>
-        {showModes ? (
-          <SearchModeSelector
-            value={searchMode}
-            onValueChange={(mode) => setSearchMode(mode, value)}
-            semantic={semanticSearchEnabled}
-            pictures={picturesEnabled}
-          />
-        ) : null}
       </div>
       <Command
         shouldFilter={false}
@@ -246,11 +219,7 @@ const SearchInput = React.forwardRef<
             <div className="relative">
               <CommandInput
                 ref={inputRef}
-                placeholder={
-                  searchMode === "pictures"
-                    ? "Describe a picture: red armchair, comet over a dark sea…"
-                    : t(SEARCH_PLACEHOLDERS[searchMode])
-                }
+                placeholder={PLACEHOLDER}
                 value={value}
                 onValueChange={handleValueChange}
                 onCompositionStart={handleCompositionStart}
@@ -258,9 +227,8 @@ const SearchInput = React.forwardRef<
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 className={cn(
-                  "h-10",
-                  showModes ? "pr-20 sm:pr-36" : "pr-10",
-                  canSaveSearch && (showModes ? "pr-32 sm:pr-48" : "pr-24"),
+                  "h-10 pr-10",
+                  canSaveSearch && "pr-24",
                   className,
                 )}
                 {...props}

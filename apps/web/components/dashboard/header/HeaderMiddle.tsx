@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 export default function HeaderMiddle() {
   const onSearch = usePathname().startsWith("/dashboard/search");
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2 sm:pl-5">
+    <div className="flex min-w-0 flex-1 items-center gap-2 sm:pl-3">
       {!onSearch && (
         <Link
           href="/dashboard/bookmarks"

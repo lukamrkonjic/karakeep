@@ -216,7 +216,31 @@ MATCHER.setPattern(
               text: "",
               matcher: { type: "title", title: ident, inverse: !!minus },
             };
-          case "#":
+          case "#": {
+            // Fork: # and six hex digits is a colour (#c8a27a) — or a tag
+            // that looks like one, so it's either (with a -, neither).
+            const tag = {
+              type: "tagName" as const,
+              tagName: ident,
+              inverse: !!minus,
+            };
+            const color = /^[0-9a-f]{6}$/i.test(ident)
+              ? parseColourQuery(`#${ident}`)
+              : null;
+            if (!color) {
+              return { text: "", matcher: tag };
+            }
+            const matchers = [
+              tag,
+              { type: "color" as const, color, inverse: !!minus },
+            ];
+            return {
+              text: "",
+              matcher: minus
+                ? { type: "and" as const, matchers }
+                : { type: "or" as const, matchers },
+            };
+          }
           case "tag:":
             return {
               text: "",

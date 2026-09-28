@@ -773,4 +773,38 @@ describe("Search Query Parser", () => {
       matcher: undefined,
     });
   });
+
+  test("# and six hex digits: that colour, or a tag that looks like it", () => {
+    const tag = { type: "tagName", tagName: "C8A27A", inverse: false };
+    const color = { type: "color", color: "#c8a27a", inverse: false };
+    expect(parseSearchQuery("#C8A27A")).toEqual({
+      result: "full",
+      text: "",
+      matcher: { type: "or", matchers: [tag, color] },
+    });
+    expect(parseSearchQuery("-#C8A27A")).toEqual({
+      result: "full",
+      text: "",
+      matcher: {
+        type: "and",
+        matchers: [
+          { ...tag, inverse: true },
+          { ...color, inverse: true },
+        ],
+      },
+    });
+    expect(parseSearchQuery("armchair #C8A27A")).toEqual({
+      result: "full",
+      text: "armchair",
+      matcher: { type: "or", matchers: [tag, color] },
+    });
+    // Any other # is a tag, and tag: always is.
+    for (const query of ["#bed", "#c8a27", "tag:c8a27a"]) {
+      expect(parseSearchQuery(query).matcher).toEqual({
+        type: "tagName",
+        tagName: query.replace(/^#|^tag:/, ""),
+        inverse: false,
+      });
+    }
+  });
 });

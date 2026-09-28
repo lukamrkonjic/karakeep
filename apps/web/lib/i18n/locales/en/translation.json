@@ -1189,6 +1189,7 @@
     "select_all": "Select all",
     "deselect_all": "Deselect all",
     "show_help": "Show keyboard shortcuts",
-    "focus_search_alt": "Focus search"
+    "focus_search_alt": "Focus search",
+    "toggle_sidebar": "Show or hide the sidebar"
   }
 }

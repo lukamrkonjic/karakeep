@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   assets,
   AssetTypes,
+  bookmarks,
   pictureEmbeddingsTable,
   pictureListSuggestionsTable,
   picturePalettesTable,
@@ -23,6 +24,29 @@ import type { CustomTestContext } from "../testUtils";
 import { defaultBeforeEach } from "../testUtils";
 
 beforeEach<CustomTestContext>(defaultBeforeEach(true));
+
+// Fork: the search index, faked — the bookmarks each query's words are in.
+const wordIndex = vi.hoisted(() => new Map<string, string[]>());
+vi.mock("@karakeep/shared/search", async (original) => ({
+  ...(await original<typeof import("@karakeep/shared/search")>()),
+  getSearchClient: async () => ({
+    search: async (opts: {
+      query: string;
+      filter: { type: string; values?: string[] }[];
+    }) => {
+      const only = opts.filter.find((f) => f.type === "in")?.values;
+      const ids = (wordIndex.get(opts.query) ?? []).filter(
+        (id) => !only || only.includes(id),
+      );
+      return {
+        hits: ids.map((id) => ({ id, score: 1 })),
+        totalHits: ids.length,
+        processingTimeMs: 0,
+      };
+    },
+  }),
+}));
+beforeEach(() => wordIndex.clear());
 
 type Api = CustomTestContext["apiCallers"][number];
 type DB = CustomTestContext["db"];
@@ -138,15 +162,23 @@ describe("Pictures", () => {
     expect((await similar()).total).toBe(0);
   });
 
-  test<CustomTestContext>("search by description, narrowed by the search's qualifiers", async ({
+  test<CustomTestContext>("search: the words, what's in the pictures and their colours, as one", async ({
     apiCallers,
     db,
   }) => {
     const caller = apiCallers[0];
-    await picture(caller, db, "a", 0);
-    await picture(caller, db, "b", 10);
+    const userId = (await caller.users.whoami()).id;
+    const a = await picture(caller, db, "a", 0);
+    const b = await picture(caller, db, "b", 10);
     const c = await picture(caller, db, "c", 35);
-    await picture(caller, db, "d", 45);
+    const d = await picture(caller, db, "d", 45);
+    // Saved a minute apart, a first.
+    for (const [i, id] of [a, b, c, d].entries()) {
+      await db
+        .update(bookmarks)
+        .set({ createdAt: new Date(1_700_000_000_000 + i * 60_000) })
+        .where(eq(bookmarks.id, id));
+    }
     // The workers made this description's fingerprint already: pointing at
     // 90°, it's sin(angle) like each picture.
     const description = normalizeDescription("  Red   CHAIR ");
@@ -155,21 +187,63 @@ describe("Pictures", () => {
       text: description,
       embedding: vectorToBuffer(at(90)),
     });
+    const search = (text: string, sortOrder?: "asc" | "desc") =>
+      caller.pictures.search({ text, sortOrder });
 
-    const search = (text: string) =>
-      caller.pictures.searchByDescription({ text });
-    // balanced: 0.23 at least.
-    expect(await search("red chair")).toMatchObject({ status: "ready" });
+    // What's in the pictures (balanced: 0.23 at least).
+    expect(await search("red chair")).toMatchObject({ pictures: "on" });
     expect(titles(await search("red chair"))).toEqual(["d", "c"]);
+    // The words' matches join in; found both ways comes first.
+    wordIndex.set("red chair", [c, a]);
+    expect(titles(await search("red chair"))).toEqual(["c", "d", "a"]);
+    expect(titles(await search("red chair", "desc"))).toEqual(["d", "c", "a"]);
+    expect(titles(await search("red chair", "asc"))).toEqual(["a", "c", "d"]);
+
+    // The qualifiers narrow all of it; alone, they're all they match.
     await caller.bookmarks.updateBookmark({ bookmarkId: c, favourited: true });
     expect(titles(await search("red chair is:fav"))).toEqual(["c"]);
-    expect(titles(await search("is:fav"))).toEqual([]);
+    expect(titles(await search("is:fav"))).toEqual(["c"]);
 
-    await caller.pictures.updateSettings({ describeEnabled: false });
-    expect(await search("red chair")).toMatchObject({
-      status: "off",
-      total: 0,
+    // A colour: the most of it first — and a tag that looks like it.
+    for (const [id, colours] of [
+      [
+        a,
+        [
+          { hex: "#ffffff", share: 0.7 },
+          { hex: "#c8a27a", share: 0.3 },
+        ],
+      ],
+      [d, [{ hex: "#c9a37b", share: 1 }]],
+    ] as const) {
+      await db.insert(picturePalettesTable).values({
+        bookmarkId: id,
+        userId,
+        assetId: `asset-${id === a ? "a" : "d"}`,
+        colours: [...colours],
+      });
+    }
+    await caller.bookmarks.updateTags({
+      bookmarkId: b,
+      attach: [{ tagName: "c8a27a" }],
+      detach: [],
     });
+    expect(titles(await search("#c8a27a"))).toEqual(["d", "a", "b"]);
+    expect(titles(await search("color:#c8a27a", "asc"))).toEqual(["a", "d"]);
+    // With words it narrows, and puts the most of it first.
+    expect(titles(await search("red chair color:#c8a27a"))).toEqual(["d", "a"]);
+
+    // A new description: the workers make its fingerprint meanwhile, and
+    // the words answer.
+    wordIndex.set("blue sofa", [b]);
+    expect(await search("blue sofa")).toMatchObject({
+      pictures: "preparing",
+      bookmarks: [{ id: b }],
+    });
+
+    // Pictures by what's in them turned off: the words alone.
+    await caller.pictures.updateSettings({ describeEnabled: false });
+    expect(await search("red chair")).toMatchObject({ pictures: "off" });
+    expect(titles(await search("red chair"))).toEqual(["c", "a"]);
   });
 
   test<CustomTestContext>("list suggestions: added, dismissed, or already there", async ({
