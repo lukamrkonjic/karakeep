@@ -381,45 +381,26 @@ export default function AllLists({
               </SmartListDialog>
             </div>
           </div>
-          {!smartFolded && (
+          {/* No rows, no words: the heading and its + are enough. */}
+          {!smartFolded && smartTree.data.length > 0 && (
             <ul>
-              {smartTree.data.length > 0 ? (
-                <CollapsibleBookmarkLists
-                  listsData={smartTree}
-                  allLists={lists.data}
-                  openState={openState}
-                  reorderable
-                  render={({
-                    node,
-                    level,
-                    open,
-                    onOpenChange,
-                    numBookmarks,
-                  }) => (
-                    <DroppableListSidebarItem
-                      node={node}
-                      level={level}
-                      open={open}
-                      onOpenChange={onOpenChange}
-                      numBookmarks={numBookmarks}
-                      selectedListId={selectedListId}
-                      setSelectedListId={setSelectedListId}
-                    />
-                  )}
-                />
-              ) : (
-                <li className="px-2 py-1.5">
-                  <SmartListDialog>
-                    <button
-                      type="button"
-                      className="text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Lists that fill themselves — by colour, what&apos;s in the
-                      picture, tags…
-                    </button>
-                  </SmartListDialog>
-                </li>
-              )}
+              <CollapsibleBookmarkLists
+                listsData={smartTree}
+                allLists={lists.data}
+                openState={openState}
+                reorderable
+                render={({ node, level, open, onOpenChange, numBookmarks }) => (
+                  <DroppableListSidebarItem
+                    node={node}
+                    level={level}
+                    open={open}
+                    onOpenChange={onOpenChange}
+                    numBookmarks={numBookmarks}
+                    selectedListId={selectedListId}
+                    setSelectedListId={setSelectedListId}
+                  />
+                )}
+              />
             </ul>
           )}
         </section>
