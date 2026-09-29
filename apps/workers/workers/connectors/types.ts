@@ -1,7 +1,4 @@
-/**
- * What every subscription connector (Pinterest, Instagram, YouTube) hands
- * the worker.
- */
+/** What every subscription connector (Pinterest, Instagram) hands the worker. */
 
 export interface SubscriptionMedia {
   kind: "image" | "video";
@@ -34,8 +31,3 @@ export interface SubscriptionFetchResult {
   /** False when paging stopped before the end of the source. */
   complete: boolean;
 }
-
-/** This item will never import (gone, not a picture, too big): remember it. */
-export class PermanentSkip extends Error {}
-/** Nothing else in this run can succeed either (quota, lost the list). */
-export class StopRun extends Error {}

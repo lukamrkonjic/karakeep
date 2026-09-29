@@ -287,7 +287,7 @@ export default function QuickFind() {
         name: "Settings: List subscriptions",
         href: "/settings/list-subscriptions",
         icon: Settings,
-        also: ["subscriptions", "pinterest", "instagram", "youtube"],
+        also: ["subscriptions", "pinterest", "instagram"],
       },
       {
         id: "settings-import",

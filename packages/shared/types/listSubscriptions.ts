@@ -1,16 +1,11 @@
 import { z } from "zod";
 
 /**
- * Fork: a list subscription — a source (a public Pinterest board, one of
- * your Instagram saved collections, or a YouTube playlist or channel) that
- * a worker keeps a list in sync with.
+ * Fork: a list subscription — a source (a public Pinterest board, or one of
+ * your Instagram saved collections) that a worker keeps a list in sync with.
  */
 
-export const zListSubscriptionKindSchema = z.enum([
-  "pinterest",
-  "instagram",
-  "youtube",
-]);
+export const zListSubscriptionKindSchema = z.enum(["pinterest", "instagram"]);
 export type ZListSubscriptionKind = z.infer<typeof zListSubscriptionKindSchema>;
 
 export const zListSubscriptionSchema = z.object({
@@ -27,8 +22,6 @@ export const zListSubscriptionSchema = z.object({
   // A picture alike enough to one you have (Settings → Pictures says how
   // alike) is linked instead of downloaded again.
   skipNearDuplicates: z.boolean(),
-  // YouTube: the tallest video it downloads (null: the default, 1080).
-  maxVideoHeight: z.number().int().nullable(),
   createdAt: z.date(),
   lastRunAt: z.date().nullable(),
   // "pending" = a sync is queued or running.
@@ -44,7 +37,6 @@ export const zNewListSubscriptionSchema = z.object({
   url: z.string().min(1),
   wholeCarousel: z.boolean().default(true),
   skipNearDuplicates: z.boolean().default(false),
-  maxVideoHeight: z.number().int().min(144).max(4320).optional(),
 });
 
 export const zUpdateListSubscriptionSchema = z.object({
@@ -52,7 +44,6 @@ export const zUpdateListSubscriptionSchema = z.object({
   enabled: z.boolean().optional(),
   wholeCarousel: z.boolean().optional(),
   skipNearDuplicates: z.boolean().optional(),
-  maxVideoHeight: z.number().int().min(144).max(4320).optional(),
 });
 
 /** Your Instagram connection (Settings → List subscriptions). */
@@ -67,10 +58,3 @@ export type ZInstagramConnection = z.infer<typeof zInstagramConnectionSchema>;
 
 /** How often subscriptions are synced, in hours. 0 means only when asked. */
 export const SUBSCRIPTION_INTERVAL_CHOICES = [0, 3, 6, 12, 24, 168] as const;
-
-/**
- * YouTube: how tall a video to download, in pixels — up to 1080p (Full HD)
- * by default. Each step down roughly halves the space a video takes.
- */
-export const VIDEO_HEIGHT_CHOICES = [1080, 720, 480, 360] as const;
-export const DEFAULT_MAX_VIDEO_HEIGHT = 1080;

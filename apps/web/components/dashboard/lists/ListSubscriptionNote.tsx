@@ -27,22 +27,20 @@ import {
 } from "./ListSubscriptionStatus";
 
 /**
- * Fork: under a list's name, that it syncs from a Pinterest board, an
- * Instagram collection or a YouTube playlist. Hovering says when each one syncs next; clicking
+ * Fork: under a list's name, that it syncs from a Pinterest board or an
+ * Instagram collection. Hovering says when each one syncs next; clicking
  * opens the list's subscriptions.
  */
 
 const SOURCE = {
   pinterest: { name: "Pinterest", several: "Pinterest boards" },
   instagram: { name: "Instagram", several: "Instagram collections" },
-  youtube: { name: "YouTube", several: "YouTube playlists" },
 } as const;
 
 function sourcesLabel(subscriptions: ZListSubscription[]) {
   const kinds = [...new Set(subscriptions.map((s) => s.kind))];
   if (kinds.length > 1) {
-    const names = kinds.map((k) => SOURCE[k].name);
-    return `Syncs from ${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+    return `Syncs from ${kinds.map((k) => SOURCE[k].name).join(" and ")}`;
   }
   const source = SOURCE[kinds[0]];
   return subscriptions.length === 1

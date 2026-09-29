@@ -149,10 +149,6 @@ const allEnv = z.object({
     .string()
     .prefault("")
     .transform((t) => t.split("%%").filter((a) => a)),
-  // Fork: a PO token provider for YouTube (bgutil-ytdlp-pot-provider's
-  // server, e.g. http://bgutil:4416): without one YouTube hands out little
-  // more than 360p to yt-dlp. Its plugin is in the image (docker/Dockerfile).
-  YOUTUBE_POT_PROVIDER_URL: z.string().optional(),
   CRAWLER_MONOLITH_TIMEOUT_SEC: z.coerce.number().default(5),
   CRAWLER_MONOLITH_ARGS: z
     .string()
@@ -421,7 +417,6 @@ const serverConfigSchema = allEnv.transform((val, ctx) => {
       enableAdblocker: val.CRAWLER_ENABLE_ADBLOCKER,
       enableAutoconsent: val.CRAWLER_ENABLE_AUTOCONSENT,
       ytDlpArguments: val.CRAWLER_YTDLP_ARGS,
-      youtubePotProviderUrl: val.YOUTUBE_POT_PROVIDER_URL,
       monolithTimeoutSec: val.CRAWLER_MONOLITH_TIMEOUT_SEC,
       monolithArguments: val.CRAWLER_MONOLITH_ARGS,
       parserMemLimitMb: val.CRAWLER_PARSER_MEM_LIMIT_MB,

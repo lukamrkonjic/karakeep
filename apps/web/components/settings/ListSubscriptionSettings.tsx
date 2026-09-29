@@ -41,57 +41,6 @@ import { SettingsPage, SettingsSection } from "./SettingsPage";
  * "…" menu.
  */
 
-const SOURCE_NAMES = {
-  pinterest: "Pinterest",
-  instagram: "Instagram",
-  youtube: "YouTube",
-} as const;
-
-/** The token provider's container, next to vrana's in compose.yaml. */
-const POT_PROVIDER_SERVICE = `  bgutil:
-    image: brainicism/bgutil-ytdlp-pot-provider:latest
-    restart: unless-stopped`;
-
-/**
- * YouTube lists: whether the server has a PO token provider — without one
- * YouTube gives yt-dlp little more than 360p — and how to add it.
- */
-function YouTubeSetup() {
-  const api = useTRPC();
-  const { data } = useQuery(api.listSubscriptions.youtubeStatus.queryOptions());
-  return (
-    <SettingsSection
-      title="YouTube"
-      description="A list can follow a YouTube playlist or channel: every video in it is downloaded, and whatever is added later, at the quality its subscription picks."
-    >
-      {data?.potProvider ? (
-        <p className="text-sm">
-          The server has a PO token provider: videos come in at the quality
-          picked.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2 text-sm">
-          <p>
-            Without a PO token provider, YouTube often gives out only 360p. For
-            the quality you pick, run one next to vrana: add this service to the
-            server&apos;s <code>compose.yaml</code>,
-          </p>
-          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-            {POT_PROVIDER_SERVICE}
-          </pre>
-          <p>
-            this line to its <code>.env</code>, and run{" "}
-            <code>docker compose up -d</code>:
-          </p>
-          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-            YOUTUBE_POT_PROVIDER_URL=http://bgutil:4416
-          </pre>
-        </div>
-      )}
-    </SettingsSection>
-  );
-}
-
 function intervalLabel(hours: number) {
   if (hours <= 0) {
     return "Only when I ask";
@@ -119,7 +68,7 @@ function Schedule() {
   return (
     <SettingsSection
       title="Schedule"
-      description="How often the worker checks every subscribed source for new pictures and videos. It only ever downloads what it hasn't taken before."
+      description="How often the worker checks every subscribed source for new pictures. It only ever downloads what it hasn't taken before."
     >
       <Select
         value={String(settings.subscriptionIntervalHours)}
@@ -200,7 +149,9 @@ function Subscriptions() {
                     {subscription.name ?? subscription.url}
                   </a>
                   <span className="text-xs text-muted-foreground">
-                    {SOURCE_NAMES[subscription.kind]}
+                    {subscription.kind === "instagram"
+                      ? "Instagram"
+                      : "Pinterest"}
                   </span>
                 </TableCell>
                 <TableCell>
@@ -227,7 +178,7 @@ function Subscriptions() {
                     variant="ghost"
                     size="none"
                     className="p-2 text-destructive"
-                    title={`Remove the subscription (the ${subscription.kind === "youtube" ? "videos" : "pictures"} stay)`}
+                    title="Remove the subscription (the pictures stay)"
                     aria-label="Remove subscription"
                     onClick={() => remove({ subscriptionId: subscription.id })}
                   >
@@ -247,11 +198,10 @@ export default function ListSubscriptionSettings() {
   return (
     <SettingsPage
       title="List subscriptions"
-      description="Keep a list in sync with a public Pinterest board, one of your Instagram saved collections, or a YouTube playlist or channel."
+      description="Keep a list in sync with a public Pinterest board or one of your Instagram saved collections."
     >
       <Schedule />
       <InstagramConnection />
-      <YouTubeSetup />
       <Subscriptions />
     </SettingsPage>
   );

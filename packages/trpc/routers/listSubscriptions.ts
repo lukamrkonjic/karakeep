@@ -9,7 +9,6 @@ import {
   listSubscriptionsTable,
 } from "@karakeep/db/schema";
 import { queueSubscriptionSync } from "@karakeep/shared-server";
-import serverConfig from "@karakeep/shared/config";
 import {
   zListSubscriptionSchema,
   zNewListSubscriptionSchema,
@@ -21,11 +20,6 @@ import {
   parseInstagramCollectionUrl,
 } from "@karakeep/shared/utils/instagram";
 import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
-import {
-  parseYouTubeList,
-  youTubeListName,
-  youTubeListUrl,
-} from "@karakeep/shared/utils/youtube";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
@@ -33,32 +27,13 @@ import { List } from "../models/lists";
 
 /**
  * Fork: subscriptions that keep a list in sync with a source — a public
- * Pinterest board, one of your Instagram saved collections (which needs
- * Instagram connected, see routers/instagram.ts), or a YouTube playlist or
- * channel (its videos downloaded). The worker does the fetching — see
- * apps/workers/workers/subscriptionWorker.ts.
+ * Pinterest board, or one of your Instagram saved collections (which needs
+ * Instagram connected, see routers/instagram.ts). The worker does the
+ * fetching — see apps/workers/workers/subscriptionWorker.ts.
  */
-
-/** What a source is called, for "already subscribes to that …". */
-const THING = {
-  pinterest: "board",
-  instagram: "collection",
-  youtube: "playlist",
-} as const;
 
 /** A pasted link, as the source it is and the one form it's stored in. */
 async function sourceOf(ctx: AuthedContext, raw: string) {
-  const youtube = parseYouTubeList(raw);
-  if (youtube && "problem" in youtube) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: youtube.problem });
-  }
-  if (youtube) {
-    return {
-      kind: "youtube" as const,
-      url: youTubeListUrl(youtube.list),
-      name: youTubeListName(youtube.list),
-    };
-  }
   const board = parsePinterestBoardUrl(raw);
   if (board) {
     // Any Pinterest domain: the same board is one subscription.
@@ -91,7 +66,7 @@ async function sourceOf(ctx: AuthedContext, raw: string) {
   throw new TRPCError({
     code: "BAD_REQUEST",
     message:
-      "That isn't a Pinterest board, an Instagram collection or a YouTube playlist link. Use one like https://www.pinterest.com/<user>/<board>/, https://www.instagram.com/<you>/saved/<collection>/<id>/ or https://www.youtube.com/playlist?list=<id>.",
+      "That isn't a Pinterest board or an Instagram collection link. Use one like https://www.pinterest.com/<user>/<board>/ or https://www.instagram.com/<you>/saved/<collection>/<id>/.",
   });
 }
 
@@ -136,16 +111,6 @@ const ensureSubscriptionOwnership = experimental_trpcMiddleware<{
 });
 
 export const listSubscriptionsAppRouter = router({
-  /**
-   * Whether the server has a YouTube PO token provider (without one, most
-   * videos come at 360p) — for Settings.
-   */
-  youtubeStatus: subscriptionsProcedure
-    .output(z.object({ potProvider: z.boolean() }))
-    .query(() => ({
-      potProvider: !!serverConfig.crawler.youtubePotProviderUrl,
-    })),
-
   list: subscriptionsProcedure
     .input(z.object({ listId: z.string() }))
     .output(z.object({ subscriptions: z.array(zListSubscriptionSchema) }))
@@ -203,7 +168,7 @@ export const listSubscriptionsAppRouter = router({
       if (existing) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `This list already subscribes to that ${THING[kind]}`,
+          message: `This list already subscribes to that ${kind === "instagram" ? "collection" : "board"}`,
         });
       }
       const [subscription] = await ctx.db
@@ -216,8 +181,6 @@ export const listSubscriptionsAppRouter = router({
           name,
           wholeCarouselSince: input.wholeCarousel ? new Date() : null,
           skipNearDuplicates: input.skipNearDuplicates,
-          maxVideoHeight:
-            kind === "youtube" ? (input.maxVideoHeight ?? null) : null,
         })
         .returning();
       // Fetch it straight away; the schedule takes over afterwards.
@@ -244,10 +207,6 @@ export const listSubscriptionsAppRouter = router({
       }
       if (input.skipNearDuplicates !== undefined) {
         changes.skipNearDuplicates = input.skipNearDuplicates;
-      }
-      // For what it downloads from now on.
-      if (input.maxVideoHeight !== undefined) {
-        changes.maxVideoHeight = input.maxVideoHeight;
       }
       if (Object.keys(changes).length === 0) {
         return toApi(ctx.subscription);
