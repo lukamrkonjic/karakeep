@@ -115,6 +115,72 @@ describe("List subscriptions", () => {
     expect(await since()).toBeNull();
   });
 
+  test<CustomTestContext>("a YouTube playlist or channel: one link each, its quality", async ({
+    apiCallers,
+  }) => {
+    const caller = apiCallers[0];
+    const list = await caller.lists.create({
+      name: "Guitar",
+      icon: "",
+      type: "manual",
+    });
+
+    // However it's shared, one link: the playlist's own.
+    const playlist = await caller.listSubscriptions.create({
+      listId: list.id,
+      url: "https://youtube.com/playlist?list=PLVGmWp1dChbHo85qhdu4oTP6Bfswz1phm&si=4YHZfLKkHi0a76Tm",
+      maxVideoHeight: 720,
+    });
+    expect(playlist).toMatchObject({
+      kind: "youtube",
+      url: "https://www.youtube.com/playlist?list=PLVGmWp1dChbHo85qhdu4oTP6Bfswz1phm",
+      name: null,
+      maxVideoHeight: 720,
+      lastStatus: "pending",
+    });
+    await expect(
+      caller.listSubscriptions.create({
+        listId: list.id,
+        url: "https://www.youtube.com/watch?v=oI6-8px71v0&list=PLVGmWp1dChbHo85qhdu4oTP6Bfswz1phm",
+      }),
+    ).rejects.toThrow(/already subscribes to that playlist/);
+
+    // A channel's videos, at the default quality.
+    expect(
+      await caller.listSubscriptions.create({
+        listId: list.id,
+        url: "https://www.youtube.com/@kkvta",
+      }),
+    ).toMatchObject({
+      kind: "youtube",
+      url: "https://www.youtube.com/@kkvta/videos",
+      name: "@kkvta",
+      maxVideoHeight: null,
+    });
+
+    // What it can't follow says why.
+    await expect(
+      caller.listSubscriptions.create({
+        listId: list.id,
+        url: "https://www.youtube.com/playlist?list=WL",
+      }),
+    ).rejects.toThrow(/Watch later is private/);
+    await expect(
+      caller.listSubscriptions.create({
+        listId: list.id,
+        url: "https://www.youtube.com/watch?v=oI6-8px71v0",
+      }),
+    ).rejects.toThrow(/single video/);
+
+    // Its quality changes on its own.
+    expect(
+      await caller.listSubscriptions.update({
+        subscriptionId: playlist.id,
+        maxVideoHeight: 480,
+      }),
+    ).toMatchObject({ maxVideoHeight: 480, enabled: true });
+  });
+
   test<CustomTestContext>("only your own subscriptions can be changed", async ({
     apiCallers,
   }) => {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
+import QuickFind from "@/components/dashboard/QuickFind";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
 import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
@@ -84,6 +85,8 @@ export default async function Dashboard({
         >
           {children}
         </SidebarLayout>
+        {/* Fork: ⌘F / Ctrl+F. */}
+        <QuickFind />
       </ReaderSettingsProvider>
     </UserSettingsContextProvider>
   );

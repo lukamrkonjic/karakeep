@@ -1190,6 +1190,7 @@
     "deselect_all": "Deselect all",
     "show_help": "Show keyboard shortcuts",
     "focus_search_alt": "Focus search",
-    "toggle_sidebar": "Show or hide the sidebar"
+    "toggle_sidebar": "Show or hide the sidebar",
+    "quick_find": "Quick find: go to a list, tag or page, or search"
   }
 }

@@ -162,6 +162,11 @@ const SearchInput = React.forwardRef<
     setScope(pageScope());
   }, [scopeKey, pageScope]);
   const { data: allLists } = useBookmarkLists();
+  // The chips are drawn once in the browser: the server may already have
+  // the lists (the sidebar put them in its cache) where the browser, as it
+  // takes the page over, doesn't yet — the two would differ.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const scopeLists = useMemo(
     () =>
       scope.flatMap((id) => {
@@ -282,6 +287,14 @@ const SearchInput = React.forwardRef<
     }
   }, [isInSearchPage]);
 
+  // Fork: a search started elsewhere (Quick find, back and forward) shows
+  // here on the search page — not while typing here, where it came from.
+  useEffect(() => {
+    if (isInSearchPage && document.activeElement !== inputRef.current) {
+      setValue(searchQuery);
+    }
+  }, [searchQuery, isInSearchPage]);
+
   const handleFocus = useCallback(() => {
     setIsPopoverOpen(true);
   }, []);
@@ -355,7 +368,7 @@ const SearchInput = React.forwardRef<
                 onCompositionEnd={handleCompositionEnd}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                before={scopeLists.map((list) => (
+                before={(mounted ? scopeLists : []).map((list) => (
                   <ScopeChip
                     key={list.id}
                     list={list}

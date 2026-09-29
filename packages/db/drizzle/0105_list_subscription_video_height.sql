@@ -1,0 +1,1 @@
+ALTER TABLE `listSubscriptions` ADD `maxVideoHeight` integer;

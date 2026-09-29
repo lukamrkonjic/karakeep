@@ -154,6 +154,15 @@ RUN case ${TARGETARCH} in \
 # changes to the worker. Fixes karakeep-app/karakeep#2758.
 RUN echo "--js-runtimes node" > /etc/yt-dlp.conf
 
+# Fork: the PO token provider's yt-dlp plugin (bgutil-ytdlp-pot-provider),
+# for YouTube downloads above 360p. It does nothing until the provider's
+# server runs beside vrana and YOUTUBE_POT_PROVIDER_URL points at it
+# (Settings → List subscriptions → YouTube says how).
+ARG BGUTIL_POT_VERSION=2.0.0
+RUN mkdir -p /etc/yt-dlp/plugins \
+    && curl -fsSL https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/download/${BGUTIL_POT_VERSION}/bgutil-ytdlp-pot-provider.zip \
+        -o /etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider.zip
+
 # Copy monolith binary from builder
 COPY --from=monolith_builder /usr/local/cargo/bin/monolith /usr/local/bin/monolith
 

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
+import { setTimeout as sleep } from "timers/promises";
 import { and, eq, isNotNull, isNull, lt, max, or } from "drizzle-orm";
 import {
   ACCEPTED_IMAGE_TYPES,
@@ -60,6 +61,7 @@ import {
   BookmarkTypes,
   MAX_BOOKMARK_TITLE_LENGTH,
 } from "@karakeep/shared/types/bookmarks";
+import { DEFAULT_MAX_VIDEO_HEIGHT } from "@karakeep/shared/types/listSubscriptions";
 import {
   isSubscriptionDue,
   SUBSCRIPTION_SCHEDULE_SLACK_MS,
@@ -69,6 +71,11 @@ import { List } from "@karakeep/trpc/models/lists";
 import { fetchInstagramCollection } from "./connectors/instagram";
 import { wantedBy } from "./connectors/ledger";
 import { fetchPinterestBoard } from "./connectors/pinterest";
+import {
+  downloadYouTubeVideo,
+  fetchYouTubeList,
+  VIDEO_TIMEOUT_MS,
+} from "./connectors/youtube";
 import type { Looked } from "./pictures/nearDuplicates";
 import { NearDuplicateFinder } from "./pictures/nearDuplicates";
 import type {
@@ -76,12 +83,14 @@ import type {
   SubscriptionItem,
   SubscriptionMedia,
 } from "./connectors/types";
+import { PermanentSkip, StopRun } from "./connectors/types";
 import { normalizeContentType } from "./crawler/utils";
 
 /**
  * Fork: keeps a list in sync with a source — a public Pinterest board
- * (connectors/pinterest.ts) or one of the user's Instagram saved collections,
- * read with the session they pasted (connectors/instagram.ts).
+ * (connectors/pinterest.ts), one of the user's Instagram saved collections,
+ * read with the session they pasted (connectors/instagram.ts), or a YouTube
+ * playlist or channel, its videos downloaded (connectors/youtube.ts).
  *
  * Modelled on the RSS feed worker: an hourly cron queues whatever is due, the
  * runner fetches the board and files what is new. The ledger
@@ -101,16 +110,42 @@ const MAX_NEW_PER_RUN: Record<Subscription["kind"], number> = {
   // Every run pages from the top down to what it has, and Instagram is paged
   // slowly: fewer, bigger runs.
   instagram: 500,
+  // Videos: a run also stops after YOUTUBE_RUN_MS, and the next carries on.
+  youtube: 40,
 };
 const FETCH_TIMEOUT_MS: Record<Subscription["kind"], number> = {
   pinterest: 5 * 60_000,
   instagram: 20 * 60_000,
+  youtube: 5 * 60_000,
 };
-const SOURCES: Record<Subscription["kind"], { name: string; referer: string }> =
-  {
-    pinterest: { name: "Pinterest", referer: "https://www.pinterest.com/" },
-    instagram: { name: "Instagram", referer: "https://www.instagram.com/" },
-  };
+const SOURCES: Record<
+  Subscription["kind"],
+  { name: string; referer: string; things: string }
+> = {
+  pinterest: {
+    name: "Pinterest",
+    referer: "https://www.pinterest.com/",
+    things: "pictures",
+  },
+  instagram: {
+    name: "Instagram",
+    referer: "https://www.instagram.com/",
+    things: "pictures",
+  },
+  youtube: {
+    name: "YouTube",
+    referer: "https://www.youtube.com/",
+    things: "videos",
+  },
+};
+/**
+ * YouTube: no new video is started after this long in a run (one started
+ * has VIDEO_TIMEOUT_MS more), and a pause between videos, as a person
+ * watching would leave — a playlist of hundreds comes in over a few hours
+ * of back-to-back runs rather than all at once.
+ */
+const YOUTUBE_RUN_MS = 25 * 60_000;
+const YOUTUBE_PAUSE_MS = [4_000, 10_000] as const;
 const DOWNLOAD_TIMEOUT_MS = 2 * 60_000;
 /** Consecutive download failures after which the source is assumed down. */
 const MAX_FAILURES_IN_A_ROW = 5;
@@ -203,17 +238,16 @@ export class SubscriptionWorker {
       {
         concurrency: 1,
         pollIntervalMs: 1000,
-        // A first sync downloads a lot of pictures, and videos are big.
-        timeoutSecs: 30 * 60,
+        // A first sync downloads a lot of pictures, and videos are big: a
+        // YouTube run starts no video after 25 minutes, and one takes 25 at
+        // most.
+        timeoutSecs:
+          Math.ceil((YOUTUBE_RUN_MS + VIDEO_TIMEOUT_MS) / 1000) + 5 * 60,
       },
     );
   }
 }
 
-/** This item will never import (gone, not a picture, too big): remember it. */
-class PermanentSkip extends Error {}
-/** Nothing else in this run can succeed either (quota, lost the list). */
-class StopRun extends Error {}
 class TooBig extends Error {}
 
 function errorMessage(error: unknown): string {
@@ -509,7 +543,13 @@ async function importItem(
     return filed ? "linked" : "kept";
   }
 
-  const file = await download(item, SOURCES[subscription.kind].referer);
+  const file =
+    subscription.kind === "youtube"
+      ? await downloadYouTubeVideo(item, {
+          maxHeight: subscription.maxVideoHeight ?? DEFAULT_MAX_VIDEO_HEIGHT,
+          signal,
+        })
+      : await download(item, SOURCES[subscription.kind].referer);
   let assetId: string;
   let looked: Looked | null = null;
   try {
@@ -766,6 +806,8 @@ async function run(
       signal,
       isKnown: (item) => !wanted(item),
     });
+  } else if (subscription.kind === "youtube") {
+    reading = fetchYouTubeList(subscription.url, { signal });
   } else {
     reading = fetchPinterestBoard(subscription.url, { signal });
   }
@@ -784,6 +826,13 @@ async function run(
       .update(instagramSessionsTable)
       .set({ checkedAt: new Date() })
       .where(eq(instagramSessionsTable.userId, subscription.userId));
+  }
+  // Its name at once: a long run only finishes much later.
+  if (fetched.name && fetched.name !== subscription.name) {
+    await db
+      .update(listSubscriptionsTable)
+      .set({ name: fetched.name })
+      .where(eq(listSubscriptionsTable.id, subscription.id));
   }
 
   const fresh = fetched.items.filter(wanted);
@@ -831,10 +880,20 @@ async function run(
   let failed = 0;
   let failedInARow = 0;
   let stoppedBecause: string | null = null;
+  // YouTube: the rest waits for the next run (queued straight after).
+  let outOfTime = false;
+  const started = Date.now();
 
   for (const [index, item] of batch.entries()) {
     if (job.abortSignal.aborted) {
       stoppedBecause = "The sync ran out of time; the next one carries on.";
+      break;
+    }
+    if (
+      subscription.kind === "youtube" &&
+      Date.now() - started > YOUTUBE_RUN_MS
+    ) {
+      outOfTime = true;
       break;
     }
     try {
@@ -848,6 +907,14 @@ async function run(
       );
       if (outcome === "downloaded") {
         downloaded++;
+        if (subscription.kind === "youtube" && index < batch.length - 1) {
+          const [least, most] = YOUTUBE_PAUSE_MS;
+          await tryCatch(
+            sleep(least + Math.random() * (most - least), undefined, {
+              signal: job.abortSignal,
+            }),
+          );
+        }
       } else if (outcome === "alike") {
         alike++;
       } else if (outcome === "kept") {
@@ -876,7 +943,7 @@ async function run(
         `[subscription][${jobId}] Failed on ${item.sourceUrl}, will retry next sync: ${errorMessage(error)}`,
       );
       if (failedInARow >= MAX_FAILURES_IN_A_ROW) {
-        stoppedBecause = `${SOURCES[subscription.kind].name} isn't handing out the pictures (${errorMessage(error)}); trying again next sync.`;
+        stoppedBecause = `${SOURCES[subscription.kind].name} isn't handing out the ${SOURCES[subscription.kind].things} (${errorMessage(error)}); trying again next sync.`;
         break;
       }
     }
@@ -905,7 +972,11 @@ async function run(
 
   // More than one run's worth: carry straight on rather than waiting for the
   // schedule. Only while it is getting somewhere.
-  if (!stoppedBecause && added + kept > 0 && fresh.length > batch.length) {
+  if (
+    !stoppedBecause &&
+    added + kept > 0 &&
+    (fresh.length > batch.length || outOfTime)
+  ) {
     await SubscriptionQueue.enqueue(
       { subscriptionId: subscription.id },
       { groupId: subscription.userId },

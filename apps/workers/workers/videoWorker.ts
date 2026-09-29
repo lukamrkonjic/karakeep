@@ -90,6 +90,14 @@ function prepareYtDlpArguments(
     );
   }
 
+  // Fork: YouTube's PO token provider, when the server has one
+  // (YOUTUBE_POT_PROVIDER_URL): more than 360p.
+  if (serverConfig.crawler.youtubePotProviderUrl) {
+    ytDlpArguments.push(
+      "--extractor-args",
+      `youtubepot-bgutilhttp:base_url=${serverConfig.crawler.youtubePotProviderUrl}`,
+    );
+  }
   ytDlpArguments.push(...serverConfig.crawler.ytDlpArguments);
   ytDlpArguments.push("-o", assetPath);
   ytDlpArguments.push("--no-playlist");

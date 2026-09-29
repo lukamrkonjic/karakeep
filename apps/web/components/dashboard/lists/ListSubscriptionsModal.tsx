@@ -21,6 +21,11 @@ import { RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 
 import type { ZListSubscription } from "@karakeep/shared/types/listSubscriptions";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import {
+  DEFAULT_MAX_VIDEO_HEIGHT,
+  VIDEO_HEIGHT_CHOICES,
+} from "@karakeep/shared/types/listSubscriptions";
+import { parseYouTubeList } from "@karakeep/shared/utils/youtube";
 
 import {
   isSyncing,
@@ -33,6 +38,49 @@ const WHOLE_CAROUSEL_HINT =
   "Every picture of a post with several (and every page of a Pinterest idea pin), not just the first. Applies to posts that sync from now on; what's already in the list stays as it is.";
 const NEAR_DUPLICATES_HINT =
   "A picture that's another copy of one you have (resized, re-saved, recropped: Settings → Pictures says how alike) is linked to that one instead of downloaded again. A video too, when a frame of it and its length match one of yours.";
+const QUALITY_HINT =
+  "How sharp the videos are downloaded; each step down takes about half the space. Without a PO token provider on the server (Settings → List subscriptions), YouTube often gives out only 360p.";
+
+/** What each kind of source is, in words. */
+const SOURCE = {
+  pinterest: { name: "Pinterest", source: "board", things: "pictures" },
+  instagram: { name: "Instagram", source: "collection", things: "pictures" },
+  youtube: { name: "YouTube", source: "playlist", things: "videos" },
+} as const;
+
+/** YouTube: the tallest video to download. */
+function VideoQualitySelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: number;
+  onChange: (height: number) => void;
+  className?: string;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex w-fit items-center gap-2 text-muted-foreground",
+        className,
+      )}
+      title={QUALITY_HINT}
+    >
+      Quality
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="cursor-pointer rounded-md border bg-background px-1.5 py-0.5 text-foreground"
+      >
+        {VIDEO_HEIGHT_CHOICES.map((height) => (
+          <option key={height} value={height}>
+            {height}p{height === 1080 ? " (Full HD)" : ""}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /** A subscription's option: whole carousels, skipping near-duplicates. */
 function OptionCheckbox({
@@ -83,7 +131,8 @@ function ForgetWhatItTook({
   const { mutate: forget, isPending } = useMutation(
     api.listSubscriptions.forget.mutationOptions({
       onSuccess: ({ forgotten }) => {
-        const what = `${forgotten.toLocaleString()} ${forgotten === 1 ? "picture" : "pictures"}`;
+        const things = SOURCE[subscription.kind].things;
+        const what = `${forgotten.toLocaleString()} ${forgotten === 1 ? things.slice(0, -1) : things}`;
         toast({
           description: subscription.enabled
             ? `Forgot ${what}; syncing again.`
@@ -94,7 +143,8 @@ function ForgetWhatItTook({
       onError: (e) => toast({ variant: "destructive", description: e.message }),
     }),
   );
-  const source = subscription.kind === "instagram" ? "collection" : "board";
+  const { source, things } = SOURCE[subscription.kind];
+  const Things = things.charAt(0).toUpperCase() + things.slice(1);
   return (
     <ActionConfirmingDialog
       title="Forget what it took?"
@@ -102,7 +152,7 @@ function ForgetWhatItTook({
         <p className="text-sm text-muted-foreground">
           {subscription.enabled ? "Right away" : "When you resume it"}, it goes
           through the whole {source} again as if it were new, with its current
-          settings. Pictures you deleted are downloaded again; ones you still
+          settings. {Things} you deleted are downloaded again; ones you still
           have are put back in this list, not copied.
         </p>
       }
@@ -135,9 +185,10 @@ function ForgetWhatItTook({
 
 /**
  * A list's subscriptions: sources a worker keeps it in sync with — a public
- * Pinterest board, or one of your Instagram saved collections (with Instagram
- * connected in Settings). Paste the link and the worker fetches its pictures
- * and videos into this list, never taking the same one twice.
+ * Pinterest board, one of your Instagram saved collections (with Instagram
+ * connected in Settings), or a YouTube playlist or channel (its videos
+ * downloaded, at the quality picked). Paste the link and the worker fetches
+ * its pictures and videos into this list, never taking the same one twice.
  * See apps/workers/workers/subscriptionWorker.ts.
  */
 export function ListSubscriptionsModal({
@@ -154,6 +205,11 @@ export function ListSubscriptionsModal({
   const [url, setUrl] = useState("");
   const [wholeCarousel, setWholeCarousel] = useState(true);
   const [skipNearDuplicates, setSkipNearDuplicates] = useState(false);
+  const [quality, setQuality] = useState<number>(DEFAULT_MAX_VIDEO_HEIGHT);
+  // A YouTube link, as it's typed: its options, or why it won't do.
+  const youtube = parseYouTubeList(url);
+  const youtubeProblem =
+    youtube && "problem" in youtube ? youtube.problem : null;
 
   const subscriptionsQuery = api.listSubscriptions.list.queryOptions({
     listId,
@@ -211,11 +267,11 @@ export function ListSubscriptionsModal({
         <DialogHeader>
           <DialogTitle>Subscriptions</DialogTitle>
           <DialogDescription>
-            Keep this list in sync with a public Pinterest board or one of your
-            Instagram saved collections. Their pictures and videos are fetched
-            on a schedule (Settings → List subscriptions), and nothing is ever
-            saved twice. Changing “Whole carousels” applies to the posts that
-            sync from then on.
+            Keep this list in sync with a public Pinterest board, one of your
+            Instagram saved collections, or a YouTube playlist or channel. Their
+            pictures and videos are fetched on a schedule (Settings → List
+            subscriptions), and nothing is ever saved twice. Changing “Whole
+            carousels” or the quality applies to what syncs from then on.
           </DialogDescription>
         </DialogHeader>
 
@@ -223,12 +279,13 @@ export function ListSubscriptionsModal({
           className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (url.trim()) {
+            if (url.trim() && !youtubeProblem) {
               add({
                 listId,
                 url: url.trim(),
                 wholeCarousel,
                 skipNearDuplicates,
+                ...(youtube ? { maxVideoHeight: quality } : {}),
               });
             }
           }}
@@ -237,34 +294,55 @@ export function ListSubscriptionsModal({
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Pinterest board or Instagram collection link"
-              aria-label="Pinterest board or Instagram collection link"
+              placeholder="Pinterest board, Instagram collection or YouTube playlist link"
+              aria-label="Pinterest board, Instagram collection or YouTube playlist link"
               className="bg-muted"
             />
             <ActionButton
               type="submit"
               loading={isAdding}
-              disabled={!url.trim()}
+              disabled={!url.trim() || !!youtubeProblem}
             >
               Add
             </ActionButton>
           </div>
-          <OptionCheckbox
-            checked={wholeCarousel}
-            onChange={setWholeCarousel}
-            hint={WHOLE_CAROUSEL_HINT}
-            className="text-sm"
-          >
-            Whole carousels: every picture of a post, not just the first
-          </OptionCheckbox>
-          <OptionCheckbox
-            checked={skipNearDuplicates}
-            onChange={setSkipNearDuplicates}
-            hint={NEAR_DUPLICATES_HINT}
-            className="text-sm"
-          >
-            Skip near-duplicates of pictures you have
-          </OptionCheckbox>
+          {youtubeProblem && (
+            <p className="text-sm text-destructive">{youtubeProblem}</p>
+          )}
+          {youtube && !youtubeProblem ? (
+            <>
+              <VideoQualitySelect
+                value={quality}
+                onChange={setQuality}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Every video in it is downloaded, a few at a time, and whatever
+                is added to it later.
+              </p>
+            </>
+          ) : (
+            !youtubeProblem && (
+              <OptionCheckbox
+                checked={wholeCarousel}
+                onChange={setWholeCarousel}
+                hint={WHOLE_CAROUSEL_HINT}
+                className="text-sm"
+              >
+                Whole carousels: every picture of a post, not just the first
+              </OptionCheckbox>
+            )
+          )}
+          {!youtubeProblem && (
+            <OptionCheckbox
+              checked={skipNearDuplicates}
+              onChange={setSkipNearDuplicates}
+              hint={NEAR_DUPLICATES_HINT}
+              className="text-sm"
+            >
+              Skip near-duplicates of {youtube ? "videos" : "pictures"} you have
+            </OptionCheckbox>
+          )}
         </form>
 
         {instagram && instagram.status !== "ok" && (
@@ -300,26 +378,39 @@ export function ListSubscriptionsModal({
                 </a>
                 <span className="truncate text-xs">
                   <span className="text-muted-foreground">
-                    {subscription.kind === "instagram"
-                      ? "Instagram · "
-                      : "Pinterest · "}
+                    {SOURCE[subscription.kind].name} ·{" "}
                   </span>
                   <SubscriptionStatus subscription={subscription} />
                 </span>
-                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                  <OptionCheckbox
-                    checked={subscription.wholeCarousel}
-                    onChange={(checked) =>
-                      update({
-                        subscriptionId: subscription.id,
-                        wholeCarousel: checked,
-                      })
-                    }
-                    hint={WHOLE_CAROUSEL_HINT}
-                    className="text-xs"
-                  >
-                    Whole carousels
-                  </OptionCheckbox>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  {subscription.kind === "youtube" ? (
+                    <VideoQualitySelect
+                      value={
+                        subscription.maxVideoHeight ?? DEFAULT_MAX_VIDEO_HEIGHT
+                      }
+                      onChange={(height) =>
+                        update({
+                          subscriptionId: subscription.id,
+                          maxVideoHeight: height,
+                        })
+                      }
+                      className="text-xs"
+                    />
+                  ) : (
+                    <OptionCheckbox
+                      checked={subscription.wholeCarousel}
+                      onChange={(checked) =>
+                        update({
+                          subscriptionId: subscription.id,
+                          wholeCarousel: checked,
+                        })
+                      }
+                      hint={WHOLE_CAROUSEL_HINT}
+                      className="text-xs"
+                    >
+                      Whole carousels
+                    </OptionCheckbox>
+                  )}
                   <OptionCheckbox
                     checked={subscription.skipNearDuplicates}
                     onChange={(checked) =>
@@ -356,7 +447,7 @@ export function ListSubscriptionsModal({
                   variant="ghost"
                   size="none"
                   className="p-2 text-destructive"
-                  title="Remove the subscription (the pictures stay)"
+                  title={`Remove the subscription (the ${SOURCE[subscription.kind].things} stay)`}
                   aria-label="Remove subscription"
                   onClick={() => remove({ subscriptionId: subscription.id })}
                 >

@@ -806,9 +806,10 @@ export const listSubscriptionsTable = sqliteTable(
     userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Which connector reads `url`: a public Pinterest board, or one of the
-    // user's Instagram saved collections (through instagramSessions).
-    kind: text("kind", { enum: ["pinterest", "instagram"] })
+    // Which connector reads `url`: a public Pinterest board, one of the
+    // user's Instagram saved collections (through instagramSessions), or a
+    // YouTube playlist or channel (yt-dlp).
+    kind: text("kind", { enum: ["pinterest", "instagram", "youtube"] })
       .notNull()
       .default("pinterest"),
     url: text("url").notNull(),
@@ -824,6 +825,9 @@ export const listSubscriptionsTable = sqliteTable(
     skipNearDuplicates: integer("skipNearDuplicates", { mode: "boolean" })
       .notNull()
       .default(false),
+    // YouTube: the tallest video to download, in pixels (1080, 720, …).
+    // Null: the default (1080).
+    maxVideoHeight: integer("maxVideoHeight"),
     lastRunAt: integer("lastRunAt", { mode: "timestamp" }),
     lastStatus: text("lastStatus", {
       enum: ["pending", "success", "failure"],

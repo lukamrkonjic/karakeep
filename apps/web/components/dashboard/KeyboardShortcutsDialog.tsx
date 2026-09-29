@@ -156,6 +156,11 @@ export default function KeyboardShortcutsDialog({
           keys: [`${searchModifier} B`],
           description: t("keyboard_shortcuts.toggle_sidebar"),
         },
+        // Fork: QuickFind.
+        {
+          keys: [`${searchModifier} F`],
+          description: t("keyboard_shortcuts.quick_find"),
+        },
       ],
     },
   ];

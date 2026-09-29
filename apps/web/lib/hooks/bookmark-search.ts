@@ -14,7 +14,7 @@ import { useInSearchPageStore } from "../store/useInSearchPageStore";
  * is just left out. The lists it's within (the search bar's chips) are
  * ?in=<id>,<id>.
  */
-function buildSearchHref(query: string, listIds: string[] = []) {
+export function buildSearchHref(query: string, listIds: string[] = []) {
   const params = new URLSearchParams();
   if (query) {
     params.set("q", query);

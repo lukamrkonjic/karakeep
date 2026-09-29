@@ -1,4 +1,5 @@
 import type translation from "@/lib/i18n/locales/en/translation.json";
+import { matchRank } from "@/lib/nameMatch";
 import type { TFunction } from "i18next";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -467,24 +468,6 @@ export function mentionAt(
 const isPlainWord = (parsed: ParsedSearchState) =>
   parsed.activeToken.length >= 2 &&
   /^[^@#"(!-][^:"]*$/.test(parsed.activeToken);
-
-/**
- * How a name matches what's typed: 0 at its start, 1 at a word's, 2 inside
- * a word; -1 not at all.
- */
-function matchRank(name: string, term: string): number {
-  const lower = name.toLowerCase();
-  const at = lower.indexOf(term);
-  if (at < 0) {
-    return -1;
-  }
-  if (at === 0) {
-    return 0;
-  }
-  return lower.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(term))
-    ? 1
-    : 2;
-}
 
 /** A plain word's suggestions of each kind: a few, not to crowd the rest. */
 const MAX_WORD_SUGGESTIONS = 3;
