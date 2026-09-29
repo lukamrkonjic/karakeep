@@ -52,6 +52,9 @@ export function GatedImage({
     );
   }
 
+  // Fork: the placeholder's shape until the picture's own is known (with
+  // width=0/height=0 it collapsed to nothing first, and every tile under it
+  // jumped twice: up, then down again).
   return (
     <Image
       alt={alt}
@@ -61,7 +64,7 @@ export function GatedImage({
       sizes="100vw"
       unoptimized
       draggable={false}
-      className={cn("block h-auto w-full", className)}
+      className={cn("block aspect-[auto_3/4] h-auto w-full", className)}
       onLoad={release}
       onError={release}
     />

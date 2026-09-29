@@ -232,6 +232,10 @@ export default function UploadDropzone({
   return (
     <DropZone
       noClick
+      // Fork: not focusable. Its root wraps the whole grid, so a click on a
+      // card focused it and Safari (the Mac app) drew its focus ring round
+      // the grid and the "Load More" row — the blue lines at the bottom.
+      noKeyboard
       onDrop={onDrop}
       onDragEnter={(e) => {
         // Don't show overlay for internal bookmark card drags

@@ -100,9 +100,10 @@ export function MasonryMediaCard({
       {/* Title + actions, revealed on hover at the top so they don't collide
           with a video's native controls along the bottom. Icons are forced
           white since they always sit on the dimmed media above. A long title
-          stays on one line, cut short (the full one is its tooltip). Not
-          there at all by touch, where a long press opens the actions: its
-          see-through buttons would take a tap meant for the picture. */}
+          stays on one line, cut short (the full one is its tooltip); a click
+          on it opens the preview, as on the picture under it. Not there at
+          all by touch, where a long press opens the actions: its see-through
+          buttons would take a tap meant for the picture. */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 touch:hidden",
@@ -110,12 +111,16 @@ export function MasonryMediaCard({
         )}
       >
         {title && (
-          <span
+          <PreviewLink
+            href={`/dashboard/preview/${bookmark.id}`}
             title={title}
+            draggable={false}
+            // The picture's own link is the one to tab to.
+            tabIndex={-1}
             className="pointer-events-auto min-w-0 truncate text-sm font-medium text-white drop-shadow"
           >
             {title}
-          </span>
+          </PreviewLink>
         )}
         <div className="pointer-events-auto ml-auto shrink-0">
           <BookmarkActionBar
