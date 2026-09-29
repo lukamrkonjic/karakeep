@@ -9,7 +9,7 @@ import {
 } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Crop, Minus, Plus, RotateCcw } from "lucide-react";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
@@ -63,8 +63,8 @@ function ControlButton({
 /**
  * Fork: the preview's picture, zoomable. Scroll (or pinch) over it to zoom in
  * where the pointer is, drag to look around once zoomed in, and the buttons
- * bottom right step in, out, and back. At its normal size a click on it is
- * `onClick` (the modal closes).
+ * bottom right step in, out, and back — then, given `onCrop`, crop it. At its
+ * normal size a click on it is `onClick` (the modal closes).
  *
  * Renders the black pane the picture sits in (`className`), so scrolling
  * anywhere on it zooms; `children` are overlaid on the pane.
@@ -76,6 +76,7 @@ export function ZoomableImage({
   imageStyle,
   showAtOnce = false,
   onClick,
+  onCrop,
   children,
 }: {
   src: string;
@@ -87,6 +88,8 @@ export function ZoomableImage({
   showAtOnce?: boolean;
   /** A click on the pane at the normal size, not on one of its buttons. */
   onClick?: () => void;
+  /** The crop button after the zoom buttons (the picture's owner only). */
+  onCrop?: () => void;
   children?: React.ReactNode;
 }) {
   const paneRef = useRef<HTMLDivElement>(null);
@@ -302,6 +305,11 @@ export function ZoomableImage({
         >
           <RotateCcw size={18} />
         </ControlButton>
+        {onCrop && (
+          <ControlButton label="Crop" onClick={onCrop}>
+            <Crop size={18} />
+          </ControlButton>
+        )}
       </div>
     </div>
   );

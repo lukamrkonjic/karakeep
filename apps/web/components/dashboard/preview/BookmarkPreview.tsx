@@ -248,6 +248,19 @@ export default function BookmarkPreview({
         fileName: downloadName(bookmark),
       }
     : undefined;
+  // Fork: a picture its owner can crop. On a wide screen the modal's crop
+  // button sits after the picture's zoom buttons (MediaFitPreview); the
+  // footer keeps one only where the picture has none (PreviewActions).
+  const crop =
+    isOwner &&
+    bookmark.content.type === BookmarkTypes.ASSET &&
+    bookmark.content.assetType === "image"
+      ? {
+          bookmarkId: bookmark.id,
+          assetId: bookmark.content.assetId,
+          fileName: bookmark.content.fileName,
+        }
+      : undefined;
 
   // Common content for both layouts
   const contentSection = isBookmarkStillCrawling(bookmark) ? (
@@ -308,6 +321,7 @@ export default function BookmarkPreview({
           bookmark={bookmark}
           canEdit={isOwner}
           download={download}
+          cropOnPicture={media?.kind === "image"}
         />
       </div>
     </div>
@@ -338,6 +352,7 @@ export default function BookmarkPreview({
             media={media}
             details={detailsSection}
             onClose={onClose}
+            crop={crop}
           />
         </div>
       ) : (

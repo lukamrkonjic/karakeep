@@ -14,6 +14,7 @@ import { ExternalLink, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
+import { CropPicture } from "./CropPicture";
 import { ZoomableImage } from "./ZoomableImage";
 
 export interface PreviewMedia {
@@ -97,11 +98,18 @@ export function MediaFitPreview({
   media,
   details,
   onClose,
+  crop,
 }: {
   media: PreviewMedia;
   details: React.ReactNode;
   onClose?: () => void;
+  /**
+   * Fork: a picture its owner can crop — the crop button sits after the zoom
+   * buttons (it used to be in the details' footer, PreviewActions).
+   */
+  crop?: { bookmarkId: string; assetId: string; fileName?: string | null };
 }) {
+  const [cropping, setCropping] = useState(false);
   // One remembered setting for every preview (lib/previewDetails.ts).
   const panelOpen = !usePreviewDetailsHidden();
   const togglePanel = useTogglePreviewDetails();
@@ -196,6 +204,7 @@ export function MediaFitPreview({
           imageStyle={box}
           showAtOnce={loadedBefore}
           onClick={onClose}
+          onCrop={crop ? () => setCropping(true) : undefined}
         >
           {controls}
         </ZoomableImage>
@@ -215,6 +224,18 @@ export function MediaFitPreview({
         <div className="relative w-[360px] shrink-0 border-l bg-muted/40">
           <div className="absolute inset-0 overflow-y-auto p-5">{details}</div>
         </div>
+      )}
+      {/* Not inside ZoomableImage: a click in the dialog would reach the
+          pane's click handler (React events follow the portal's parent) and
+          close the preview. */}
+      {crop && (
+        <CropPicture
+          bookmarkId={crop.bookmarkId}
+          assetId={crop.assetId}
+          fileName={crop.fileName}
+          open={cropping}
+          onOpenChange={setCropping}
+        />
       )}
     </div>
   );

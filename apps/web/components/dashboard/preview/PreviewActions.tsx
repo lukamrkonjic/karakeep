@@ -28,11 +28,17 @@ export function PreviewActions({
   bookmark,
   canEdit,
   download,
+  cropOnPicture = false,
 }: {
   bookmark: ZBookmark;
   /** Archive and Delete are the owner's. */
   canEdit: boolean;
   download?: { href: string; fileName?: string };
+  /**
+   * The modal's picture has a crop button by its zoom buttons on a wide
+   * screen (MediaFitPreview), so Crop shows here only on a narrow one.
+   */
+  cropOnPicture?: boolean;
 }) {
   const { t } = useTranslation();
   const [deleting, setDeleting] = useState(false);
@@ -84,7 +90,11 @@ export function PreviewActions({
           <Button
             variant="ghost"
             size="none"
-            className={cn(button, "hover:text-foreground")}
+            className={cn(
+              button,
+              "hover:text-foreground",
+              cropOnPicture && "lg:hidden",
+            )}
             onClick={() => setCropping(true)}
           >
             <Crop size={16} strokeWidth={1.75} />
