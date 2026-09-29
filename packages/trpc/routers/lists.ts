@@ -112,6 +112,21 @@ export const listsAppRouter = router({
     .mutation(async ({ input, ctx }) => {
       await List.reorder(ctx, input);
     }),
+  // Fork: under another list (or the top level) and in place, in one go —
+  // the Organise lists dialog.
+  move: listsProcedure
+    .input(
+      z.object({
+        listId: z.string(),
+        parentId: z.string().nullable(),
+        index: z.number().int().min(0),
+      }),
+    )
+    .use(ensureListAtLeastViewer)
+    .use(ensureListAtLeastOwner)
+    .mutation(async ({ input, ctx }) => {
+      await List.move(ctx, input);
+    }),
   merge: listsProcedure
     .input(zMergeListSchema)
     .mutation(async ({ input, ctx }) => {

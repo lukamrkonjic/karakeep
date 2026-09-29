@@ -72,3 +72,29 @@ export function normalizeListIcon(icon: string): string {
   const trimmed = icon.trim();
   return /^[?�\s]*$/.test(trimmed) ? "" : trimmed;
 }
+
+/**
+ * Fork: the position that puts a list at `index` (0: first) among
+ * `siblings` — its new siblings without it, first first (the highest
+ * position): halfway between its neighbours, or one past either end. As
+ * lists.move places one; the web app shows the move with it before the
+ * server's answer.
+ */
+export function positionAmong(
+  siblings: { position: number }[],
+  index: number,
+): number {
+  const at = Math.max(0, Math.min(index, siblings.length));
+  const prev = siblings[at - 1];
+  const next = siblings[at];
+  if (!prev && !next) {
+    return 0;
+  }
+  if (!prev) {
+    return next.position + 1;
+  }
+  if (!next) {
+    return prev.position - 1;
+  }
+  return (prev.position + next.position) / 2;
+}

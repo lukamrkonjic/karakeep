@@ -494,6 +494,110 @@ describe("Lists Routes", () => {
       /List not found/,
     );
   });
+
+  // Fork: the Organise lists dialog.
+  test<CustomTestContext>("move puts a list under another, in place", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].lists;
+    const food = await api.create({ name: "Food", type: "manual", icon: "📋" });
+    await api.create({
+      name: "A",
+      type: "manual",
+      icon: "📋",
+      parentId: food.id,
+    });
+    const b = await api.create({
+      name: "B",
+      type: "manual",
+      icon: "📋",
+      parentId: food.id,
+    });
+    const loose = await api.create({
+      name: "Loose",
+      type: "manual",
+      icon: "📋",
+    });
+    // Food holds B, A (newest first).
+    const order = async (parentId: string | null) =>
+      (await api.list()).lists
+        .filter((l) => l.parentId === parentId)
+        .sort((x, y) => y.position - x.position)
+        .map((l) => l.name);
+
+    await api.move({ listId: loose.id, parentId: food.id, index: 1 });
+    expect(await order(food.id)).toEqual(["B", "Loose", "A"]);
+    expect(await order(null)).toEqual(["Food"]);
+
+    await api.move({ listId: loose.id, parentId: food.id, index: 5 });
+    expect(await order(food.id)).toEqual(["B", "A", "Loose"]);
+
+    // Out again, to the top.
+    await api.move({ listId: b.id, parentId: null, index: 0 });
+    expect(await order(null)).toEqual(["B", "Food"]);
+    expect(await order(food.id)).toEqual(["A", "Loose"]);
+
+    // Under a list of its own, with what's under it.
+    await api.move({ listId: food.id, parentId: b.id, index: 0 });
+    expect(await order(null)).toEqual(["B"]);
+    expect(await order(b.id)).toEqual(["Food"]);
+    expect(await order(food.id)).toEqual(["A", "Loose"]);
+  });
+
+  test<CustomTestContext>("move never puts a list inside itself", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].lists;
+    const top = await api.create({ name: "Top", type: "manual", icon: "📋" });
+    const mid = await api.create({
+      name: "Mid",
+      type: "manual",
+      icon: "📋",
+      parentId: top.id,
+    });
+    const low = await api.create({
+      name: "Low",
+      type: "manual",
+      icon: "📋",
+      parentId: mid.id,
+    });
+
+    await expect(
+      api.move({ listId: top.id, parentId: top.id, index: 0 }),
+    ).rejects.toThrow(/inside itself/);
+    await expect(
+      api.move({ listId: top.id, parentId: low.id, index: 0 }),
+    ).rejects.toThrow(/inside itself/);
+    // Nothing moved.
+    const byId = new Map((await api.list()).lists.map((l) => [l.id, l]));
+    expect(byId.get(top.id)!.parentId).toBeNull();
+    expect(byId.get(mid.id)!.parentId).toEqual(top.id);
+    expect(byId.get(low.id)!.parentId).toEqual(mid.id);
+  });
+
+  test<CustomTestContext>("move only moves your lists, under your lists", async ({
+    apiCallers,
+  }) => {
+    const mine = apiCallers[0].lists;
+    const theirs = apiCallers[1].lists;
+    const list = await mine.create({
+      name: "Mine",
+      type: "manual",
+      icon: "📋",
+    });
+    const other = await theirs.create({
+      name: "Theirs",
+      type: "manual",
+      icon: "📋",
+    });
+
+    await expect(
+      theirs.move({ listId: list.id, parentId: null, index: 0 }),
+    ).rejects.toThrow(/List not found/);
+    await expect(
+      mine.move({ listId: list.id, parentId: other.id, index: 0 }),
+    ).rejects.toThrow(/No such list/);
+  });
 });
 
 describe("recursive delete", () => {

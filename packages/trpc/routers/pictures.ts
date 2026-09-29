@@ -213,6 +213,27 @@ function coloursIn(matcher: Matcher | undefined): string[] {
   }
 }
 
+/**
+ * A query's matcher, within lists (any of them, and what's under them) —
+ * as a matcher of its own, so the query's "or"s stay inside them.
+ */
+function withinLists(
+  matcher: Matcher | undefined,
+  listIds: string[] | undefined,
+): Matcher | undefined {
+  if (!listIds?.length) {
+    return matcher;
+  }
+  const lists: Matcher[] = listIds.map((listId) => ({
+    type: "listId",
+    listId,
+    inverse: false,
+  }));
+  const scope: Matcher =
+    lists.length === 1 ? lists[0] : { type: "or", matchers: lists };
+  return matcher ? { type: "and", matchers: [scope, matcher] } : scope;
+}
+
 /** Only these (a query's qualifiers), and only the user's. */
 function onlyOf(ctx: AuthedContext, allowed: string[] | null) {
   return [
@@ -598,12 +619,15 @@ export const picturesAppRouter = router({
    * by rank, so what several find rises; newest or oldest first, it's all
    * of them by date. A new description's fingerprint can take the workers a
    * moment (the first time, the text model downloads): until it's there, the
-   * rest answers, with `pictures: "preparing"`.
+   * rest answers, with `pictures: "preparing"`. With `listIds` (the search
+   * bar's list chips), only what's in those lists — any of them, and what's
+   * under them.
    */
   search: picturesProcedure
     .input(
       z.object({
         text: z.string().max(1000),
+        listIds: z.array(z.string()).max(50).optional(),
         sortOrder: zSortOrder.optional(),
         cursor: z.number().int().min(0).nullish(),
       }),
@@ -616,16 +640,17 @@ export const picturesAppRouter = router({
     .query(async ({ ctx, input }) => {
       const sortOrder = input.sortOrder ?? "relevance";
       const parsed = parseSearchQuery(input.text);
+      const matcher = withinLists(parsed.matcher, input.listIds);
       const words = parsed.text.trim();
       const settings = await getPictureSettings(ctx.db, ctx.user.id);
       let pictures: "on" | "preparing" | "off" = settings.describeEnabled
         ? "on"
         : "off";
-      const allowedIds = parsed.matcher
-        ? await getBookmarkIdsFromMatcher(ctx, parsed.matcher)
+      const allowedIds = matcher
+        ? await getBookmarkIdsFromMatcher(ctx, matcher)
         : null;
       const allowed = allowedIds ? new Set(allowedIds) : null;
-      const colours = settings.palettesEnabled ? coloursIn(parsed.matcher) : [];
+      const colours = settings.palettesEnabled ? coloursIn(matcher) : [];
 
       let ranked: string[];
       if (allowedIds?.length === 0) {

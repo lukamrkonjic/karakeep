@@ -232,6 +232,43 @@ describe("Pictures", () => {
     // With words it narrows, and puts the most of it first.
     expect(titles(await search("red chair color:#c8a27a"))).toEqual(["d", "a"]);
 
+    // Within lists (the search bar's chips): any of them, and what's under
+    // them — a query's own "or" staying inside.
+    const food = await caller.lists.create({
+      name: "Food",
+      type: "manual",
+      icon: "📋",
+    });
+    const snacks = await caller.lists.create({
+      name: "Snacks",
+      type: "manual",
+      icon: "📋",
+      parentId: food.id,
+    });
+    const other = await caller.lists.create({
+      name: "Other",
+      type: "manual",
+      icon: "📋",
+    });
+    await caller.lists.addToList({ listId: food.id, bookmarkId: d });
+    await caller.lists.addToList({ listId: snacks.id, bookmarkId: a });
+    await caller.lists.addToList({ listId: other.id, bookmarkId: c });
+    const within = (text: string, listIds: string[]) =>
+      caller.pictures.search({ text, listIds, sortOrder: "desc" });
+    expect(titles(await within("red chair", [food.id]))).toEqual(["d", "a"]);
+    expect(titles(await within("red chair", [snacks.id]))).toEqual(["a"]);
+    expect(titles(await within("red chair", [food.id, other.id]))).toEqual([
+      "d",
+      "c",
+      "a",
+    ]);
+    expect(titles(await within("", [food.id]))).toEqual(["d", "a"]);
+    expect(titles(await within("is:fav", [other.id]))).toEqual(["c"]);
+    expect(titles(await within("is:fav or is:archived", [food.id]))).toEqual(
+      [],
+    );
+    expect(titles(await within("red chair", []))).toEqual(["d", "c", "a"]);
+
     // A new description: the workers make its fingerprint meanwhile, and
     // the words answer.
     wordIndex.set("blue sofa", [b]);

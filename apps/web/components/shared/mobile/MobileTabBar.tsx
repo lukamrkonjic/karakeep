@@ -148,6 +148,7 @@ export default function MobileTabBar({
   // Picking anything in a sheet navigates, and that closes it.
   useEffect(() => setSheet(null), [pathname]);
 
+  const pageList = /^\/dashboard\/lists\/([^/]+)/.exec(pathname)?.[1];
   const tabs: {
     label: string;
     icon: React.ReactNode;
@@ -176,7 +177,8 @@ export default function MobileTabBar({
     {
       label: t("common.search"),
       icon: <Search />,
-      href: "/dashboard/search",
+      // Fork: from a list's page, within that list (a chip to take away).
+      href: pageList ? `/dashboard/search?in=${pageList}` : "/dashboard/search",
       active: pathname.startsWith("/dashboard/search"),
     },
     {

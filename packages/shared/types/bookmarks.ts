@@ -309,6 +309,9 @@ export const zGetBookmarksRequestSchema = z.object({
   // (round the colour wheel, by each picture's palette). See
   // packages/trpc/models/bookmarkOrders.ts.
   sortBy: z.enum(["random", "addedToList", "colour"]).optional(),
+  // Fork: favourites first, then the order asked for. A list (listId) has
+  // them first anyway; this is for one shown with its sub-lists (listIds).
+  favouritesFirst: z.boolean().optional(),
   shuffleSeed: z.number().int().optional(),
   includeContent: z.boolean().optional().default(false),
 });

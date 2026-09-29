@@ -19,6 +19,7 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 import { zBookmarkSourceSchema } from "@karakeep/shared/types/bookmarks";
 
 const MAX_DISPLAY_SUGGESTIONS = 5;
+const NO_LISTS: string[] = [];
 
 type SearchTranslationKey = `search.${keyof typeof translation.search}`;
 
@@ -107,8 +108,12 @@ const QUALIFIER_DEFINITIONS = [
 ] satisfies readonly QualifierDefinition[];
 
 export interface AutocompleteSuggestionItem {
-  type: "token" | "tag" | "list" | "feed" | "source";
+  type: "token" | "tag" | "list" | "feed" | "source" | "scope";
   id: string;
+  /** Fork: a "scope" item's list (searched within, as a chip). */
+  listId?: string;
+  /** Fork: named after @ (what's replaced runs from the @). */
+  mention?: boolean;
   label: string;
   insertText: string;
   appendSpace?: boolean;
@@ -164,6 +169,10 @@ interface UseSearchAutocompleteParams {
   setIsPopoverOpen: React.Dispatch<React.SetStateAction<boolean>>;
   t: TFunction;
   history: string[];
+  /** Fork: the lists the search is within (the chips). */
+  scope?: string[];
+  /** Fork: a list picked (@name), and the text without its name. */
+  onScopeAdd?: (listId: string, value: string) => void;
 }
 
 const useParsedSearchState = (value: string): ParsedSearchState => {
@@ -260,10 +269,15 @@ const useQualifierSuggestions = (
 const useTagSuggestions = (
   parsed: ParsedSearchState,
 ): AutocompleteSuggestionItem[] => {
-  const shouldSuggestTags = parsed.tokenWithoutMinus.startsWith("#");
-  const tagSearchTermRaw = shouldSuggestTags
+  const hashed = parsed.tokenWithoutMinus.startsWith("#");
+  // Fork: a word typed as it is suggests a few tags too.
+  const plain = isPlainWord(parsed);
+  const shouldSuggestTags = hashed || plain;
+  const tagSearchTermRaw = hashed
     ? parsed.tokenWithoutMinus.slice(1)
-    : "";
+    : plain
+      ? parsed.activeToken
+      : "";
   const tagSearchTerm = stripSurroundingQuotes(tagSearchTermRaw);
   const debouncedTagSearchTerm = useDebounce(tagSearchTerm, 200);
 
@@ -278,21 +292,36 @@ const useTagSuggestions = (
       return [];
     }
 
-    return (tagResults ?? []).slice(0, MAX_DISPLAY_SUGGESTIONS).map((tag) => {
-      const formattedName = formatSearchValue(tag.name);
-      const insertText = `${parsed.isTokenNegative ? "-" : ""}#${formattedName}`;
+    // A plain word's: only where a name (or a word in it) starts with it.
+    const term = tagSearchTerm.toLowerCase();
+    const startsWithIt = (name: string) => {
+      const rank = matchRank(name, term);
+      return rank === 0 || rank === 1;
+    };
+    return (tagResults ?? [])
+      .filter((tag) => hashed || startsWithIt(tag.name))
+      .slice(0, hashed ? MAX_DISPLAY_SUGGESTIONS : MAX_WORD_SUGGESTIONS)
+      .map((tag) => {
+        const formattedName = formatSearchValue(tag.name);
+        const insertText = `${parsed.isTokenNegative ? "-" : ""}#${formattedName}`;
 
-      return {
-        type: "tag" as const,
-        id: `tag-${tag.id}`,
-        label: insertText,
-        insertText,
-        appendSpace: true,
-        description: undefined,
-        Icon: TagIcon,
-      } satisfies AutocompleteSuggestionItem;
-    });
-  }, [shouldSuggestTags, tagResults, parsed.isTokenNegative]);
+        return {
+          type: "tag" as const,
+          id: `tag-${tag.id}`,
+          label: insertText,
+          insertText,
+          appendSpace: true,
+          description: undefined,
+          Icon: TagIcon,
+        } satisfies AutocompleteSuggestionItem;
+      });
+  }, [
+    shouldSuggestTags,
+    hashed,
+    tagSearchTerm,
+    tagResults,
+    parsed.isTokenNegative,
+  ]);
 
   return tagSuggestions;
 };
@@ -414,6 +443,112 @@ const useListSuggestions = (
   return listSuggestions;
 };
 
+/**
+ * Fork: a list being named after @ (spaces and all: "@interior de"), up to
+ * the cursor — where its @ is and what's typed after it.
+ */
+export function mentionAt(
+  value: string,
+  cursor: number,
+): { start: number; term: string } | null {
+  const before = value.slice(0, cursor);
+  const at = before.lastIndexOf("@");
+  if (at < 0 || (at > 0 && !/[\s(]/.test(before[at - 1]))) {
+    return null;
+  }
+  const term = before.slice(at + 1);
+  return term.length <= 80 ? { start: at, term } : null;
+}
+
+/**
+ * Fork: a word typed as it is (no @, #, - or qualifier:), two letters or
+ * more — lists and tags are suggested for it too.
+ */
+const isPlainWord = (parsed: ParsedSearchState) =>
+  parsed.activeToken.length >= 2 &&
+  /^[^@#"(!-][^:"]*$/.test(parsed.activeToken);
+
+/**
+ * How a name matches what's typed: 0 at its start, 1 at a word's, 2 inside
+ * a word; -1 not at all.
+ */
+function matchRank(name: string, term: string): number {
+  const lower = name.toLowerCase();
+  const at = lower.indexOf(term);
+  if (at < 0) {
+    return -1;
+  }
+  if (at === 0) {
+    return 0;
+  }
+  return lower.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(term))
+    ? 1
+    : 2;
+}
+
+/** A plain word's suggestions of each kind: a few, not to crowd the rest. */
+const MAX_WORD_SUGGESTIONS = 3;
+
+/**
+ * Fork: lists to search within, each picked one a chip in the search bar.
+ * @name asks for them — every list with it in its name, spaces and all; a
+ * word typed as it is suggests the few whose name (or a word in it) starts
+ * with it.
+ */
+const useScopeSuggestions = (
+  value: string,
+  parsed: ParsedSearchState,
+  scope: string[],
+): AutocompleteSuggestionItem[] => {
+  const mention = useMemo(() => mentionAt(value, value.length), [value]);
+  const plain = isPlainWord(parsed);
+  const { data: listResults } = useBookmarkLists(undefined, {
+    enabled: !!mention || plain,
+  });
+
+  return useMemo<AutocompleteSuggestionItem[]>(() => {
+    if (!listResults) {
+      return [];
+    }
+    const pick = (term: string, fromMention: boolean) =>
+      listResults.data
+        .filter((list) => !scope.includes(list.id))
+        .map((list) => ({ list, rank: matchRank(list.name, term) }))
+        .filter(({ rank }) => rank >= 0 && (fromMention || rank <= 1))
+        .sort(
+          (a, b) => a.rank - b.rank || a.list.name.localeCompare(b.list.name),
+        )
+        .slice(0, fromMention ? MAX_DISPLAY_SUGGESTIONS : MAX_WORD_SUGGESTIONS)
+        .map(({ list }) => {
+          const path = listResults.getPathById(list.id) ?? [];
+          return {
+            type: "scope" as const,
+            id: `scope-${list.id}`,
+            listId: list.id,
+            mention: fromMention,
+            label: list.name,
+            insertText: "",
+            description:
+              path.length > 1
+                ? path
+                    .slice(0, -1)
+                    .map((l) => l.name)
+                    .join(" / ")
+                : undefined,
+            Icon: ListTree,
+          } satisfies AutocompleteSuggestionItem;
+        });
+    if (mention) {
+      const found = pick(mention.term.trim().toLowerCase(), true);
+      // Past a space, it's still a list's name only while one has it.
+      if (found.length > 0 || !/\s/.test(mention.term)) {
+        return found;
+      }
+    }
+    return plain ? pick(parsed.activeToken.toLowerCase(), false) : [];
+  }, [listResults, mention, plain, parsed.activeToken, scope]);
+};
+
 const SOURCE_VALUES = zBookmarkSourceSchema.options;
 
 const useSourceSuggestions = (
@@ -502,8 +637,12 @@ export const useSearchAutocomplete = ({
   setIsPopoverOpen,
   t,
   history,
+  scope = NO_LISTS,
+  onScopeAdd,
 }: UseSearchAutocompleteParams) => {
   const parsedState = useParsedSearchState(value);
+  const scopeSuggestions = useScopeSuggestions(value, parsedState, scope);
+  const plainWord = isPlainWord(parsedState);
   const qualifierSuggestions = useQualifierSuggestions(parsedState, t);
   const tagSuggestions = useTagSuggestions(parsedState);
   const listSuggestions = useListSuggestions(parsedState);
@@ -514,6 +653,14 @@ export const useSearchAutocomplete = ({
 
   const suggestionGroups = useMemo<SuggestionGroup[]>(() => {
     const groups: SuggestionGroup[] = [];
+
+    if (scopeSuggestions.length > 0) {
+      groups.push({
+        id: "scope",
+        label: "Search in",
+        items: scopeSuggestions,
+      });
+    }
 
     if (tagSuggestions.length > 0) {
       groups.push({
@@ -547,8 +694,9 @@ export const useSearchAutocomplete = ({
       });
     }
 
-    // Only suggest qualifiers if no other suggestions are available
-    if (groups.length === 0 && qualifierSuggestions.length > 0) {
+    // Only suggest qualifiers if no other suggestions are available (fork:
+    // or the word's typed as it is, the lists and tags for it above them)
+    if ((groups.length === 0 || plainWord) && qualifierSuggestions.length > 0) {
       groups.push({
         id: "qualifiers",
         label: t("search.filters"),
@@ -566,6 +714,8 @@ export const useSearchAutocomplete = ({
 
     return groups;
   }, [
+    plainWord,
+    scopeSuggestions,
     qualifierSuggestions,
     tagSuggestions,
     listSuggestions,
@@ -577,6 +727,12 @@ export const useSearchAutocomplete = ({
 
   const hasSuggestions = suggestionGroups.length > 0;
   const isPopoverVisible = isPopoverOpen && hasSuggestions;
+  // Fork: after @ or #, the first one's picked with Enter (a word typed as
+  // it is still just searches).
+  const autoSelectFirst =
+    scopeSuggestions.some((item) => item.mention) ||
+    (parsedState.tokenWithoutMinus.startsWith("#") &&
+      tagSuggestions.length > 0);
 
   const handleSuggestionSelect = useCallback(
     (item: AutocompleteSuggestionItem) => {
@@ -586,6 +742,26 @@ export const useSearchAutocomplete = ({
       const { start } = getActiveToken(selectionStart);
       const beforeToken = value.slice(0, start);
       const afterToken = value.slice(selectionEnd);
+
+      // Fork: a list becomes a chip, and its name leaves the text.
+      if (item.type === "scope" && item.listId) {
+        const mention = item.mention ? mentionAt(value, selectionStart) : null;
+        const head = value.slice(0, mention?.start ?? start).trimEnd();
+        const tail = afterToken.trimStart();
+        const gap = head && tail ? " " : "";
+        onScopeAdd?.(item.listId, `${head}${gap}${tail}`);
+        requestAnimationFrame(() => {
+          const target = inputRef.current;
+          if (!target) {
+            return;
+          }
+          const cursorPosition = head.length + gap.length;
+          target.focus();
+          target.setSelectionRange(cursorPosition, cursorPosition);
+        });
+        setIsPopoverOpen(true);
+        return;
+      }
 
       const needsSpace =
         item.appendSpace &&
@@ -610,7 +786,14 @@ export const useSearchAutocomplete = ({
 
       setIsPopoverOpen(true);
     },
-    [getActiveToken, onValueChange, value, inputRef, setIsPopoverOpen],
+    [
+      getActiveToken,
+      onValueChange,
+      onScopeAdd,
+      value,
+      inputRef,
+      setIsPopoverOpen,
+    ],
   );
 
   const handleCommandKeyDown = useCallback(
@@ -639,6 +822,7 @@ export const useSearchAutocomplete = ({
     suggestionGroups,
     hasSuggestions,
     isPopoverVisible,
+    autoSelectFirst,
     handleSuggestionSelect,
     handleCommandKeyDown,
   };

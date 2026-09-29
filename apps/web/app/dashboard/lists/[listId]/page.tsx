@@ -83,7 +83,8 @@ export default async function ListPage(props: {
     ];
     const ids = walk(list.id);
     if (ids.length > 1) {
-      query = { listIds: ids, archived };
+      // Its favourites first, as a list's (listId) always are.
+      query = { listIds: ids, archived, favouritesFirst: true };
     }
   }
 

@@ -36,12 +36,16 @@ const CommandDialog = ({ children, ...props }: DialogProps) => {
 
 const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input> & {
+    /** Fork: shown before the text (the search bar's list chips). */
+    before?: React.ReactNode;
+  }
+>(({ className, before, ...props }, ref) => (
   // https://github.com/shadcn-ui/ui/issues/3366
   // eslint-disable-next-line react/no-unknown-property
   <div className="flex items-center px-3" cmdk-input-wrapper="">
     <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+    {before}
     <CommandPrimitive.Input
       ref={ref}
       className={cn(

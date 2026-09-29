@@ -559,6 +559,66 @@ describe("Bookmark Routes", () => {
     expect(viaMany.slice(0, 2)).toEqual([oldest, newest]);
   });
 
+  // Fork: a list's favourites first, whatever its order.
+  test<CustomTestContext>("a list shows its favourites first, in every order", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0].bookmarks;
+    const lists = apiCallers[0].lists;
+    const list = await lists.create({ name: "Food", type: "manual", icon: "" });
+    const ids: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const b = await api.createBookmark({
+        text: `note ${i}`,
+        type: BookmarkTypes.TEXT,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+      });
+      await lists.addToList({ listId: list.id, bookmarkId: b.id });
+      ids.push(b.id);
+    }
+    // Two old ones starred.
+    for (const id of [ids[1], ids[4]]) {
+      await api.updateBookmark({ bookmarkId: id, favourited: true });
+    }
+    type Query = Parameters<typeof api.getBookmarks>[0];
+    const all = async (query: Query) => {
+      const seen: string[] = [];
+      let cursor: Query["cursor"] = null;
+      do {
+        const page = await api.getBookmarks({ ...query, cursor, limit: 5 });
+        seen.push(...page.bookmarks.map((b) => b.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+      return seen;
+    };
+    const rest = ids.filter((id) => id !== ids[1] && id !== ids[4]);
+
+    expect(await all({ listId: list.id })).toEqual([
+      ids[4],
+      ids[1],
+      ...[...rest].reverse(),
+    ]);
+    expect(await all({ listId: list.id, sortOrder: "asc" })).toEqual([
+      ids[1],
+      ids[4],
+      ...rest,
+    ]);
+    const shuffled = await all({
+      listId: list.id,
+      sortBy: "random",
+      shuffleSeed: 3,
+    });
+    expect(new Set(shuffled.slice(0, 2))).toEqual(new Set([ids[1], ids[4]]));
+    expect(new Set(shuffled).size).toBe(12);
+    // With its sub-lists, as asked; the tailored feed, and not a list, as
+    // they were.
+    expect(
+      (await all({ listIds: [list.id], favouritesFirst: true })).slice(0, 2),
+    ).toEqual([ids[4], ids[1]]);
+    expect((await all({ listIds: [list.id] }))[0]).toEqual(ids[11]);
+    expect((await all({}))[0]).toEqual(ids[11]);
+  });
+
   test<CustomTestContext>("update tags", async ({ apiCallers }) => {
     const api = apiCallers[0].bookmarks;
     const createdBookmark = await api.createBookmark({

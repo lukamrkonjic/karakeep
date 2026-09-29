@@ -21,7 +21,10 @@ import {
   zNewBookmarkListSchema,
 } from "@karakeep/shared/types/lists";
 import { ZCursor } from "@karakeep/shared/types/pagination";
-import { normalizeListIcon } from "@karakeep/shared/utils/listUtils";
+import {
+  normalizeListIcon,
+  positionAmong,
+} from "@karakeep/shared/utils/listUtils";
 import { switchCase } from "@karakeep/shared/utils/switch";
 
 import { AuthedContext, Context } from "..";
@@ -369,6 +372,69 @@ export abstract class List {
     await ctx.db
       .update(bookmarkLists)
       .set({ position: newPosition })
+      .where(
+        and(
+          eq(bookmarkLists.id, input.listId),
+          eq(bookmarkLists.userId, ctx.user.id),
+        ),
+      );
+  }
+
+  /**
+   * Fork: a list moved in one go — under another list (or to the top level:
+   * null) and to a place among its new siblings (0: first), as the Organise
+   * lists dialog drags it. Only your own lists, and never into itself or
+   * one of its own sub-lists.
+   */
+  static async move(
+    ctx: AuthedContext,
+    input: { listId: string; parentId: string | null; index: number },
+  ): Promise<void> {
+    const own = await ctx.db
+      .select({
+        id: bookmarkLists.id,
+        parentId: bookmarkLists.parentId,
+        position: bookmarkLists.position,
+      })
+      .from(bookmarkLists)
+      .where(eq(bookmarkLists.userId, ctx.user.id));
+    const byId = new Map(own.map((l) => [l.id, l]));
+    if (!byId.has(input.listId)) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+    if (input.parentId !== null) {
+      if (!byId.has(input.parentId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No such list" });
+      }
+      // Up from the new parent: reaching the list means it'd be inside
+      // itself.
+      const seen = new Set<string>();
+      for (
+        let at: string | null = input.parentId;
+        at !== null && !seen.has(at);
+        at = byId.get(at)?.parentId ?? null
+      ) {
+        if (at === input.listId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A list can't go inside itself",
+          });
+        }
+        seen.add(at);
+      }
+    }
+
+    // Its place among the new siblings, as reorder() places one.
+    const position = positionAmong(
+      own
+        .filter((l) => l.parentId === input.parentId && l.id !== input.listId)
+        .sort((a, b) => b.position - a.position),
+      input.index,
+    );
+
+    await ctx.db
+      .update(bookmarkLists)
+      .set({ parentId: input.parentId, position })
       .where(
         and(
           eq(bookmarkLists.id, input.listId),

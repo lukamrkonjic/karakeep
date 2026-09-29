@@ -474,6 +474,11 @@ export class Bookmark extends BareBookmark {
       });
     }
 
+    // Fork: a list shows its favourites first (bookmarkOrders.ts) — any
+    // list (manual or smart), or one shown with its sub-lists, which asks
+    // (favouritesFirst); the page loads below say false, not to loop.
+    const favouritesFirst = input.favouritesFirst ?? input.listId !== undefined;
+
     // Handle smart lists by converting to bookmark IDs
     if (input.listId) {
       const list = await List.fromId(ctx, input.listId);
@@ -486,10 +491,11 @@ export class Bookmark extends BareBookmark {
     // Fork: the random and recently-added orders (bookmarkOrders.ts). The
     // page's bookmarks load through the usual paths below, by id — a manual
     // list keeps its listId, so a shared list's access rules still apply.
-    if (input.sortBy) {
-      return loadInForkOrder(ctx, input, (ids) =>
+    if (input.sortBy || favouritesFirst) {
+      return loadInForkOrder(ctx, { ...input, favouritesFirst }, (ids) =>
         Bookmark.loadMulti(ctx, {
           ...input,
+          favouritesFirst: false,
           sortBy: undefined,
           shuffleSeed: undefined,
           cursor: null,

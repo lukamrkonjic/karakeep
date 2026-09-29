@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 import {
   listsToTree,
+  positionAmong,
   ZBookmarkListRoot,
 } from "@karakeep/shared/utils/listUtils";
 
@@ -69,6 +70,70 @@ export function useReorderBookmarkList(
         return opts?.onSuccess?.(res, req, meta, context);
       },
     }),
+  );
+}
+
+/**
+ * Fork: moves a list under another (or to the top level: null), to `index`
+ * among its new siblings — shown at once (the lists as the server will
+ * leave them), put back if the server says no.
+ */
+export function useMoveBookmarkList() {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
+  const lists = api.lists.list.pathFilter();
+  return useMutation(
+    api.lists.move.mutationOptions({
+      onMutate: async (req) => {
+        await queryClient.cancelQueries(lists);
+        const before = queryClient.getQueriesData<{ lists: ZBookmarkList[] }>(
+          lists,
+        );
+        queryClient.setQueriesData<{ lists: ZBookmarkList[] }>(lists, (old) =>
+          old ? { ...old, lists: movedList(old.lists, req) } : old,
+        );
+        return { before };
+      },
+      onError: (_err, _req, saved) => {
+        saved?.before.forEach(([key, data]) =>
+          queryClient.setQueryData(key, data),
+        );
+      },
+      // A list's count and what it shows take in its sub-lists' (so do
+      // smart lists of "in this list"): fetched again once the last of a
+      // run of moves is in.
+      onSettled: () => {
+        if (
+          queryClient.isMutating({
+            mutationKey: api.lists.move.mutationKey(),
+          }) > 1
+        ) {
+          return;
+        }
+        queryClient.invalidateQueries(lists);
+        queryClient.invalidateQueries(api.lists.stats.pathFilter());
+        queryClient.invalidateQueries(api.bookmarks.getBookmarks.pathFilter());
+      },
+    }),
+  );
+}
+
+/** The lists with one moved, as lists.move leaves them. */
+export function movedList(
+  lists: ZBookmarkList[],
+  move: { listId: string; parentId: string | null; index: number },
+): ZBookmarkList[] {
+  const siblings = lists
+    .filter(
+      (l) =>
+        l.userRole === "owner" &&
+        l.parentId === move.parentId &&
+        l.id !== move.listId,
+    )
+    .sort((a, b) => b.position - a.position);
+  const position = positionAmong(siblings, move.index);
+  return lists.map((l) =>
+    l.id === move.listId ? { ...l, parentId: move.parentId, position } : l,
   );
 }
 

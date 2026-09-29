@@ -19,6 +19,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   MoreHorizontal,
+  Pencil,
   Plus,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ import type { OpenState } from "../lists/CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
 import { ListOptions } from "../lists/ListOptions";
+import { OrganiseListsDialog } from "../lists/OrganiseListsDialog";
 import { SmartListDialog } from "../lists/smart/SmartListDialog";
 import { BookmarkPageOptions } from "../PageOptions";
 import { InvitationNotificationBadge } from "./InvitationNotificationBadge";
@@ -369,6 +371,18 @@ export default function AllLists({
               />
             </button>
             <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
+              {smartTree.data.length > 1 && (
+                <OrganiseListsDialog type="smart">
+                  <button
+                    type="button"
+                    title="Organise smart lists"
+                    aria-label="Organise smart lists"
+                    className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-4 p-px" strokeWidth={1.5} />
+                  </button>
+                </OrganiseListsDialog>
+              )}
               <SmartListDialog>
                 <button
                   type="button"
@@ -412,6 +426,18 @@ export default function AllLists({
               Lists
             </p>
             <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
+              {manualTree.data.length > 1 && (
+                <OrganiseListsDialog type="manual">
+                  <button
+                    type="button"
+                    title="Organise lists"
+                    aria-label="Organise lists"
+                    className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-4 p-px" strokeWidth={1.5} />
+                  </button>
+                </OrganiseListsDialog>
+              )}
               {(foldable.length > 0 || hasSharedLists) && (
                 <button
                   type="button"
