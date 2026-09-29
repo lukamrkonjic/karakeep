@@ -47,8 +47,10 @@ export const PreviewLink = React.forwardRef<
     const { clientX: x, clientY: y, pointerId } = e;
     const release = (ev: MouseEvent) => {
       stop();
+      // (written so an event without a place never counts as near)
+      const near = Math.hypot(ev.clientX - x, ev.clientY - y) < PRESS_SLOP_PX;
       if (
-        Math.hypot(ev.clientX - x, ev.clientY - y) >= PRESS_SLOP_PX ||
+        !near ||
         // A held press that started choosing cards (useLongPress).
         useBulkActionsStore.getState().isBulkEditEnabled
       ) {
