@@ -13,6 +13,7 @@ import {
 } from "@karakeep/db/schema";
 
 import type { AuthedContext } from "../index";
+import { kindCondition } from "../lib/search";
 
 /**
  * Fork: orders beyond upstream's newest/oldest, for getBookmarks (`sortBy`):
@@ -30,11 +31,7 @@ import type { AuthedContext } from "../index";
  *   (picturePalettes.sortKey, shared utils/colours.ts); what has no colours
  *   (not a picture, or not looked at yet) last, newest first.
  *
- * - A list's favourites first (`favouritesFirst`: a list, or one shown with
- *   its sub-lists), then the rest in whichever order — newest or oldest by
- *   default, so a list always takes this path.
- *
- * All need the whole matching set in order, so the ids and their sort keys
+ * Both need the whole matching set in order, so the ids and their sort keys
  * are read in one query, ordered here, and a page is the run after the
  * cursor. The cursor holds the last item's sort key, not an offset: moving a
  * bookmark out while you scroll (drag-and-drop moves) neither repeats nor
@@ -48,11 +45,9 @@ interface Row {
   id: string;
   createdAt: Date;
   addedAt: Date | null;
-  favourited: boolean;
 }
 
-/** [favourites first, the order's two keys, the id]. */
-type Key = [number, number, number, string];
+type Key = [number, number, string];
 
 /** cyrb53 (public domain): a fast, well-mixed 53-bit string hash. */
 function hash(text: string, seed: number): number {
@@ -71,12 +66,7 @@ function hash(text: string, seed: number): number {
 }
 
 function compare(a: Key, b: Key): number {
-  return (
-    a[0] - b[0] ||
-    a[1] - b[1] ||
-    a[2] - b[2] ||
-    (a[3] < b[3] ? -1 : a[3] > b[3] ? 1 : 0)
-  );
+  return a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
 }
 
 /** After every picture with colours: none is past 2. */
@@ -88,25 +78,18 @@ function keyOf(
   input: Input,
   colourKeys: ReadonlyMap<string, number>,
 ): Key {
-  const star = input.favouritesFirst && !row.favourited ? 1 : 0;
   if (input.sortBy === "random") {
-    return [star, hash(row.id, input.shuffleSeed ?? 0), 0, row.id];
+    return [hash(row.id, input.shuffleSeed ?? 0), 0, row.id];
   }
   if (input.sortBy === "colour") {
     return [
-      star,
       colourKeys.get(row.id) ?? NO_COLOUR,
       -row.createdAt.getTime(),
       row.id,
     ];
   }
-  if (input.sortBy === "addedToList") {
-    const added = row.addedAt ?? row.createdAt;
-    return [star, -added.getTime(), -row.createdAt.getTime(), row.id];
-  }
-  // Newest or oldest (a list's favourites first, then these).
-  const time = row.createdAt.getTime();
-  return [star, input.sortOrder === "asc" ? time : -time, 0, row.id];
+  const added = row.addedAt ?? row.createdAt;
+  return [-added.getTime(), -row.createdAt.getTime(), row.id];
 }
 
 function parseCursor(cursor: ZCursor | null | undefined): Key | null {
@@ -115,7 +98,7 @@ function parseCursor(cursor: ZCursor | null | undefined): Key | null {
   }
   try {
     const key = JSON.parse(cursor.id) as unknown;
-    return Array.isArray(key) && key.length === 4 ? (key as Key) : null;
+    return Array.isArray(key) && key.length === 3 ? (key as Key) : null;
   } catch {
     return null; // a cursor from another order: start over
   }
@@ -131,11 +114,12 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
       ? eq(bookmarks.favourited, input.favourited)
       : undefined,
     input.ids ? inArray(bookmarks.id, input.ids) : undefined,
+    // Fork: the pages' Filter by kind.
+    input.kind ? kindCondition(ctx.db, input.kind) : undefined,
   ];
   const ownOnly = eq(bookmarks.userId, ctx.user.id);
-  const withoutAdded = (
-    rows: { id: string; createdAt: Date; favourited: boolean }[],
-  ) => rows.map((r) => ({ ...r, addedAt: null }));
+  const withoutAdded = (rows: { id: string; createdAt: Date }[]) =>
+    rows.map((r) => ({ ...r, addedAt: null }));
 
   if (input.listId !== undefined) {
     // No owner filter, as on loadMulti's list path: a shared list shows its
@@ -145,7 +129,6 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
         id: bookmarks.id,
         createdAt: bookmarks.createdAt,
         addedAt: bookmarksInLists.addedAt,
-        favourited: bookmarks.favourited,
       })
       .from(bookmarksInLists)
       .innerJoin(bookmarks, eq(bookmarks.id, bookmarksInLists.bookmarkId))
@@ -154,11 +137,7 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
   if (input.tagId !== undefined) {
     return withoutAdded(
       await ctx.db
-        .select({
-          id: bookmarks.id,
-          createdAt: bookmarks.createdAt,
-          favourited: bookmarks.favourited,
-        })
+        .select({ id: bookmarks.id, createdAt: bookmarks.createdAt })
         .from(tagsOnBookmarks)
         .innerJoin(bookmarks, eq(bookmarks.id, tagsOnBookmarks.bookmarkId))
         .where(and(eq(tagsOnBookmarks.tagId, input.tagId), ownOnly, ...common)),
@@ -167,11 +146,7 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
   if (input.rssFeedId !== undefined) {
     return withoutAdded(
       await ctx.db
-        .select({
-          id: bookmarks.id,
-          createdAt: bookmarks.createdAt,
-          favourited: bookmarks.favourited,
-        })
+        .select({ id: bookmarks.id, createdAt: bookmarks.createdAt })
         .from(rssFeedImportsTable)
         .innerJoin(bookmarks, eq(bookmarks.id, rssFeedImportsTable.bookmarkId))
         .where(
@@ -216,7 +191,6 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
         id: bookmarks.id,
         createdAt: bookmarks.createdAt,
         addedAt: added.addedAt,
-        favourited: bookmarks.favourited,
       })
       .from(bookmarks)
       .innerJoin(added, eq(added.bookmarkId, bookmarks.id))
@@ -230,11 +204,7 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
 
   return withoutAdded(
     await ctx.db
-      .select({
-        id: bookmarks.id,
-        createdAt: bookmarks.createdAt,
-        favourited: bookmarks.favourited,
-      })
+      .select({ id: bookmarks.id, createdAt: bookmarks.createdAt })
       .from(bookmarks)
       .where(and(ownOnly, ...common, allTags)),
   );
@@ -245,6 +215,17 @@ async function matchingRows(ctx: AuthedContext, input: Input): Promise<Row[]> {
  * ids (loadMulti on its usual path, so access rules stay the same); they're
  * put back in this order before returning.
  */
+/**
+ * Fork: how many bookmarks the input matches (a list's "★ N starred") —
+ * the same set the orders page through.
+ */
+export async function countMatching(
+  ctx: AuthedContext,
+  input: Input,
+): Promise<number> {
+  return (await matchingRows(ctx, input)).length;
+}
+
 export async function loadInForkOrder<T extends { id: string }>(
   ctx: AuthedContext,
   input: Input,

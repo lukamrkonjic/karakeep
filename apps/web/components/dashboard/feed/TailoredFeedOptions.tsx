@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ListChecks } from "lucide-react";
 
 import { PageOptions } from "../PageOptions";
+import { BookmarkFilterSubmenu } from "../sort/FilterSubmenu";
 import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import { TailoredFeedSettings } from "./TailoredFeedSettings";
 
@@ -31,7 +32,12 @@ export function TailoredFeedOptions({
             onSelect: () => setPickerOpen(true),
           },
         ]}
-        sort={<BookmarkSortSubmenu pageKey="feed" withRecentlyAdded />}
+        sort={
+          <>
+            <BookmarkSortSubmenu pageKey="feed" withRecentlyAdded />
+            <BookmarkFilterSubmenu pageKey="feed" />
+          </>
+        }
         path="/dashboard/feed"
       />
     </>

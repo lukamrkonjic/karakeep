@@ -6,19 +6,26 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePageFilters } from "@/lib/hooks/usePageFilter";
 import { usePageSorts, useSetPageSort } from "@/lib/hooks/usePageSort";
+import { PAGE_FILTER_LABELS } from "@/lib/pageFilter";
 import { BOOKMARK_SORT_LABELS, bookmarkSortOf } from "@/lib/pageSort";
 import { Palette, Shuffle, SortAsc, SortDesc } from "lucide-react";
 
+import { BookmarkFilterSubmenu } from "./FilterSubmenu";
+
 /**
  * Fork: the header's sort button for a page with no header of its own to
- * hang a "…" on — the home feed. Same choices and memory as the menus'.
+ * hang a "…" on — the home feed. Same choices and memory as the menus', and
+ * their Filter under them.
  */
 export function PageSortButton({ pageKey }: { pageKey: string }) {
   const setSort = useSetPageSort();
   const current = bookmarkSortOf(usePageSorts(), pageKey);
+  const filters = usePageFilters(pageKey);
   const Icon =
     current === "oldest"
       ? SortAsc
@@ -31,7 +38,11 @@ export function PageSortButton({ pageKey }: { pageKey: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <ButtonWithTooltip
-          tooltip={`Sort: ${BOOKMARK_SORT_LABELS[current]}`}
+          tooltip={`Sort: ${BOOKMARK_SORT_LABELS[current]}${
+            filters.length > 0
+              ? ` · Filter: ${filters.map((f) => PAGE_FILTER_LABELS[f]).join(", ")}`
+              : ""
+          }`}
           delayDuration={100}
           variant="ghost"
         >
@@ -51,6 +62,8 @@ export function PageSortButton({ pageKey }: { pageKey: string }) {
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <BookmarkFilterSubmenu pageKey={pageKey} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

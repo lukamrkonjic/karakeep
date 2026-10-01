@@ -15,6 +15,7 @@ import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
 import { cn } from "@/lib/utils";
 import { CircleCheck, MoreHorizontal } from "lucide-react";
 
+import { BookmarkFilterSubmenu } from "./sort/FilterSubmenu";
 import { BookmarkSortSubmenu } from "./sort/SortSubmenu";
 
 /**
@@ -62,7 +63,9 @@ export function PageOptions({
   /** What the button is called, e.g. "Tailored feed options". */
   label: string;
   items?: PageOptionsItem[];
-  /** The page's Sort submenu (components/dashboard/sort/SortSubmenu.tsx). */
+  /**
+   * The page's Sort and Filter submenus (components/dashboard/sort/).
+   */
   sort: React.ReactNode;
   /** The page's address: the sidebar's "…" offers Select only there. */
   path?: string;
@@ -116,7 +119,10 @@ export function PageOptions({
   );
 }
 
-/** A page whose "…" only sorts its bookmarks; plain props, so server pages can use it. */
+/**
+ * A page whose "…" only sorts and filters its bookmarks; plain props, so
+ * server pages can use it.
+ */
 export function BookmarkPageOptions({
   variant,
   label,
@@ -132,7 +138,15 @@ export function BookmarkPageOptions({
     <PageOptions
       variant={variant}
       label={label}
-      sort={<BookmarkSortSubmenu pageKey={pageKey} />}
+      sort={
+        <>
+          <BookmarkSortSubmenu pageKey={pageKey} />
+          <BookmarkFilterSubmenu
+            pageKey={pageKey}
+            withStarred={pageKey !== "favourites"}
+          />
+        </>
+      }
       path={path}
     />
   );

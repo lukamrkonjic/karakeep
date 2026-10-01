@@ -27,6 +27,7 @@ import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
 import { EditListModal } from "../lists/EditListModal";
 import { SelectMenuItem } from "../PageOptions";
+import { BookmarkFilterSubmenu } from "../sort/FilterSubmenu";
 import { BookmarkSortSubmenu } from "../sort/SortSubmenu";
 import DeleteListConfirmationDialog from "./DeleteListConfirmationDialog";
 import LeaveListConfirmationDialog from "./LeaveListConfirmationDialog";
@@ -288,6 +289,8 @@ export function ListOptions({
           pageKey={`list:${list.id}`}
           withRecentlyAdded={list.type === "manual"}
         />
+        {/* Fork: and what it shows (Starred, a kind). */}
+        <BookmarkFilterSubmenu pageKey={`list:${list.id}`} />
         {visibleItems.filter((item) => AFTER_SORT.has(item.id)).map(renderItem)}
       </DropdownMenuContent>
     </DropdownMenu>

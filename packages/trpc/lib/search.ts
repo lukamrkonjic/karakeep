@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import type { SQL } from "drizzle-orm";
 import {
   and,
   eq,
@@ -12,6 +13,7 @@ import {
   lt,
   lte,
   ne,
+  not,
   notExists,
   notInArray,
   notLike,
@@ -34,6 +36,7 @@ import {
 } from "@karakeep/db/schema";
 import logger from "@karakeep/shared/logger";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
+import type { BookmarkKind } from "@karakeep/shared/types/search";
 import { Matcher } from "@karakeep/shared/types/search";
 import { colourQueryMatches } from "@karakeep/shared/utils/colours";
 import { toAbsoluteDate } from "@karakeep/shared/utils/relativeDateUtils";
@@ -117,6 +120,54 @@ function union(vals: BookmarkQueryReturnType[][]): BookmarkQueryReturnType[] {
   }
 
   return result;
+}
+
+/**
+ * Fork: a bookmark of a kind, as a condition on `bookmarks` — the search's
+ * is:picture / video / pdf / note, and the pages' Filter (which has "link"
+ * too). A video is a video bookmark or a note carrying one (how imported
+ * videos arrive), and such a note is a video, not a note.
+ */
+export function kindCondition(
+  db: AuthedContext["db"],
+  kind: BookmarkKind | "link",
+): SQL {
+  const fileOf = (type: "image" | "pdf" | "video") =>
+    exists(
+      db
+        .select({ id: bookmarkAssets.id })
+        .from(bookmarkAssets)
+        .where(
+          and(
+            eq(bookmarkAssets.id, bookmarks.id),
+            eq(bookmarkAssets.assetType, type),
+          ),
+        ),
+    );
+  const carriesVideo = exists(
+    db
+      .select({ id: assets.id })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.bookmarkId, bookmarks.id),
+          eq(assets.assetType, AssetTypes.LINK_VIDEO),
+        ),
+      ),
+  );
+  const note = eq(bookmarks.type, BookmarkTypes.TEXT);
+  switch (kind) {
+    case "picture":
+      return fileOf("image");
+    case "pdf":
+      return fileOf("pdf");
+    case "video":
+      return or(fileOf("video"), and(note, carriesVideo)) as SQL;
+    case "note":
+      return and(note, not(carriesVideo)) as SQL;
+    case "link":
+      return eq(bookmarks.type, BookmarkTypes.LINK);
+  }
 }
 
 async function getIds(
@@ -532,49 +583,14 @@ async function getIds(
       }
       return ownBookmarks(ctx, ids, matcher.inverse);
     }
-    // Fork: what it is, finer than link/text/media. A video is a video
-    // bookmark or a note carrying one (how imported videos arrive), and such
-    // a note is a video, not a note.
+    // Fork: what it is, finer than link/text/media (kindCondition).
     case "kind": {
-      const carriesVideo = exists(
-        db
-          .select({ id: assets.id })
-          .from(assets)
-          .where(
-            and(
-              eq(assets.bookmarkId, bookmarks.id),
-              eq(assets.assetType, AssetTypes.LINK_VIDEO),
-            ),
-          ),
-      );
-      const note = eq(bookmarks.type, BookmarkTypes.TEXT);
-      const condition = {
-        picture: eq(bookmarkAssets.assetType, "image"),
-        pdf: eq(bookmarkAssets.assetType, "pdf"),
-        video: or(
-          eq(bookmarkAssets.assetType, "video"),
-          and(note, carriesVideo),
-        ),
-        note: and(
-          note,
-          notExists(
-            db
-              .select({ id: assets.id })
-              .from(assets)
-              .where(
-                and(
-                  eq(assets.bookmarkId, bookmarks.id),
-                  eq(assets.assetType, AssetTypes.LINK_VIDEO),
-                ),
-              ),
-          ),
-        ),
-      }[matcher.kind];
       const matching = await db
         .select({ id: bookmarks.id })
         .from(bookmarks)
-        .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
-        .where(and(eq(bookmarks.userId, userId), condition));
+        .where(
+          and(eq(bookmarks.userId, userId), kindCondition(db, matcher.kind)),
+        );
       return matcher.inverse
         ? ownBookmarks(
             ctx,

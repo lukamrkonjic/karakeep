@@ -44,6 +44,7 @@ import { getAlignedExpiry } from "@karakeep/shared/signedTokens";
 import {
   BookmarkTypes,
   DEFAULT_NUM_BOOKMARKS_PER_PAGE,
+  zCountBookmarksRequestSchema,
   zGetBookmarksRequestSchema,
 } from "@karakeep/shared/types/bookmarks";
 import type {
@@ -65,7 +66,7 @@ import { AuthedContext } from "..";
 import { mapDBAssetTypeToUserType } from "../lib/attachments";
 import { getPreferredLinkPreview } from "../lib/linkPreview";
 import { Asset } from "./assets";
-import { loadInForkOrder } from "./bookmarkOrders";
+import { countMatching, loadInForkOrder } from "./bookmarkOrders";
 import { List } from "./lists";
 
 async function dummyDrizzleReturnType() {
@@ -428,6 +429,45 @@ export class Bookmark extends BareBookmark {
     };
   }
 
+  /**
+   * Fork: how many bookmarks a getBookmarks query matches, without paging
+   * (a list's "★ N starred"). A list is checked as loadMulti checks it, and
+   * a smart list counts what it holds.
+   */
+  static async count(
+    ctx: AuthedContext,
+    input: z.infer<typeof zCountBookmarksRequestSchema>,
+  ): Promise<number> {
+    if (input.listIds?.length === 0) {
+      return 0;
+    }
+    const single = [input.listId, input.tagId, input.rssFeedId].filter(
+      (f) => f !== undefined,
+    ).length;
+    if (single > 1 || (single > 0 && (input.listIds || input.tagIds?.length))) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Count one of: a list, a tag, an RSS feed, or lists (listIds) and tags (tagIds)",
+      });
+    }
+    const query = {
+      sortOrder: "desc" as const,
+      includeContent: false,
+      ...input,
+    };
+    if (input.listId) {
+      const list = await List.fromId(ctx, input.listId);
+      if (list.type === "smart") {
+        const ids = await list.getBookmarkIds();
+        return ids.length === 0
+          ? 0
+          : countMatching(ctx, { ...query, listId: undefined, ids });
+      }
+    }
+    return countMatching(ctx, query);
+  }
+
   static async loadMulti(
     ctx: AuthedContext,
     // `ids` is intentionally not part of the public getBookmarks API; it's
@@ -474,11 +514,6 @@ export class Bookmark extends BareBookmark {
       });
     }
 
-    // Fork: a list shows its favourites first (bookmarkOrders.ts) — any
-    // list (manual or smart), or one shown with its sub-lists, which asks
-    // (favouritesFirst); the page loads below say false, not to loop.
-    const favouritesFirst = input.favouritesFirst ?? input.listId !== undefined;
-
     // Handle smart lists by converting to bookmark IDs
     if (input.listId) {
       const list = await List.fromId(ctx, input.listId);
@@ -491,12 +526,13 @@ export class Bookmark extends BareBookmark {
     // Fork: the random and recently-added orders (bookmarkOrders.ts). The
     // page's bookmarks load through the usual paths below, by id — a manual
     // list keeps its listId, so a shared list's access rules still apply.
-    if (input.sortBy || favouritesFirst) {
-      return loadInForkOrder(ctx, { ...input, favouritesFirst }, (ids) =>
+    // Fork: and the Filter's kinds, which only that path knows.
+    if (input.sortBy || input.kind) {
+      return loadInForkOrder(ctx, input, (ids) =>
         Bookmark.loadMulti(ctx, {
           ...input,
-          favouritesFirst: false,
           sortBy: undefined,
+          kind: undefined,
           shuffleSeed: undefined,
           cursor: null,
           ids,

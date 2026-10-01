@@ -94,6 +94,11 @@ export function useDeleteBookmark(
           api.bookmarks.getBookmark.queryFilter({ bookmarkId: req.bookmarkId }),
         );
         scheduleInvalidateQueries(queryClient, api.lists.stats.pathFilter());
+        // Fork: a list's "★ N starred".
+        scheduleInvalidateQueries(
+          queryClient,
+          api.bookmarks.countBookmarks.pathFilter(),
+        );
         return opts?.onSuccess?.(res, req, meta, context);
       },
     }),
@@ -123,6 +128,11 @@ export function useUpdateBookmark(
           api.bookmarks.getBookmark.queryFilter({ bookmarkId: req.bookmarkId }),
         );
         scheduleInvalidateQueries(queryClient, api.lists.stats.pathFilter());
+        // Fork: a list's "★ N starred".
+        scheduleInvalidateQueries(
+          queryClient,
+          api.bookmarks.countBookmarks.pathFilter(),
+        );
         return opts?.onSuccess?.(res, req, meta, context);
       },
     }),
@@ -201,6 +211,11 @@ export function useUpdateBookmarkTags(
         });
         scheduleInvalidateQueries(queryClient, api.tags.list.pathFilter());
         scheduleInvalidateQueries(queryClient, api.lists.stats.pathFilter());
+        // Fork: a list's "★ N starred".
+        scheduleInvalidateQueries(
+          queryClient,
+          api.bookmarks.countBookmarks.pathFilter(),
+        );
         return opts?.onSuccess?.(res, req, meta, context);
       },
     }),

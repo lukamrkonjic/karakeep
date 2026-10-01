@@ -83,8 +83,7 @@ export default async function ListPage(props: {
     ];
     const ids = walk(list.id);
     if (ids.length > 1) {
-      // Its favourites first, as a list's (listId) always are.
-      query = { listIds: ids, archived, favouritesFirst: true };
+      query = { listIds: ids, archived };
     }
   }
 
@@ -96,7 +95,7 @@ export default async function ListPage(props: {
         showEditorCard={list.type === "manual" && canEdit}
         header={
           <>
-            <ListHeader initialData={list} />
+            <ListHeader initialData={list} query={query} />
             <ListSubfolders listId={list.id} />
           </>
         }

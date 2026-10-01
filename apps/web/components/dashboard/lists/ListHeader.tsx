@@ -3,10 +3,14 @@
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { isEmojiIcon } from "@/lib/emoji";
+import { usePageFilters, useSetPageFilters } from "@/lib/hooks/usePageFilter";
 import { useTranslation } from "@/lib/i18n/client";
+import { bookmarkFilterQuery, toggledFilter } from "@/lib/pageFilter";
+import { cn } from "@/lib/utils";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Star } from "lucide-react";
 
+import type { ZGetBookmarksRequest } from "@karakeep/shared/types/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
 
@@ -18,10 +22,68 @@ import {
 } from "./ListHeaderComponents";
 import { ListSubscriptionNote } from "./ListSubscriptionNote";
 
+/**
+ * Fork: "★ N starred" beside the count — a link that filters the list to its
+ * starred bookmarks (its "…" → Filter → Starred), and back. N is what that
+ * shows: in `query` (the list, or with its sub-lists), of the kind the
+ * Filter has on.
+ */
+function StarredLink({
+  listId,
+  query,
+}: {
+  listId: string;
+  query: Pick<ZGetBookmarksRequest, "listId" | "listIds" | "archived">;
+}) {
+  const api = useTRPC();
+  const pageKey = `list:${listId}`;
+  const filters = usePageFilters(pageKey);
+  const setFilters = useSetPageFilters();
+  const on = filters.includes("starred");
+  const { data } = useQuery(
+    api.bookmarks.countBookmarks.queryOptions(
+      {
+        ...query,
+        ...bookmarkFilterQuery(filters.filter((f) => f !== "starred")),
+        favourited: true,
+      },
+      { placeholderData: keepPreviousData },
+    ),
+  );
+  if (!on && !data?.count) {
+    return null;
+  }
+  return (
+    <>
+      <button
+        type="button"
+        aria-pressed={on}
+        title={on ? "Show everything again" : "Show only the starred ones"}
+        onClick={() =>
+          void setFilters(pageKey, toggledFilter(filters, "starred"))
+        }
+        className={cn(
+          "flex items-center gap-1 underline-offset-2 transition-colors hover:text-foreground hover:underline",
+          on && "text-foreground",
+        )}
+      >
+        <Star
+          className={cn("size-3.5", on && "fill-amber-400 text-amber-400")}
+        />
+        {(data?.count ?? 0).toLocaleString()} starred
+      </button>
+      <span aria-hidden>·</span>
+    </>
+  );
+}
+
 export default function ListHeader({
   initialData,
+  query,
 }: {
   initialData: ZBookmarkList;
+  /** What the page shows (the list, or with its sub-lists). */
+  query?: Pick<ZGetBookmarksRequest, "listId" | "listIds" | "archived">;
 }) {
   const api = useTRPC();
   const { t } = useTranslation();
@@ -73,6 +135,10 @@ export default function ListHeader({
                 <span aria-hidden>·</span>
               </>
             )}
+            <StarredLink
+              listId={list.id}
+              query={query ?? { listId: list.id }}
+            />
             <ListPrivacyLabel list={list} />
             <ListSubscriptionNote list={list} />
             <ListCollaboratorsIcons list={list} />

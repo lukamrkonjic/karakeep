@@ -27,6 +27,12 @@ export const zUiPreferencesSchema = z.object({
     .record(z.string().max(100), z.string().max(20))
     .refine((sorts) => Object.keys(sorts).length <= 500, "Too many sorts")
     .optional(),
+  // Each page's "…" Filter (Starred, a kind), by page key
+  // (apps/web/lib/pageFilter.ts).
+  pageFilters: z
+    .record(z.string().max(100), z.array(z.string().max(20)).max(5))
+    .refine((filters) => Object.keys(filters).length <= 500, "Too many filters")
+    .optional(),
   // Lists that show their sub-lists' items too.
   sublists: z.array(z.string()).max(5000).optional(),
   previewDetailsHidden: z.boolean().optional(),

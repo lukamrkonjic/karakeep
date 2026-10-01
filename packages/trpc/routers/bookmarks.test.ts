@@ -559,66 +559,6 @@ describe("Bookmark Routes", () => {
     expect(viaMany.slice(0, 2)).toEqual([oldest, newest]);
   });
 
-  // Fork: a list's favourites first, whatever its order.
-  test<CustomTestContext>("a list shows its favourites first, in every order", async ({
-    apiCallers,
-  }) => {
-    const api = apiCallers[0].bookmarks;
-    const lists = apiCallers[0].lists;
-    const list = await lists.create({ name: "Food", type: "manual", icon: "" });
-    const ids: string[] = [];
-    for (let i = 0; i < 12; i++) {
-      const b = await api.createBookmark({
-        text: `note ${i}`,
-        type: BookmarkTypes.TEXT,
-        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
-      });
-      await lists.addToList({ listId: list.id, bookmarkId: b.id });
-      ids.push(b.id);
-    }
-    // Two old ones starred.
-    for (const id of [ids[1], ids[4]]) {
-      await api.updateBookmark({ bookmarkId: id, favourited: true });
-    }
-    type Query = Parameters<typeof api.getBookmarks>[0];
-    const all = async (query: Query) => {
-      const seen: string[] = [];
-      let cursor: Query["cursor"] = null;
-      do {
-        const page = await api.getBookmarks({ ...query, cursor, limit: 5 });
-        seen.push(...page.bookmarks.map((b) => b.id));
-        cursor = page.nextCursor;
-      } while (cursor);
-      return seen;
-    };
-    const rest = ids.filter((id) => id !== ids[1] && id !== ids[4]);
-
-    expect(await all({ listId: list.id })).toEqual([
-      ids[4],
-      ids[1],
-      ...[...rest].reverse(),
-    ]);
-    expect(await all({ listId: list.id, sortOrder: "asc" })).toEqual([
-      ids[1],
-      ids[4],
-      ...rest,
-    ]);
-    const shuffled = await all({
-      listId: list.id,
-      sortBy: "random",
-      shuffleSeed: 3,
-    });
-    expect(new Set(shuffled.slice(0, 2))).toEqual(new Set([ids[1], ids[4]]));
-    expect(new Set(shuffled).size).toBe(12);
-    // With its sub-lists, as asked; the tailored feed, and not a list, as
-    // they were.
-    expect(
-      (await all({ listIds: [list.id], favouritesFirst: true })).slice(0, 2),
-    ).toEqual([ids[4], ids[1]]);
-    expect((await all({ listIds: [list.id] }))[0]).toEqual(ids[11]);
-    expect((await all({}))[0]).toEqual(ids[11]);
-  });
-
   test<CustomTestContext>("update tags", async ({ apiCallers }) => {
     const api = apiCallers[0].bookmarks;
     const createdBookmark = await api.createBookmark({
@@ -2054,5 +1994,178 @@ describe("Bookmark Routes", () => {
         }),
       ).rejects.toThrow(/Unsupported asset type/);
     });
+  });
+});
+
+// Fork: the pages' Filter (Starred, a kind) and a list's "★ N starred".
+describe("Filters", () => {
+  async function file(
+    caller: APICallerType,
+    db: CustomTestContext["db"],
+    name: string,
+    contentType: string,
+    assetType: "image" | "video",
+  ) {
+    const userId = (await caller.users.whoami()).id;
+    await db.insert(assets).values({
+      id: `asset-${name}`,
+      assetType: AssetTypes.UNKNOWN,
+      contentType,
+      size: 1000,
+      userId,
+    });
+    const bookmark = await caller.bookmarks.createBookmark({
+      type: BookmarkTypes.ASSET,
+      assetType,
+      assetId: `asset-${name}`,
+      title: name,
+    });
+    return bookmark.id;
+  }
+
+  test<CustomTestContext>("by kind, starred or both, and how many are starred", async ({
+    apiCallers,
+    db,
+  }) => {
+    const caller = apiCallers[0];
+    const list = await caller.lists.create({
+      name: "Mixed",
+      icon: "",
+      type: "manual",
+    });
+    const ids = {
+      picture: await file(caller, db, "picture", "image/jpeg", "image"),
+      video: await file(caller, db, "video", "video/mp4", "video"),
+      link: (
+        await caller.bookmarks.createBookmark({
+          type: BookmarkTypes.LINK,
+          url: "https://example.com/a",
+        })
+      ).id,
+      note: (
+        await caller.bookmarks.createBookmark({
+          type: BookmarkTypes.TEXT,
+          text: "a note",
+        })
+      ).id,
+    };
+    for (const id of Object.values(ids)) {
+      await caller.lists.addToList({ listId: list.id, bookmarkId: id });
+    }
+    await caller.bookmarks.updateBookmark({
+      bookmarkId: ids.video,
+      favourited: true,
+    });
+    await caller.bookmarks.updateBookmark({
+      bookmarkId: ids.note,
+      favourited: true,
+    });
+
+    interface Filter {
+      kind?: "picture" | "video" | "link" | "note";
+      favourited?: boolean;
+    }
+    const shown = async (filter: Filter) =>
+      (
+        await caller.bookmarks.getBookmarks({ listId: list.id, ...filter })
+      ).bookmarks
+        .map((b) => b.id)
+        .sort();
+    expect(await shown({ kind: "picture" })).toEqual([ids.picture]);
+    expect(await shown({ kind: "video" })).toEqual([ids.video]);
+    expect(await shown({ kind: "link" })).toEqual([ids.link]);
+    expect(await shown({ kind: "note" })).toEqual([ids.note]);
+    expect(await shown({ favourited: true })).toEqual(
+      [ids.video, ids.note].sort(),
+    );
+    expect(await shown({ favourited: true, kind: "video" })).toEqual([
+      ids.video,
+    ]);
+    expect(await shown({ favourited: true, kind: "picture" })).toEqual([]);
+    // Home: everything of the user's.
+    expect(
+      (await caller.bookmarks.getBookmarks({ kind: "video" })).bookmarks.map(
+        (b) => b.id,
+      ),
+    ).toEqual([ids.video]);
+
+    const count = async (input: Filter & { listId: string }) =>
+      (await caller.bookmarks.countBookmarks(input)).count;
+    expect(await count({ listId: list.id })).toBe(4);
+    expect(await count({ listId: list.id, favourited: true })).toBe(2);
+    expect(
+      await count({ listId: list.id, favourited: true, kind: "note" }),
+    ).toBe(1);
+    // A smart list counts what it holds.
+    const notes = await caller.lists.create({
+      name: "Notes",
+      icon: "",
+      type: "smart",
+      query: "is:note",
+    });
+    expect(await count({ listId: notes.id, favourited: true })).toBe(1);
+    // Someone else's list isn't theirs to count.
+    await expect(
+      apiCallers[1].bookmarks.countBookmarks({ listId: list.id }),
+    ).rejects.toThrow(/List not found/);
+  });
+
+  test<CustomTestContext>("a filtered list pages through, newest first, nothing pinned", async ({
+    apiCallers,
+    db,
+  }) => {
+    const caller = apiCallers[0];
+    const list = await caller.lists.create({
+      name: "Notes",
+      icon: "",
+      type: "manual",
+    });
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const { id } = await caller.bookmarks.createBookmark({
+        type: BookmarkTypes.TEXT,
+        text: `note ${i}`,
+      });
+      // Saved a second apart, 0 first.
+      await db
+        .update(bookmarks)
+        .set({ createdAt: new Date(1_700_000_000_000 + i * 1000) })
+        .where(eq(bookmarks.id, id));
+      await caller.lists.addToList({ listId: list.id, bookmarkId: id });
+      ids.push(id);
+    }
+    for (const i of [1, 4]) {
+      await caller.bookmarks.updateBookmark({
+        bookmarkId: ids[i],
+        favourited: true,
+      });
+    }
+
+    // Starred ones stay where their date puts them.
+    expect(
+      (
+        await caller.bookmarks.getBookmarks({ listId: list.id, limit: 10 })
+      ).bookmarks.map((b) => b.id),
+    ).toEqual([...ids].reverse());
+
+    // Starred notes, one page at a time.
+    const seen: string[] = [];
+    let cursor = null;
+    for (let page = 0; page < 5; page++) {
+      const res: Awaited<ReturnType<typeof caller.bookmarks.getBookmarks>> =
+        await caller.bookmarks.getBookmarks({
+          listId: list.id,
+          favourited: true,
+          kind: "note",
+          limit: 1,
+          cursor,
+        });
+      seen.push(...res.bookmarks.map((b) => b.id));
+      cursor = res.nextCursor;
+      if (!cursor) {
+        break;
+      }
+    }
+    expect(seen).toEqual([ids[4], ids[1]]);
   });
 });

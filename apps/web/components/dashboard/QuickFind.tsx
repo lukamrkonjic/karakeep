@@ -147,13 +147,13 @@ const ITEM = "gap-3 rounded-md px-3 py-2";
 
 /**
  * Fork: Quick find — ⌘F on a Mac, Ctrl+F elsewhere (instead of the
- * browser's find), as Notion's search: a box over the page. Enter searches
- * what's typed (on a list's page, within that list; "everywhere" is at the
- * end). Under it, the lists, tags and pages whose name — or a word in it —
- * starts with it (then those that have it anywhere): ↓ to one and Enter
- * goes there. @name looks among lists only and #name among tags, the first
- * picked with Enter, as in the search bar. Empty, it shows where you last
- * went from here and the pages.
+ * browser's find), as Notion's search: a box over the page. The closest
+ * list, page or tag — its name, or a word in it, starting with what's
+ * typed — comes first, picked, with the rest of its name filled in grey
+ * (Tab takes it): Enter goes there. Then searching for what's typed (on a
+ * list's page, within that list; "everywhere" is at the end), and the other
+ * lists, tags and pages that match. @name looks among lists only and #name
+ * among tags. Empty, it shows where you last went from here and the pages.
  */
 export default function QuickFind() {
   const { t } = useTranslation();
@@ -332,8 +332,7 @@ export default function QuickFind() {
           a.list.name.length - b.list.name.length ||
           a.list.name.localeCompare(b.list.name),
       )
-      .slice(0, only ? 12 : 7)
-      .map(({ list }) => list);
+      .slice(0, only ? 12 : 7);
   }, [lists, term, only]);
 
   const foundTags = useMemo(() => {
@@ -349,8 +348,7 @@ export default function QuickFind() {
           a.tag.name.length - b.tag.name.length ||
           a.tag.name.localeCompare(b.tag.name),
       )
-      .slice(0, only ? 12 : 4)
-      .map(({ tag }) => tag);
+      .slice(0, only ? 12 : 4);
   }, [tags, term, only]);
 
   const foundPages = useMemo(() => {
@@ -358,7 +356,7 @@ export default function QuickFind() {
       return [];
     }
     if (!term) {
-      return pages;
+      return pages.map((page) => ({ page, rank: 0 }));
     }
     return pages
       .map((page) => ({
@@ -371,8 +369,7 @@ export default function QuickFind() {
       }))
       .filter(({ rank }) => rank <= 1)
       .sort((a, b) => a.rank - b.rank)
-      .slice(0, 4)
-      .map(({ page }) => page);
+      .slice(0, 4);
   }, [pages, term, only]);
 
   const pastSearches = useMemo(() => {
@@ -383,6 +380,67 @@ export default function QuickFind() {
       .filter((h) => h.toLowerCase().includes(term) && h.trim() !== term)
       .slice(0, 3);
   }, [history, term, only]);
+
+  /**
+   * The closest match — a list, page or tag whose name (or a word in it)
+   * starts with what's typed — comes first, picked: Enter goes there. Lists
+   * before pages before tags, then the shorter name. (After @ or #, the
+   * first one is picked anyway.)
+   */
+  const best = useMemo(() => {
+    if (!term || only) {
+      return null;
+    }
+    const hits = [
+      foundLists[0] && {
+        kind: "list" as const,
+        id: foundLists[0].list.id,
+        name: foundLists[0].list.name,
+        rank: foundLists[0].rank,
+        order: 0,
+      },
+      foundPages[0] && {
+        kind: "page" as const,
+        id: foundPages[0].page.id,
+        name: foundPages[0].page.name,
+        rank: foundPages[0].rank,
+        order: 1,
+      },
+      foundTags[0] && {
+        kind: "tag" as const,
+        id: foundTags[0].tag.id,
+        name: foundTags[0].tag.name,
+        rank: foundTags[0].rank,
+        order: 2,
+      },
+    ].filter((hit) => !!hit && hit.rank <= 1);
+    hits.sort(
+      (a, b) =>
+        a!.rank - b!.rank ||
+        a!.order - b!.order ||
+        a!.name.length - b!.name.length,
+    );
+    return hits[0] ?? null;
+  }, [term, only, foundLists, foundPages, foundTags]);
+  const isBest = (kind: "list" | "page" | "tag", id: string) =>
+    best?.kind === kind && best.id === id;
+
+  // Autofill: the rest of the closest match's name after what's typed, when
+  // it starts that way, in grey — Tab (or → at the end) takes it.
+  const lead = only ? typed.slice(0, 1) : "";
+  const typedName = only ? typed.slice(1) : typed;
+  const target = only
+    ? only === "lists"
+      ? foundLists[0]?.list.name
+      : foundTags[0]?.tag.name
+    : best?.name;
+  const fill =
+    target &&
+    typedName &&
+    target.toLowerCase().startsWith(typedName.toLowerCase()) &&
+    target.length > typedName.length
+      ? { rest: target.slice(typedName.length), full: lead + target }
+      : null;
 
   const go = (href: string, place?: Place) => {
     if (place) {
@@ -409,6 +467,78 @@ export default function QuickFind() {
     return list ? [{ ...place, name: list.name }] : [];
   });
 
+  const listItem = (list: ZBookmarkList) => (
+    <CommandItem
+      key={list.id}
+      value={`list-${list.id}`}
+      className={ITEM}
+      onSelect={() =>
+        go(`/dashboard/lists/${list.id}`, {
+          kind: "list",
+          id: list.id,
+          name: list.name,
+          href: `/dashboard/lists/${list.id}`,
+        })
+      }
+    >
+      <Row icon={<ListIcon list={list} />} hint={pathOf(list.id)}>
+        <Marked text={list.name} term={term} />
+      </Row>
+    </CommandItem>
+  );
+  const tagItem = (tag: { id: string; name: string; numBookmarks: number }) => (
+    <CommandItem
+      key={tag.id}
+      value={`tag-${tag.id}`}
+      className={ITEM}
+      onSelect={() =>
+        go(`/dashboard/tags/${tag.id}`, {
+          kind: "tag",
+          id: tag.id,
+          name: tag.name,
+          href: `/dashboard/tags/${tag.id}`,
+        })
+      }
+    >
+      <Row
+        icon={<Hash />}
+        hint={tag.numBookmarks > 0 ? String(tag.numBookmarks) : ""}
+      >
+        <Marked text={tag.name} term={term} />
+      </Row>
+    </CommandItem>
+  );
+  const pageItem = (page: (typeof pages)[number]) => (
+    <CommandItem
+      key={page.id}
+      value={`page-${page.id}`}
+      className={ITEM}
+      onSelect={() =>
+        go(page.href, {
+          kind: "page",
+          id: page.id,
+          name: page.name,
+          href: page.href,
+        })
+      }
+    >
+      <Row icon={<page.icon />}>
+        <Marked text={page.name} term={term} />
+      </Row>
+    </CommandItem>
+  );
+  const bestItem = best
+    ? best.kind === "list"
+      ? listItem(foundLists[0].list)
+      : best.kind === "page"
+        ? pageItem(foundPages[0].page)
+        : tagItem(foundTags[0].tag)
+    : null;
+
+  const otherLists = foundLists.filter(({ list }) => !isBest("list", list.id));
+  const otherTags = foundTags.filter(({ tag }) => !isBest("tag", tag.id));
+  const otherPages = foundPages.filter(({ page }) => !isBest("page", page.id));
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
@@ -427,13 +557,39 @@ export default function QuickFind() {
           loop
           className="rounded-lg [&_[cmdk-group-heading]]:px-3"
         >
-          <CommandInput
-            value={typed}
-            onValueChange={setTyped}
-            placeholder="Search, or go to a list, tag or page…"
-            className="h-12 text-base"
-          />
+          <div className="relative">
+            <CommandInput
+              value={typed}
+              onValueChange={setTyped}
+              placeholder="Search, or go to a list, tag or page…"
+              className="h-12 text-base"
+              onKeyDown={(e) => {
+                if (!fill) {
+                  return;
+                }
+                const input = e.currentTarget;
+                const atEnd =
+                  input.selectionStart === typed.length &&
+                  input.selectionEnd === typed.length;
+                if (e.key === "Tab" || (e.key === "ArrowRight" && atEnd)) {
+                  e.preventDefault();
+                  setTyped(fill.full);
+                }
+              }}
+            />
+            {/* What Tab fills in, after the text (past the search icon). */}
+            {fill && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-9 right-3 flex items-center overflow-hidden whitespace-pre text-base"
+              >
+                <span className="invisible">{typed}</span>
+                <span className="text-muted-foreground/60">{fill.rest}</span>
+              </div>
+            )}
+          </div>
           <CommandList className="max-h-[min(60vh,30rem)] border-t pb-1">
+            {bestItem && <CommandGroup>{bestItem}</CommandGroup>}
             {query && !only && (
               <CommandGroup>
                 {here ? (
@@ -484,78 +640,19 @@ export default function QuickFind() {
                 ))}
               </CommandGroup>
             )}
-            {foundLists.length > 0 && (
+            {otherLists.length > 0 && (
               <CommandGroup heading="Lists">
-                {foundLists.map((list) => (
-                  <CommandItem
-                    key={list.id}
-                    value={`list-${list.id}`}
-                    className={ITEM}
-                    onSelect={() =>
-                      go(`/dashboard/lists/${list.id}`, {
-                        kind: "list",
-                        id: list.id,
-                        name: list.name,
-                        href: `/dashboard/lists/${list.id}`,
-                      })
-                    }
-                  >
-                    <Row icon={<ListIcon list={list} />} hint={pathOf(list.id)}>
-                      <Marked text={list.name} term={term} />
-                    </Row>
-                  </CommandItem>
-                ))}
+                {otherLists.map(({ list }) => listItem(list))}
               </CommandGroup>
             )}
-            {foundTags.length > 0 && (
+            {otherTags.length > 0 && (
               <CommandGroup heading="Tags">
-                {foundTags.map((tag) => (
-                  <CommandItem
-                    key={tag.id}
-                    value={`tag-${tag.id}`}
-                    className={ITEM}
-                    onSelect={() =>
-                      go(`/dashboard/tags/${tag.id}`, {
-                        kind: "tag",
-                        id: tag.id,
-                        name: tag.name,
-                        href: `/dashboard/tags/${tag.id}`,
-                      })
-                    }
-                  >
-                    <Row
-                      icon={<Hash />}
-                      hint={
-                        tag.numBookmarks > 0 ? String(tag.numBookmarks) : ""
-                      }
-                    >
-                      <Marked text={tag.name} term={term} />
-                    </Row>
-                  </CommandItem>
-                ))}
+                {otherTags.map(({ tag }) => tagItem(tag))}
               </CommandGroup>
             )}
-            {foundPages.length > 0 && (
+            {otherPages.length > 0 && (
               <CommandGroup heading="Pages">
-                {foundPages.map((page) => (
-                  <CommandItem
-                    key={page.id}
-                    value={`page-${page.id}`}
-                    className={ITEM}
-                    onSelect={() =>
-                      go(page.href, {
-                        kind: "page",
-                        id: page.id,
-                        name: page.name,
-                        href: page.href,
-                      })
-                    }
-                  >
-                    <Row icon={<page.icon />}>
-                      <Marked text={page.name} term={term} />
-                    </Row>
-                  </CommandItem>
-                ))}
+                {otherPages.map(({ page }) => pageItem(page))}
               </CommandGroup>
             )}
             {pastSearches.length > 0 && (
@@ -599,6 +696,11 @@ export default function QuickFind() {
             <span className="flex items-center gap-1">
               <Kbd>↵</Kbd> to open
             </span>
+            {fill && (
+              <span className="flex items-center gap-1">
+                <Kbd>tab</Kbd> to fill in
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <Kbd>esc</Kbd> to close
             </span>

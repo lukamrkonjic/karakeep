@@ -51,6 +51,7 @@ import {
   zBookmarkSchema,
   zBookmarkReadableContentFormatSchema,
   zBookmarkReadableContentSchema,
+  zCountBookmarksRequestSchema,
   zGetBookmarksRequestSchema,
   zGetBookmarksResponseSchema,
   zManipulatedTagSchema,
@@ -1242,6 +1243,14 @@ export const bookmarksAppRouter = router({
         nextCursor: res.nextCursor,
       };
     }),
+
+  // Fork: how many a getBookmarks query matches (a list's "★ N starred").
+  countBookmarks: bookmarksProcedure
+    .input(zCountBookmarksRequestSchema)
+    .output(z.object({ count: z.number().int() }))
+    .query(async ({ input, ctx }) => ({
+      count: await Bookmark.count(ctx, input),
+    })),
 
   updateTags: bookmarksProcedure
     .input(

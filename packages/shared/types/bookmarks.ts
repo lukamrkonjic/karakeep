@@ -309,13 +309,27 @@ export const zGetBookmarksRequestSchema = z.object({
   // (round the colour wheel, by each picture's palette). See
   // packages/trpc/models/bookmarkOrders.ts.
   sortBy: z.enum(["random", "addedToList", "colour"]).optional(),
-  // Fork: favourites first, then the order asked for. A list (listId) has
-  // them first anyway; this is for one shown with its sub-lists (listIds).
-  favouritesFirst: z.boolean().optional(),
+  // Fork: only bookmarks of this kind (the pages' Filter): pictures, videos
+  // (a note carrying one too), links, or notes. See trpc lib/search.ts
+  // kindCondition.
+  kind: z.enum(["picture", "video", "link", "note"]).optional(),
   shuffleSeed: z.number().int().optional(),
   includeContent: z.boolean().optional().default(false),
 });
 export type ZGetBookmarksRequest = z.infer<typeof zGetBookmarksRequestSchema>;
+
+// Fork: how many a getBookmarks query matches, without paging — a list's
+// "★ N starred".
+export const zCountBookmarksRequestSchema = zGetBookmarksRequestSchema.pick({
+  archived: true,
+  favourited: true,
+  kind: true,
+  tagId: true,
+  listId: true,
+  rssFeedId: true,
+  listIds: true,
+  tagIds: true,
+});
 
 export const zGetBookmarksResponseSchema = z.object({
   bookmarks: z.array(zBookmarkSchema),
