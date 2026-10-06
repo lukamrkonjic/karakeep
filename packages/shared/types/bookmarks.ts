@@ -138,6 +138,8 @@ export const zBookmarkedLinkSchema = z.object({
   preferredPreview: zPreferredLinkPreviewSchema.nullish(),
   crawledAt: z.date().nullish(),
   crawlStatus: z.enum(["success", "failure", "pending"]).nullish(),
+  // Fork: a YouTube video on its way to becoming a video bookmark, or not.
+  videoDownloadStatus: z.enum(["pending", "failure"]).nullish(),
   author: z.string().nullish(),
   publisher: z.string().nullish(),
   datePublished: z.date().nullish(),

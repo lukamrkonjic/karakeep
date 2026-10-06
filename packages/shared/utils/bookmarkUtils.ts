@@ -45,11 +45,20 @@ export function isBookmarkStillSummarizing(bookmark: ZBookmark) {
   return bookmark.summarizationStatus == "pending";
 }
 
+/** Fork: a YouTube link whose video is downloading to become a video bookmark. */
+export function isBookmarkDownloadingVideo(bookmark: ZBookmark) {
+  return (
+    bookmark.content.type == BookmarkTypes.LINK &&
+    bookmark.content.videoDownloadStatus === "pending"
+  );
+}
+
 export function isBookmarkStillLoading(bookmark: ZBookmark) {
   return (
     isBookmarkStillTagging(bookmark) ||
     isBookmarkStillCrawling(bookmark) ||
-    isBookmarkStillSummarizing(bookmark)
+    isBookmarkStillSummarizing(bookmark) ||
+    isBookmarkDownloadingVideo(bookmark)
   );
 }
 

@@ -180,6 +180,15 @@ export function BookmarkProperties({
     rows.push(["Size", formatBytes(content.size)]);
   }
   rows.push(["Type", typeOf(bookmark, media)]);
+  // Fork: a YouTube link becomes its video once it's downloaded.
+  if (content.type === BookmarkTypes.LINK && content.videoDownloadStatus) {
+    rows.push([
+      "Video",
+      content.videoDownloadStatus === "pending"
+        ? "Downloading…"
+        : "Couldn't download it",
+    ]);
+  }
   if (content.type === BookmarkTypes.LINK) {
     if (content.author) {
       rows.push(["Author", content.author]);

@@ -19,6 +19,7 @@ import {
   getTracer,
   IMAGE_ASSET_TYPES,
   OpenAIQueue,
+  queueYouTubeVideoDownload,
   SUPPORTED_UPLOAD_ASSET_TYPES,
   triggerSearchReindex,
   VideoWorkerQueue,
@@ -188,6 +189,13 @@ export class CrawlerWorker {
                 )
                 .run();
             });
+            // Fork: the page wouldn't crawl, but a YouTube video may still
+            // download (youtubeVideo.ts).
+            await queueYouTubeVideoDownload(db, bookmarkId).catch((error) =>
+              logger.warn(
+                `[Crawler][${jobId}] Couldn't queue the YouTube video: ${error}`,
+              ),
+            );
           }
         },
       },
@@ -305,7 +313,14 @@ async function enqueuePostCrawlJobs(
   // Update the search index
   await triggerSearchReindex(bookmarkId, enqueueOpts);
 
-  if (serverConfig.crawler.downloadVideo) {
+  // Fork: a YouTube video's link becomes a video bookmark (youtubeVideo.ts),
+  // whether or not CRAWLER_VIDEO_DOWNLOAD is on.
+  const youTubeVideo = await queueYouTubeVideoDownload(
+    db,
+    bookmarkId,
+    enqueueOpts,
+  );
+  if (!youTubeVideo && serverConfig.crawler.downloadVideo) {
     // Trigger a potential download of a video from the URL
     await VideoWorkerQueue.enqueue(
       {

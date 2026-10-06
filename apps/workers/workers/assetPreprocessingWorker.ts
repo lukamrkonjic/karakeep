@@ -286,6 +286,88 @@ export async function extractAndSavePDFScreenshot(
 const execFileAsync = promisify(execFile);
 
 /**
+ * A frame of the video file at `inputPath`, as a JPEG at `outputPath` at the
+ * video's own aspect ratio (only the width capped). Best-effort: false, with
+ * a warning, when ffmpeg can't (missing, or a video it can't decode). Fork:
+ * shared with the YouTube worker, which has its download on disk already.
+ */
+export async function grabVideoFrame(
+  jobId: string,
+  inputPath: string,
+  outputPath: string,
+): Promise<boolean> {
+  // Seek ~20% into the video before grabbing the frame. Lots of videos
+  // (music videos especially) open on a black title card or fade-in, and a
+  // naive first-frame grab captures that as an all-black thumbnail. 20% of
+  // the runtime reliably lands in real content for anything longer than a
+  // few seconds, while staying proportional for short clips. Falls back to
+  // the first frame if the duration can't be probed or the seek fails.
+  let seekArgs: string[] = [];
+  try {
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      inputPath,
+    ]);
+    const duration = Number.parseFloat(stdout.trim());
+    if (Number.isFinite(duration) && duration > 0) {
+      seekArgs = ["-ss", (duration * 0.2).toFixed(2)];
+    }
+  } catch {
+    // ffprobe unavailable or couldn't read the duration; fall through to a
+    // first-frame grab below.
+  }
+
+  // -ss before -i does a fast (keyframe) seek. Cap the width so oversized
+  // source videos don't produce an oversized thumbnail, preserving aspect.
+  const runFfmpeg = (leadingArgs: string[]) =>
+    execFileAsync("ffmpeg", [
+      "-y",
+      ...leadingArgs,
+      "-i",
+      inputPath,
+      "-frames:v",
+      "1",
+      // Required by the image2 muxer for single-image (non-sequence)
+      // output — without it ffmpeg warns and some versions may refuse.
+      "-update",
+      "1",
+      "-vf",
+      "scale='min(1280,iw)':-2",
+      "-q:v",
+      "4",
+      outputPath,
+    ]);
+
+  try {
+    await runFfmpeg(seekArgs);
+  } catch (error) {
+    // A seek can fail on a truncated/short file — retry from the first
+    // frame so we still produce a thumbnail rather than nothing.
+    if (seekArgs.length > 0) {
+      try {
+        await runFfmpeg([]);
+      } catch (retryError) {
+        logger.warn(
+          `[assetPreprocessing][${jobId}] ffmpeg failed to extract a video thumbnail (is ffmpeg installed?): ${retryError}`,
+        );
+        return false;
+      }
+    } else {
+      logger.warn(
+        `[assetPreprocessing][${jobId}] ffmpeg failed to extract a video thumbnail (is ffmpeg installed?): ${error}`,
+      );
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Extracts the first frame of a video attachment via ffmpeg and saves it as
  * a companion LINK_VIDEO_THUMBNAIL asset, at the video's own aspect ratio
  * (no resizing beyond capping the width) so the feed can show a real
@@ -352,73 +434,8 @@ export async function extractAndSaveVideoThumbnail(
     const outputPath = path.join(tmpDir, "thumbnail.jpg");
     await fs.writeFile(inputPath, videoBuffer);
 
-    // Seek ~20% into the video before grabbing the frame. Lots of videos
-    // (music videos especially) open on a black title card or fade-in, and a
-    // naive first-frame grab captures that as an all-black thumbnail. 20% of
-    // the runtime reliably lands in real content for anything longer than a
-    // few seconds, while staying proportional for short clips. Falls back to
-    // the first frame if the duration can't be probed or the seek fails.
-    let seekArgs: string[] = [];
-    try {
-      const { stdout } = await execFileAsync("ffprobe", [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        inputPath,
-      ]);
-      const duration = Number.parseFloat(stdout.trim());
-      if (Number.isFinite(duration) && duration > 0) {
-        seekArgs = ["-ss", (duration * 0.2).toFixed(2)];
-      }
-    } catch {
-      // ffprobe unavailable or couldn't read the duration; fall through to a
-      // first-frame grab below.
-    }
-
-    // -ss before -i does a fast (keyframe) seek. Cap the width so oversized
-    // source videos don't produce an oversized thumbnail, preserving aspect.
-    const runFfmpeg = (leadingArgs: string[]) =>
-      execFileAsync("ffmpeg", [
-        "-y",
-        ...leadingArgs,
-        "-i",
-        inputPath,
-        "-frames:v",
-        "1",
-        // Required by the image2 muxer for single-image (non-sequence)
-        // output — without it ffmpeg warns and some versions may refuse.
-        "-update",
-        "1",
-        "-vf",
-        "scale='min(1280,iw)':-2",
-        "-q:v",
-        "4",
-        outputPath,
-      ]);
-
-    try {
-      await runFfmpeg(seekArgs);
-    } catch (error) {
-      // A seek can fail on a truncated/short file — retry from the first
-      // frame so we still produce a thumbnail rather than nothing.
-      if (seekArgs.length > 0) {
-        try {
-          await runFfmpeg([]);
-        } catch (retryError) {
-          logger.warn(
-            `[assetPreprocessing][${jobId}] ffmpeg failed to extract a video thumbnail (is ffmpeg installed?): ${retryError}`,
-          );
-          return false;
-        }
-      } else {
-        logger.warn(
-          `[assetPreprocessing][${jobId}] ffmpeg failed to extract a video thumbnail (is ffmpeg installed?): ${error}`,
-        );
-        return false;
-      }
+    if (!(await grabVideoFrame(jobId, inputPath, outputPath))) {
+      return false;
     }
 
     const thumbnailBuffer = await fs.readFile(outputPath);

@@ -42,6 +42,13 @@ export function useCreateBookmark(
           api.bookmarks.searchBookmarks.pathFilter(),
         );
         queryClient.invalidateQueries(api.lists.stats.pathFilter());
+        // Fork: added again, the bookmark already on screen changed too (a
+        // YouTube link starts downloading its video).
+        if (res.alreadyExists) {
+          queryClient.invalidateQueries(
+            api.bookmarks.getBookmark.queryFilter({ bookmarkId: res.id }),
+          );
+        }
         return opts?.onSuccess?.(res, req, meta, context);
       },
     }),
@@ -64,6 +71,13 @@ export function useCreateBookmarkWithPostHook(
         queryClient.invalidateQueries(
           api.bookmarks.searchBookmarks.pathFilter(),
         );
+        // Fork: added again, the bookmark already on screen changed too (a
+        // YouTube link starts downloading its video).
+        if (res.alreadyExists) {
+          queryClient.invalidateQueries(
+            api.bookmarks.getBookmark.queryFilter({ bookmarkId: res.id }),
+          );
+        }
         await postCreationCB(res.id);
         return opts?.onSuccess?.(res, req, meta, context);
       },

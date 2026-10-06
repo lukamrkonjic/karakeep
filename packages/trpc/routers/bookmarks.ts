@@ -25,6 +25,7 @@ import {
   LowPriorityCrawlerQueue,
   OpenAIQueue,
   QueuePriority,
+  queueYouTubeVideoDownload,
   QuotaService,
   SUPPORTED_BOOKMARK_ASSET_TYPES,
   triggerSearchReindex,
@@ -63,6 +64,7 @@ import {
 import type { ZBookmarkTags } from "@karakeep/shared/types/tags";
 import { ANCHOR_TEXT_MAX_LENGTH } from "@karakeep/shared/utils/reading-progress-dom";
 import { normalizeTagName } from "@karakeep/shared/utils/tag";
+import { youTubeVideoId } from "@karakeep/shared/utils/youtube";
 import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 import type { VectorFilterQuery } from "@karakeep/shared/vectorStore";
 import { bookmarkCreationCounter } from "../stats";
@@ -137,12 +139,56 @@ async function attemptToDedupLink(ctx: AuthedContext, url: string) {
     .leftJoin(bookmarks, eq(bookmarks.id, bookmarkLinks.id))
     .where(and(eq(bookmarkLinks.url, url), eq(bookmarks.userId, ctx.user.id)));
 
-  if (result.length == 0) {
+  const id = result[0]?.id ?? (await findYouTubeVideo(ctx, url));
+  if (!id) {
     return null;
   }
   return (
-    await Bookmark.fromId(ctx, result[0].id, /* includeContent: */ false)
+    await Bookmark.fromId(ctx, id, /* includeContent: */ false)
   ).asZBookmark();
+}
+
+/**
+ * Fork: one YouTube video, however its link was shared (youtu.be, a watch
+ * page with a start time…) — a link still, or the video bookmark it became
+ * (its source is the link it was added by).
+ */
+async function findYouTubeVideo(
+  ctx: AuthedContext,
+  url: string,
+): Promise<string | null> {
+  const videoId = youTubeVideoId(url);
+  if (!videoId) {
+    return null;
+  }
+  const pattern = `%${videoId}%`;
+  const candidates = await ctx.db
+    .select({
+      id: bookmarks.id,
+      url: bookmarkLinks.url,
+      sourceUrl: bookmarkAssets.sourceUrl,
+    })
+    .from(bookmarks)
+    .leftJoin(bookmarkLinks, eq(bookmarkLinks.id, bookmarks.id))
+    .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
+    .where(
+      and(
+        eq(bookmarks.userId, ctx.user.id),
+        or(
+          like(bookmarkLinks.url, pattern),
+          and(
+            eq(bookmarkAssets.assetType, "video"),
+            like(bookmarkAssets.sourceUrl, pattern),
+          ),
+        ),
+      ),
+    );
+  // LIKE's "_" matches any character: the id is checked properly here.
+  return (
+    candidates.find(
+      (c) => youTubeVideoId(c.url ?? c.sourceUrl ?? "") === videoId,
+    )?.id ?? null
+  );
 }
 
 const BOOKMARKS_QUERIED_WINDOW_MS = 10 * 60 * 1000;
@@ -320,6 +366,17 @@ export const bookmarksAppRouter = router({
               },
             ),
           ]);
+          // Fork: a YouTube video kept as a link (saved before videos were
+          // fetched, or one that couldn't be) is fetched now it's added again.
+          if (
+            alreadyExists.content.type === BookmarkTypes.LINK &&
+            youTubeVideoId(alreadyExists.content.url)
+          ) {
+            await queueYouTubeVideoDownload(ctx.db, alreadyExists.id, {
+              explicit: true,
+              groupId: ctx.user.id,
+            });
+          }
 
           return {
             ...alreadyExists,

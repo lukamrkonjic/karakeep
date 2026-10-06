@@ -11,3 +11,4 @@ export * from "./pictureVectors";
 export * from "./pictureModels";
 export * from "./pictureSettings";
 export * from "./pictureSources";
+export * from "./youtubeVideos";

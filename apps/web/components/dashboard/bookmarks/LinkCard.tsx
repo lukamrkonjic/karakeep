@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useUserSettings } from "@/lib/userSettings";
+import { Loader2 } from "lucide-react";
 
 import type { ZBookmarkTypeLink } from "@karakeep/shared/types/bookmarks";
 import {
   getBookmarkLinkImageUrl,
   getBookmarkTitle,
   getSourceUrl,
+  isBookmarkDownloadingVideo,
   isBookmarkStillCrawling,
 } from "@karakeep/shared/utils/bookmarkUtils";
 
@@ -82,7 +84,16 @@ function LinkImage({
       rel="noreferrer"
       className={className}
     >
-      <div className="relative size-full flex-1">{img}</div>
+      <div className="relative size-full flex-1">
+        {img}
+        {/* Fork: a YouTube video on its way to becoming a video bookmark. */}
+        {isBookmarkDownloadingVideo(bookmark) && (
+          <span className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-full bg-black/70 px-2.5 py-1 text-xs text-white">
+            <Loader2 className="size-3 shrink-0 animate-spin" />
+            <span className="truncate">Downloading video…</span>
+          </span>
+        )}
+      </div>
     </Link>
   );
 }

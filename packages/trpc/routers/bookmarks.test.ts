@@ -4,6 +4,7 @@ import { assert, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   assets,
   AssetTypes,
+  bookmarkAssets,
   bookmarkLinks,
   bookmarks,
   bookmarksInLists,
@@ -969,6 +970,77 @@ describe("Bookmark Routes", () => {
       type: BookmarkTypes.LINK,
     });
     expect(bookmark3User1.alreadyExists).toEqual(false);
+  });
+
+  // Fork: a YouTube video's link becomes a video bookmark (workers'
+  // youtubeVideo.ts); adding the video again finds it, however it's shared.
+  test<CustomTestContext>("one YouTube video, however its link was shared", async ({
+    apiCallers,
+    db,
+  }) => {
+    const api = apiCallers[0].bookmarks;
+    const queueVideo = getTestQueueMocks().queueYouTubeVideoDownload;
+    queueVideo.mockClear();
+
+    const first = await api.createBookmark({
+      url: "https://www.youtube.com/watch?v=4JPnfgAng_4",
+      type: BookmarkTypes.LINK,
+    });
+    expect(first.alreadyExists).toEqual(false);
+
+    // Still a link: the same bookmark, and its video is asked for again.
+    const again = await api.createBookmark({
+      url: "https://youtu.be/4JPnfgAng_4?t=42",
+      type: BookmarkTypes.LINK,
+    });
+    expect(again.alreadyExists).toEqual(true);
+    expect(again.id).toEqual(first.id);
+    expect(queueVideo).toHaveBeenCalledWith(
+      expect.anything(),
+      first.id,
+      expect.objectContaining({ explicit: true }),
+    );
+
+    // Once it's the video bookmark, it's found by the link it was added by.
+    db.transaction((trx) => {
+      trx.delete(bookmarkLinks).where(eq(bookmarkLinks.id, first.id)).run();
+      trx
+        .insert(bookmarkAssets)
+        .values({
+          id: first.id,
+          assetType: "video",
+          assetId: "video-asset",
+          fileName: "video.mp4",
+          sourceUrl: "https://www.youtube.com/watch?v=4JPnfgAng_4",
+        })
+        .run();
+      trx
+        .update(bookmarks)
+        .set({ type: BookmarkTypes.ASSET })
+        .where(eq(bookmarks.id, first.id))
+        .run();
+    });
+    queueVideo.mockClear();
+    const video = await api.createBookmark({
+      url: "https://m.youtube.com/watch?v=4JPnfgAng_4&list=PL123",
+      type: BookmarkTypes.LINK,
+    });
+    expect(video.alreadyExists).toEqual(true);
+    expect(video.id).toEqual(first.id);
+    expect(video.content.type).toEqual(BookmarkTypes.ASSET);
+    expect(queueVideo).not.toHaveBeenCalled();
+
+    // Another video, or another user's same video, is a bookmark of its own.
+    const other = await api.createBookmark({
+      url: "https://youtu.be/4JPnfgAng_5",
+      type: BookmarkTypes.LINK,
+    });
+    expect(other.alreadyExists).toEqual(false);
+    const otherUser = await apiCallers[1].bookmarks.createBookmark({
+      url: "https://youtu.be/4JPnfgAng_4",
+      type: BookmarkTypes.LINK,
+    });
+    expect(otherUser.alreadyExists).toEqual(false);
   });
 
   test<CustomTestContext>("re-saving a link restores and refreshes the existing bookmark", async ({

@@ -333,6 +333,15 @@
                       null
                     ]
                   },
+                  "videoDownloadStatus": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "pending",
+                      "failure",
+                      null
+                    ]
+                  },
                   "author": {
                     "type": "string",
                     "nullable": true

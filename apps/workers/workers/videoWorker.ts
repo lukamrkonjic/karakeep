@@ -28,8 +28,14 @@ import {
 import serverConfig from "@karakeep/shared/config";
 import logger from "@karakeep/shared/logger";
 import { DequeuedJob, getQueueClient } from "@karakeep/shared/queueing";
+import { youTubeVideoId } from "@karakeep/shared/utils/youtube";
 
 import { getBookmarkDetails, updateAsset } from "../workerUtils";
+import {
+  markYouTubeVideoFailed,
+  runYouTubeVideoJob,
+  YOUTUBE_JOB_TIMEOUT_SECS,
+} from "./youtubeVideo";
 
 const TMP_FOLDER = path.join(os.tmpdir(), "video_downloads");
 
@@ -61,12 +67,20 @@ export class VideoWorker {
           logger.error(
             `[VideoCrawler][${jobId}] Video Download job failed: ${job.error}`,
           );
+          // Fork: a YouTube video that never came leaves its link saying so.
+          if (job.numRetriesLeft == 0 && job.data?.bookmarkId) {
+            await markYouTubeVideoFailed(job.data.bookmarkId);
+          }
           return Promise.resolve();
         },
       },
       {
         pollIntervalMs: 1000,
-        timeoutSecs: serverConfig.crawler.downloadVideoTimeout,
+        // Fork: room for a long YouTube video at 1080p (youtubeVideo.ts).
+        timeoutSecs: Math.max(
+          serverConfig.crawler.downloadVideoTimeout,
+          YOUTUBE_JOB_TIMEOUT_SECS,
+        ),
         concurrency: 1,
         validator: zvideoRequestSchema,
       },
@@ -103,6 +117,13 @@ async function runWorker(job: DequeuedJob<ZVideoRequest>) {
   const jobId = job.id;
   const { bookmarkId } = job.data;
   addLogFields<"videoWorker.run">({ "bookmark.id": bookmarkId });
+
+  // Fork: a YouTube video's link becomes a video bookmark, whether or not
+  // CRAWLER_VIDEO_DOWNLOAD is on.
+  if (youTubeVideoId(job.data.url)) {
+    await runYouTubeVideoJob(job);
+    return;
+  }
 
   const {
     url,

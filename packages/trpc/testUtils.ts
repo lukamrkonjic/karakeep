@@ -16,6 +16,8 @@ const testQueueMocks = vi.hoisted(() => ({
   ruleEngineEnqueue: vi.fn(),
   searchIndexingEnqueue: vi.fn(),
   triggerSearchReindex: vi.fn(),
+  // Fork: a YouTube video's link becomes a video bookmark.
+  queueYouTubeVideoDownload: vi.fn(async () => true),
 }));
 
 export function getTestQueueMocks() {
@@ -154,6 +156,7 @@ export function defaultBeforeEach(seedDB = true) {
         requestDiscover: vi.fn(async () => undefined),
         queueDiscoverKeep: vi.fn(async () => undefined),
         PictureTextQueue: { enqueue: vi.fn(async () => undefined) },
+        queueYouTubeVideoDownload: testQueueMocks.queueYouTubeVideoDownload,
       };
     });
     Object.assign(context, await buildTestContext(seedDB));

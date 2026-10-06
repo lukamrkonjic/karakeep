@@ -328,6 +328,11 @@ export const bookmarkLinks = sqliteTable(
     // When the pre-crawl probe last extracted and stored this link's metadata.
     // Lets crawl retries skip re-fetching it.
     probeMetadataAt: integer("probeMetadataAt", { mode: "timestamp" }),
+    // Fork: a YouTube video being downloaded to become a video bookmark
+    // (the link row goes when it does), or one that couldn't be.
+    videoDownloadStatus: text("videoDownloadStatus", {
+      enum: ["pending", "failure"],
+    }),
   },
   (bl) => [index("bookmarkLinks_url_idx").on(bl.url)],
 );
