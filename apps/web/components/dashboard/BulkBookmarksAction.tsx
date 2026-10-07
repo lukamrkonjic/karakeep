@@ -16,12 +16,14 @@ import { toast } from "@/components/ui/sonner";
 import { pictureUrlOf } from "@/lib/bookmarkDragImage";
 import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
+import { downloadBookmarks } from "@/lib/downloadBookmarks";
 import { useBookmarkBulkMutations } from "@/lib/hooks/useBookmarkBulkActions";
 import type { UpdateBookmarkProps } from "@/lib/hooks/useBookmarkBulkActions";
 import { useTranslation } from "@/lib/i18n/client";
 import { selectAllLoaded, setSelection } from "@/lib/selection";
 import {
   CheckCheck,
+  Download,
   FileDown,
   FileText,
   Hash,
@@ -179,8 +181,27 @@ export default function BulkBookmarksAction() {
     (withinListContext.userRole === "editor" ||
       withinListContext.userRole === "owner");
 
+  // Fork: Download — one as its own file, several as a zip (named after the
+  // list you're in); the browser (or the app) saves it as it comes.
+  const downloadSelected = () => {
+    downloadBookmarks(
+      selectedBookmarks.map((b) => b.id),
+      withinListContext?.name,
+    );
+    toast({
+      description:
+        count === 1 ? "Downloading it…" : `Downloading ${count} as a zip…`,
+    });
+  };
+
   // Fork: done to many less often, so behind the card's "…".
   const moreActions = [
+    {
+      name: count > 1 ? "Download as zip" : "Download",
+      icon: <Download className="size-4" />,
+      action: downloadSelected,
+      isPending: false,
+    },
     {
       name: t("actions.edit_tags"),
       icon: <Hash className="size-4" />,

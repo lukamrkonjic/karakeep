@@ -5,13 +5,12 @@ import { toast } from "@/components/ui/sonner";
 import { BOOKMARK_DRAG_MIME } from "@/lib/bookmark-drag";
 import { useClientConfig } from "@/lib/clientConfig";
 import useUpload from "@/lib/hooks/upload-file";
+import { useAddToCurrentList } from "@/lib/hooks/useAddToCurrentList";
 import { cn } from "@/lib/utils";
 import { TRPCClientError } from "@trpc/client";
 import DropZone from "react-dropzone";
 
-import { useBookmarkListContext } from "@karakeep/shared-react/hooks/bookmark-list-context";
 import { useCreateBookmarkWithPostHook } from "@karakeep/shared-react/hooks/bookmarks";
-import { useAddBookmarkToList } from "@karakeep/shared-react/hooks/lists";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
 import LoadingSpinner from "../ui/spinner";
@@ -19,30 +18,10 @@ import BookmarkSavedToast from "../utils/BookmarkSavedToast";
 
 export function useUploadAsset() {
   // When an upload happens while viewing a list, drop the new bookmark into
-  // that list (so drag-drop, editor paste, and the global screenshot paste
-  // all land where you'd expect). Undefined outside a list page.
-  const currentList = useBookmarkListContext();
-  const { mutateAsync: addToList } = useAddBookmarkToList();
-
-  const addToCurrentList = useCallback(
-    async (bookmark: { id: string; alreadyExists?: boolean }) => {
-      if (!currentList || bookmark.alreadyExists) {
-        return;
-      }
-      const canEdit =
-        currentList.type === "manual" &&
-        (currentList.userRole === "owner" || currentList.userRole === "editor");
-      if (!canEdit) {
-        return;
-      }
-      // Best-effort: an "already in list" collision shouldn't surface an error.
-      await addToList({
-        bookmarkId: bookmark.id,
-        listId: currentList.id,
-      }).catch(() => undefined);
-    },
-    [currentList, addToList],
-  );
+  // that list (so drag-drop, editor paste, the "+" dialog's Photos and the
+  // global screenshot paste all land where you'd expect) — a picture saved
+  // before too. Nothing outside a list page.
+  const addToCurrentList = useAddToCurrentList();
 
   const { mutateAsync: createBookmark } = useCreateBookmarkWithPostHook({
     onSuccess: (resp) => {

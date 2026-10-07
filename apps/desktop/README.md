@@ -16,13 +16,12 @@ Mac, Edge's WebView2 on Windows.
 - **Mac: closing the window keeps vrana running.** Click the Dock icon to get
   it back exactly as you left it; ⌘Q quits. (On Windows, closing quits, as
   Windows apps do, and opening it again focuses the open window.)
-- **Links to other sites open in vrana's own browser window** — a picture's
-  original link, say. Hold ⌘ (Ctrl on Windows) or Shift, or middle-click,
-  to open one in your usual browser instead. The browser window is one
-  window, reused, titled with its page; links in it stay in it, its pages
-  get nothing of the app's, and closing it closes it. vrana's own links,
-  even ⌘/Ctrl-clicked, open in vrana's window; its files (a picture, a PDF)
-  opened as a new tab go to the browser window.
+- **Links to other sites open in your usual browser** — a picture's original
+  link, say: a new tab when the browser is open, else a new window, however
+  you click. vrana's own links open in vrana's window; its files (a picture,
+  a PDF) opened as a new tab go to the browser too, by a link that works for
+  an hour without signing in there. (Until 0.1.3 vrana had a browser window
+  of its own for these; on Windows it opened white and hung the app.)
 - **Downloads** go to your Downloads folder and are shown in Finder or
   Explorer.
 - **Files dropped on the window** go to vrana's upload, as in the browser.
@@ -32,10 +31,9 @@ Mac, Edge's WebView2 on Windows.
   page; it follows the theme.
 - **The window remembers** its size and place.
 - **Keys:** back / forward ⌘[ ⌘] or a two-finger swipe (Mac), Alt+← →
-  (Windows); reload ⌘R / Ctrl+R; zoom ⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0 — in
-  whichever window is in front.
+  (Windows); reload ⌘R / Ctrl+R; zoom ⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0.
 - **Menu (Mac):** vrana → Settings… (⌘,) and Change Server…; View → Open
-  in Browser (⌘⇧O) takes the page in front to your usual browser.
+  in Browser (⌘⇧O) takes the page you're on to your usual browser.
 - **Can't reach the server** (the NAS off, or Tailscale off on this computer):
   a page says so, with the address to try again or change.
 
@@ -65,7 +63,7 @@ The first build downloads and compiles Tauri's Rust crates: give it a few
 minutes. You get:
 
 - `apps/desktop/src-tauri/target/release/bundle/macos/vrana.app`
-- `apps/desktop/src-tauri/target/release/bundle/dmg/vrana_0.1.0_aarch64.dmg`
+- `apps/desktop/src-tauri/target/release/bundle/dmg/vrana_0.1.3_aarch64.dmg`
 
 Drag `vrana.app` into Applications. Built on the same Mac, it opens straight
 away. On another Mac, right-click → Open the first time: the app isn't
@@ -100,7 +98,7 @@ pnpm app:build
 (`--filter` installs only what the app needs — the Tauri command line — not
 the whole repository's server packages.)
 
-You get `apps\desktop\src-tauri\target\release\bundle\nsis\vrana_0.1.0_x64-setup.exe`:
+You get `apps\desktop\src-tauri\target\release\bundle\nsis\vrana_0.1.3_x64-setup.exe`:
 the installer. It installs for your user only (no administrator needed), with
 a Start menu entry, and fetches WebView2 itself on a Windows that lacks it.
 
@@ -124,7 +122,7 @@ opens the app from a quick debug build. To try it against a local web app
 
 - `src-tauri/src/lib.rs` — the window: menu, links, downloads, theme, and
   what the server's pages may ask of the app (only to move the window, zoom
-  it and report their theme).
+  it, report their theme and hand a link to the browser).
 - `src/index.html` — the app's own page: shown while it opens the server, and
   when it can't.
 - `src-tauri/tauri.conf.json` — name, version, identifier and installers.

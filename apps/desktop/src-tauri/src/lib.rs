@@ -7,8 +7,9 @@
 //!   `<html data-shell="macos">`, which the script below sets);
 //! - on a Mac, closing the window keeps vrana running — the Dock icon brings
 //!   it back as it was (⌘Q quits);
-//! - links to other sites open in the browser; downloads land in Downloads
-//!   and show in Finder / Explorer;
+//! - links to other sites open in the computer's own browser (a new tab when
+//!   it's open), and so do vrana's files opened in a new tab; downloads land
+//!   in Downloads and show in Finder / Explorer;
 //! - the window opens in the theme vrana was last in (no white flash), and a
 //!   page of its own (src/index.html) asks for the server's address, or says
 //!   when it can't be reached.
@@ -35,8 +36,6 @@ use tauri::{
 use tauri_plugin_opener::OpenerExt;
 
 const WINDOW: &str = "main";
-/// vrana's own browser window, for links to other sites (open_in_app).
-const BROWSER: &str = "browser";
 
 /// Baked in at build time (`VRANA_SERVER=https://… pnpm app:build`), so a
 /// first launch opens straight onto it; otherwise the app's page asks.
@@ -98,9 +97,9 @@ const PAGE_SCRIPT: &str = r#"
   }
   addEventListener("DOMContentLoaded", report);
 
-  // A link to another site: vrana's own browser window, or — with ⌘, Ctrl
-  // or Shift held, or a middle click — the computer's browser (open_link).
-  const follow = (e, elsewhere) => {
+  // A link to another site, however it's clicked: the computer's own
+  // browser, in a new tab when it's open (open_link).
+  const follow = (e) => {
     const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
     if (!ipc || e.defaultPrevented || !a || a.hasAttribute("download")) return;
     let url;
@@ -113,15 +112,31 @@ const PAGE_SCRIPT: &str = r#"
     // Only the navigation: the page's own handlers still run (a menu the
     // link sits in closes).
     e.preventDefault();
-    ipc.invoke("open_link", { url: url.href, elsewhere }).catch(() => {});
+    ipc.invoke("open_link", { url: url.href }).catch(() => {});
   };
-  addEventListener(
-    "click",
-    (e) => e.button === 0 && follow(e, e.metaKey || e.ctrlKey || e.shiftKey),
-    true,
-  );
-  addEventListener("auxclick", (e) => e.button === 1 && follow(e, true), true);
+  addEventListener("click", (e) => e.button === 0 && follow(e), true);
+  addEventListener("auxclick", (e) => e.button === 1 && follow(e), true);
 })();
+"#;
+
+/// vrana's own file (a picture, a video, a PDF) opened in a new tab, to the
+/// computer's browser. The browser may not be signed in to vrana, so the page
+/// — which is — asks the server for a link that works without (the asset's
+/// signed URL, an hour), on the address the app uses; failing that, the
+/// plain one.
+const OPEN_FILE_SCRIPT: &str = r#"
+(async (id) => {
+  const ipc = window.__TAURI_INTERNALS__;
+  let url = new URL("/api/assets/" + encodeURIComponent(id), location.origin).href;
+  try {
+    const res = await fetch("/api/assets/" + encodeURIComponent(id) + "/signed-url");
+    if (res.ok) {
+      const signed = new URL((await res.json()).signedUrl, location.origin);
+      url = new URL(signed.pathname + signed.search, location.origin).href;
+    }
+  } catch {}
+  ipc && ipc.invoke("open_link", { url }).catch(() => {});
+})(__ASSET_ID__);
 "#;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -260,7 +275,7 @@ fn open_elsewhere(app: &AppHandle, url: &Url) {
 }
 
 /// Downloads, under the name the site gave (a number added if it's taken),
-/// shown in Finder / Explorer when done — in either window.
+/// shown in Finder / Explorer when done.
 fn downloads(
     app: &AppHandle,
 ) -> impl Fn(tauri::webview::Webview, DownloadEvent<'_>) -> bool + Send + Sync + 'static {
@@ -287,67 +302,30 @@ fn downloads(
     }
 }
 
-/// vrana's own browser window: a link to another site, over vrana. One
-/// window, reused — another link opens in it — titled with its page's
-/// title; everything in it may go anywhere (a link opening a new window
-/// stays in it), and its pages get nothing of the app's. Closing it closes
-/// it (vrana's window only hides), so nothing keeps playing behind.
-fn open_in_app(app: &AppHandle, url: Url) {
-    if let Some(browser) = app.get_webview_window(BROWSER) {
-        let _ = browser.navigate(url);
-        let _ = browser.unminimize();
-        let _ = browser.show();
-        let _ = browser.set_focus();
-        return;
-    }
-    let dark = {
-        let state = app.state::<AppState>();
-        let settings = state.settings.lock().unwrap();
-        settings.theme.as_deref() == Some("dark")
-    };
-    let handle = app.clone();
-    let built = WebviewWindowBuilder::new(app, BROWSER, WebviewUrl::External(url))
-        .title("vrana")
-        .inner_size(1100.0, 820.0)
-        .min_inner_size(480.0, 360.0)
-        .center()
-        .theme(Some(if dark { Theme::Dark } else { Theme::Light }))
-        .zoom_hotkeys_enabled(true)
-        .on_document_title_changed(|browser, title| {
-            let _ = browser.set_title(&title);
-        })
-        .on_new_window(move |url, _features| {
-            if let Some(browser) = handle.get_webview_window(BROWSER) {
-                let _ = browser.navigate(url);
-            }
-            NewWindowResponse::Deny
-        })
-        .on_download(downloads(app))
-        .build();
-    if let Ok(browser) = built {
-        #[cfg(target_os = "macos")]
-        swipe_to_go_back(&browser);
-        #[cfg(target_os = "windows")]
-        paint_title_bar(browser.hwnd(), dark);
-        let _ = browser.set_focus();
-    }
-}
-
-/// A link on a page of vrana's to another site (PAGE_SCRIPT): vrana's own
-/// browser window, or the computer's browser when asked (⌘ / Ctrl / Shift,
-/// a middle click).
+/// A link on a page of vrana's to another site (PAGE_SCRIPT), or one of its
+/// files (OPEN_FILE_SCRIPT): the computer's own browser — a new tab when
+/// it's open. (vrana had a browser window of its own for these; on Windows
+/// it opened white and hung the app, so it went.)
 #[tauri::command]
-fn open_link(app: AppHandle, url: String, elsewhere: bool) -> Result<(), String> {
+fn open_link(app: AppHandle, url: String) -> Result<(), String> {
     let url = Url::parse(&url).map_err(|_| "That isn't an address.".to_string())?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err("That isn't a web address.".into());
     }
-    if elsewhere {
-        open_elsewhere(&app, &url);
-    } else {
-        open_in_app(&app, url);
-    }
+    open_elsewhere(&app, &url);
     Ok(())
+}
+
+/// The asset in a link to one of the server's files: /api/assets/<id> (the
+/// web app's) or /api/v1/assets/<id>.
+fn asset_id(url: &Url) -> Option<String> {
+    let segments: Vec<&str> = url.path_segments()?.collect();
+    match segments.as_slice() {
+        ["api", "assets", id] | ["api", "v1", "assets", id] if !id.is_empty() => {
+            Some((*id).to_string())
+        }
+        _ => None,
+    }
 }
 
 fn is_own_page(url: &Url) -> bool {
@@ -635,14 +613,6 @@ fn mac_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
 
 #[cfg(target_os = "macos")]
 fn menu_action(app: &AppHandle, id: &str) {
-    // Reload, Back, Forward and Open in Browser: the window in front (vrana's
-    // or its browser window); Settings and Change Server: vrana's.
-    let front = app
-        .webview_windows()
-        .into_values()
-        .find(|w| w.is_focused().unwrap_or(false))
-        .or_else(|| window(app));
-    let Some(front) = front else { return };
     let Some(window) = window(app) else { return };
     match id {
         "settings" => {
@@ -659,16 +629,16 @@ fn menu_action(app: &AppHandle, id: &str) {
             }
         }
         "reload" => {
-            let _ = front.eval("location.reload()");
+            let _ = window.eval("location.reload()");
         }
         "back" => {
-            let _ = front.eval("history.back()");
+            let _ = window.eval("history.back()");
         }
         "forward" => {
-            let _ = front.eval("history.forward()");
+            let _ = window.eval("history.forward()");
         }
         "elsewhere" => {
-            if let Ok(url) = front.url() {
+            if let Ok(url) = window.url() {
                 if matches!(url.scheme(), "http" | "https") {
                     open_elsewhere(app, &url);
                 }
@@ -690,13 +660,17 @@ fn build_window(app: &AppHandle, theme: Option<&str>) -> tauri::Result<WebviewWi
                     return true;
                 }
             }
-            // A site (a link the page script didn't see), in vrana's own
-            // browser window; mail and the like, where they belong.
-            if matches!(url.scheme(), "http" | "https") {
-                open_in_app(&app, url.clone());
-            } else {
-                open_elsewhere(&app, url);
+            // A Mac's WebKit asks here about every frame's navigations — the
+            // players a preview embeds (YouTube, Instagram, TikTok) too —
+            // and doesn't say which frame, so there other sites load: the
+            // page script still hands their links to the browser.
+            // (WebView2 asks about the page itself only.)
+            if cfg!(target_os = "macos") && matches!(url.scheme(), "http" | "https") {
+                return true;
             }
+            // A site (a link the page script didn't see): the computer's
+            // browser; mail and the like, where they belong.
+            open_elsewhere(&app, url);
             false
         }
     };
@@ -704,15 +678,19 @@ fn build_window(app: &AppHandle, theme: Option<&str>) -> tauri::Result<WebviewWi
         let app = app.clone();
         move |url: Url, _features| {
             // A link in a new tab (target=_blank, window.open): the server's
-            // pages open here, its files (a picture, a PDF) and other sites
-            // in vrana's own browser window, mail and the like elsewhere.
+            // pages open here; its files (a picture, a PDF) and other sites
+            // in the computer's browser, mail and the like where they belong.
             match current_server(&app) {
-                Some(server) if same_server(&url, &server) && !url.path().starts_with("/api/") => {
-                    if let Some(window) = window(&app) {
+                Some(server) if same_server(&url, &server) => {
+                    if let (Some(id), Some(window)) = (asset_id(&url), window(&app)) {
+                        let id = serde_json::to_string(&id).unwrap_or_default();
+                        let _ = window.eval(&OPEN_FILE_SCRIPT.replace("__ASSET_ID__", &id));
+                    } else if url.path().starts_with("/api/") {
+                        open_elsewhere(&app, &url);
+                    } else if let Some(window) = window(&app) {
                         let _ = window.navigate(url);
                     }
                 }
-                _ if matches!(url.scheme(), "http" | "https") => open_in_app(&app, url),
                 _ => open_elsewhere(&app, &url),
             }
             NewWindowResponse::Deny
@@ -789,7 +767,6 @@ fn on_window_event(window: &Window, event: &WindowEvent) {
     if let WindowEvent::ThemeChanged(theme) = event {
         paint_title_bar(window.hwnd(), *theme == Theme::Dark);
     }
-    // vrana's own browser window closes as any window does.
     if window.label() != WINDOW {
         return;
     }

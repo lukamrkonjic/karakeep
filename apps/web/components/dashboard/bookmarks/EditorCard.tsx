@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import BookmarkSavedToast from "@/components/utils/BookmarkSavedToast";
 import { useClientConfig } from "@/lib/clientConfig";
+import { useAddToCurrentList } from "@/lib/hooks/useAddToCurrentList";
 import { useIsTouch } from "@/lib/hooks/useIsPhone";
 import { useTranslation } from "@/lib/i18n/client";
 import {
@@ -67,8 +68,11 @@ export default function EditorCard({
     inputRef.current?.focus();
   });
 
+  // Fork: on a list's page, a link or note goes into that list
+  // (NewBookmarkDialog sets the list; uploads do the same in useUploadAsset).
+  const addToCurrentList = useAddToCurrentList();
   const { mutate, isPending } = useCreateBookmarkWithPostHook({
-    onSuccess: (resp) => {
+    onSuccess: async (resp) => {
       if (resp.alreadyExists) {
         toast({
           description: <BookmarkSavedToast bookmarkId={resp.id} />,
@@ -80,6 +84,7 @@ export default function EditorCard({
       if (bookmarkLayout === "list" && inputRef?.current?.style) {
         inputRef.current.style.height = "auto";
       }
+      await addToCurrentList(resp);
       onCreated?.();
     },
     onError: (e) => {
