@@ -554,6 +554,38 @@ describe("Pictures", () => {
       "red",
     ]);
 
+    // Lists left out: what's in them, or in a list under them, isn't shown
+    // (nor counted); a list that's gone leaves nothing out.
+    const games = await api.lists.create({ name: "Games", icon: "" });
+    const shots = await api.lists.create({
+      name: "Screenshots",
+      icon: "",
+      parentId: games.id,
+    });
+    await api.lists.addToList({ listId: shots.id, bookmarkId: bitOfBlue });
+    const leftOut = await api.pictures.byColour({
+      colour: "blue",
+      leaveOut: [games.id],
+    });
+    expect(titles(leftOut)).toEqual(["blue"]);
+    expect(leftOut.total).toBe(1);
+    expect(
+      titles(
+        await api.pictures.byColour({ colour: "blue", leaveOut: ["gone"] }),
+      ),
+    ).toEqual(["blue", "a bit of blue"]);
+    // As a smart list leaves them out ("Save as smart list" carries them).
+    const bluesKept = await api.lists.create({
+      name: "Blue, no games",
+      icon: "",
+      type: "smart",
+      query: `color:blue -listid:${games.id}`,
+    });
+    expect(
+      titles(await api.bookmarks.getBookmarks({ listId: bluesKept.id })),
+    ).toEqual(["blue"]);
+    await api.lists.removeFromList({ listId: shots.id, bookmarkId: bitOfBlue });
+
     // color: in a search — and so in a smart list, which groups by colour.
     const blues = await api.lists.create({
       name: "Blue",

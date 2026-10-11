@@ -10,7 +10,9 @@ import {
   smartRuleMatcher,
   smartRulesFor,
   smartRulesFromQuery,
+  smartRulesLeftOut,
   suggestSmartListName,
+  withSmartRulesLeftOut,
 } from "./smartListRules";
 
 // Fork: a smart list's rules (the editor), as the search language and back.
@@ -341,5 +343,65 @@ describe("A smart list's suggested name", () => {
     expect(name("l1,l2,l3,l4")).toEqual("Art, Cars & 2 more");
     // A list that's gone isn't named.
     expect(name("gone,l2")).toEqual("Cars");
+  });
+});
+
+describe("Leaving lists out of a smart list", () => {
+  const colour: ZSmartRule = { field: "colour", op: "is", value: "red" };
+  const out = (value: string): ZSmartRule => ({
+    field: "lists",
+    op: "not_contains",
+    value,
+  });
+
+  test("its Lists doesn't contain rule is what it leaves out", () => {
+    expect(smartRulesLeftOut(all(colour))).toEqual([]);
+    expect(smartRulesLeftOut(all(colour, out("a,b"), out("b,c")))).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    // Not when it's turned round, or one of several that may hold.
+    expect(
+      smartRulesLeftOut({
+        groups: [
+          { match: "all", negate: true, rules: [out("a")] },
+          { match: "any", negate: false, rules: [colour, out("b")] },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  test("leaving lists out changes that rule, and nothing else", () => {
+    // Added after the first "all" group's rules…
+    const added = withSmartRulesLeftOut(all(colour), ["a", "b", "a"]);
+    expect(added).toEqual(all(colour, out("a,b")));
+    expect(compileSmartRules(added).query).toBe(
+      "color:red -listid:a -listid:b",
+    );
+    // …changed where it was, the others it had taken in…
+    expect(
+      withSmartRulesLeftOut(all(out("a"), colour, out("b")), ["c"]),
+    ).toEqual(all(out("c"), colour));
+    // …and gone when nothing is left out.
+    expect(withSmartRulesLeftOut(all(colour, out("a")), [])).toEqual(
+      all(colour),
+    );
+    // A group of its own when no group is "all … true"; one left empty goes.
+    const anyRed = {
+      groups: [{ match: "any" as const, negate: false, rules: [colour] }],
+    };
+    expect(withSmartRulesLeftOut(anyRed, ["a"])).toEqual({
+      groups: [...anyRed.groups, ...all(out("a")).groups],
+    });
+    expect(
+      withSmartRulesLeftOut(
+        { groups: [...anyRed.groups, ...all(out("a")).groups] },
+        [],
+      ),
+    ).toEqual(anyRed);
+    // Read back from the list's query, as a list made elsewhere is.
+    const query = compileSmartRules(added).query ?? "";
+    expect(smartRulesLeftOut(smartRulesFromQuery(query))).toEqual(["a", "b"]);
   });
 });

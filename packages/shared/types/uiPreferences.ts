@@ -22,6 +22,9 @@ export const zUiPreferencesSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   // The tailored feed's left-out lists (exclusions, so new lists join it).
   tailoredFeedExcluded: z.array(z.string()).max(5000).optional(),
+  // The lists every colour page leaves out (/dashboard/colour/…): each with
+  // everything under it, as a smart list's "Lists doesn't contain" reads.
+  colourLeftOutLists: z.array(z.string()).max(5000).optional(),
   // Each page's "…" Sort, by page key (apps/web/lib/pageSort.ts).
   pageSorts: z
     .record(z.string().max(100), z.string().max(20))

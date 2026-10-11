@@ -5,14 +5,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BookmarksGrid from "@/components/dashboard/bookmarks/BookmarksGrid";
 import BookmarksGridSkeleton from "@/components/dashboard/bookmarks/BookmarksGridSkeleton";
+import { LeaveListsOutDialog } from "@/components/dashboard/lists/LeaveListsOutDialog";
+import { PageOptions } from "@/components/dashboard/PageOptions";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
+import { useColourLeftOut, useSetColourLeftOut } from "@/lib/leftOutLists";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { ListPlus } from "lucide-react";
+import { ListPlus, ListX, X } from "lucide-react";
 
-import { useCreateBookmarkList } from "@karakeep/shared-react/hooks/lists";
+import {
+  useBookmarkLists,
+  useCreateBookmarkList,
+} from "@karakeep/shared-react/hooks/lists";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import {
+  compileSmartRules,
+  withSmartRulesLeftOut,
+} from "@karakeep/shared/smartListRules";
 import {
   COLOUR_FAMILIES,
   FAMILY_SWATCHES,
@@ -20,12 +30,16 @@ import {
   parseColourQuery,
 } from "@karakeep/shared/utils/colours";
 
-/** The pictures with a colour, or a family's colours, a page at a time. */
+/**
+ * The pictures with a colour, or a family's colours, a page at a time —
+ * none from the lists every colour page leaves out.
+ */
 function useColourResults(colour: string) {
   const api = useTRPC();
+  const leftOut = useColourLeftOut();
   return useInfiniteQuery(
     api.pictures.byColour.infiniteQueryOptions(
-      { colour },
+      leftOut.length > 0 ? { colour, leaveOut: leftOut } : { colour },
       {
         initialCursor: 0,
         getNextPageParam: (page) => page.nextCursor,
@@ -67,6 +81,49 @@ const nameOf = (family: string) =>
   family.charAt(0).toUpperCase() + family.slice(1);
 
 /**
+ * The lists left out, over the grid, so a colour never passes for all of
+ * it: a tap opens the picker, × brings them all back.
+ */
+function LeftOutChip({ onOpen }: { onOpen: () => void }) {
+  const leftOut = useColourLeftOut();
+  const setLeftOut = useSetColourLeftOut();
+  const { data: lists } = useBookmarkLists();
+  if (leftOut.length === 0) {
+    return null;
+  }
+  const names = leftOut.flatMap((id) => {
+    const name = lists?.data.find((l) => l.id === id)?.name;
+    return name ? [name] : [];
+  });
+  const label =
+    names.length > 0 && names.length === leftOut.length && names.length <= 2
+      ? names.join(", ")
+      : `${leftOut.length} ${leftOut.length === 1 ? "list" : "lists"}`;
+  return (
+    <span className="flex h-7 w-fit max-w-full items-center gap-1.5 rounded-full border bg-muted/50 pl-2.5 pr-1 text-sm">
+      <button
+        type="button"
+        onClick={onOpen}
+        title="Choose the lists colours leave out"
+        className="flex min-w-0 items-center gap-1.5"
+      >
+        <ListX className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate">Without {label}</span>
+      </button>
+      <button
+        type="button"
+        title="Show every list's pictures"
+        aria-label="Show every list's pictures"
+        onClick={() => setLeftOut([])}
+        className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <X className="size-3.5" />
+      </button>
+    </span>
+  );
+}
+
+/**
  * Fork: pictures by colour — a family's (red, beige…: the chips) or one
  * colour's, its lighter and darker shades too (the swatch picks any), the
  * most of it first (routers/pictures.ts byColour). Saved as a smart list
@@ -97,6 +154,9 @@ export default function ColourPage({ colour: param }: { colour: string }) {
   }, [picked, shown, router]);
 
   const total = useColourResults(query).data?.pages[0]?.total;
+  const leftOut = useColourLeftOut();
+  const setLeftOut = useSetColourLeftOut();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const { mutate: createList, isPending: saving } = useCreateBookmarkList({
     onSuccess: (list) => router.push(`/dashboard/lists/${list.id}`),
     onError: (e) => toast({ variant: "destructive", description: e.message }),
@@ -140,13 +200,48 @@ export default function ColourPage({ colour: param }: { colour: string }) {
               // No emoji of its own: one can be picked in its settings.
               icon: "",
               type: "smart",
-              query: `color:${query}`,
+              // The lists left out here stay out of it: its Lists rule.
+              query:
+                compileSmartRules(
+                  withSmartRulesLeftOut(
+                    {
+                      groups: [
+                        {
+                          match: "all",
+                          negate: false,
+                          rules: [{ field: "colour", op: "is", value: query }],
+                        },
+                      ],
+                    },
+                    leftOut,
+                  ),
+                ).query ?? `color:${query}`,
             })
           }
         >
           <ListPlus className="size-4" />
           <span className="hidden sm:inline">Save as smart list</span>
         </Button>
+        <PageOptions
+          variant="header"
+          label="Colour options"
+          items={[
+            {
+              id: "leave-out",
+              label: "Leave lists out…",
+              icon: <ListX className="size-4" />,
+              onSelect: () => setPickerOpen(true),
+            },
+          ]}
+          sort={null}
+        />
+        <LeaveListsOutDialog
+          open={pickerOpen}
+          setOpen={setPickerOpen}
+          leftOut={leftOut}
+          onSave={setLeftOut}
+          description="Pictures in a list you untick don't show on any colour page. Unticking a folder leaves out everything in it; open it to keep single sub-lists."
+        />
       </div>
       <div className="flex flex-wrap gap-2">
         {COLOUR_FAMILIES.map((f) => (
@@ -172,6 +267,7 @@ export default function ColourPage({ colour: param }: { colour: string }) {
           />
         ))}
       </div>
+      <LeftOutChip onOpen={() => setPickerOpen(true)} />
       <ColourResults colour={query} />
     </div>
   );

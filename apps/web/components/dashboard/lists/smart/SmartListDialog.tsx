@@ -62,7 +62,27 @@ import {
  * menu reads them as it opens (PrefetchSmartListRules), so Edit opens with
  * them in place, at its final size; saving them reads them again.
  */
-const RULES_FRESH = { staleTime: 30_000, gcTime: 30_000 };
+export const RULES_FRESH = { staleTime: 30_000, gcTime: 30_000 };
+
+/** After a smart list's rules change: its count, rules and bookmarks. */
+export function useRefreshSmartList() {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
+  return (listId: string) => {
+    void queryClient.invalidateQueries(api.lists.list.pathFilter());
+    void queryClient.invalidateQueries(api.lists.stats.pathFilter());
+    void queryClient.invalidateQueries(api.lists.get.queryFilter({ listId }));
+    void queryClient.invalidateQueries(
+      api.smartLists.rules.queryFilter({ listId }),
+    );
+    void queryClient.invalidateQueries(
+      api.bookmarks.getBookmarks.queryFilter({ listId }),
+    );
+    void queryClient.invalidateQueries(
+      api.bookmarks.getBookmarks.infiniteQueryFilter({ listId }),
+    );
+  };
+}
 
 /** Rendered in a smart list's "…" menu: reads its rules as it opens. */
 export function PrefetchSmartListRules({ listId }: { listId: string }) {
@@ -206,7 +226,6 @@ function SmartListForm({
   onDone: () => void;
 }) {
   const api = useTRPC();
-  const queryClient = useQueryClient();
   const router = useRouter();
   const [name, setName] = useState(list?.name ?? "");
   const [icon, setIcon] = useState(list?.icon ?? "");
@@ -224,20 +243,7 @@ function SmartListForm({
   const complete =
     compiled.matcher !== null && compiled.incomplete.length === 0;
 
-  const refresh = (listId: string) => {
-    void queryClient.invalidateQueries(api.lists.list.pathFilter());
-    void queryClient.invalidateQueries(api.lists.stats.pathFilter());
-    void queryClient.invalidateQueries(api.lists.get.queryFilter({ listId }));
-    void queryClient.invalidateQueries(
-      api.smartLists.rules.queryFilter({ listId }),
-    );
-    void queryClient.invalidateQueries(
-      api.bookmarks.getBookmarks.queryFilter({ listId }),
-    );
-    void queryClient.invalidateQueries(
-      api.bookmarks.getBookmarks.infiniteQueryFilter({ listId }),
-    );
-  };
+  const refresh = useRefreshSmartList();
   const onError = (e: { message: string }) =>
     toast({ variant: "destructive", description: e.message });
   const create = useMutation(

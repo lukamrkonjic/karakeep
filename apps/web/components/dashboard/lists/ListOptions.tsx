@@ -12,6 +12,7 @@ import { useTranslation } from "@/lib/i18n/client";
 import {
   DoorOpen,
   FolderInput,
+  ListX,
   Pencil,
   Plus,
   Rss,
@@ -39,6 +40,7 @@ import {
   PrefetchSmartListRules,
   SmartListDialog,
 } from "./smart/SmartListDialog";
+import { SmartListLeaveOut } from "./smart/SmartListLeaveOut";
 
 // The view toggles and the leave/delete actions come after "Sort".
 const AFTER_SORT = new Set([
@@ -73,6 +75,7 @@ export function ListOptions({
   const [newNestedListModalOpen, setNewNestedListModalOpen] = useState(false);
   const [mergeListModalOpen, setMergeListModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [leaveOutOpen, setLeaveOutOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [subscriptionsModalOpen, setSubscriptionsModalOpen] = useState(false);
@@ -92,6 +95,18 @@ export function ListOptions({
       visible: isOwner,
       disabled: false,
       onClick: () => setEditModalOpen(true),
+    },
+    {
+      // Fork: the lists a smart list leaves out, as the tailored feed's are
+      // picked (its "Lists doesn't contain" rule).
+      id: "leave-out",
+      title: t("lists.leave_lists_out", {
+        defaultValue: "Leave lists out…",
+      }),
+      icon: <ListX className="size-4" />,
+      visible: isOwner && list.type === "smart",
+      disabled: false,
+      onClick: () => setLeaveOutOpen(true),
     },
     {
       id: "share",
@@ -235,6 +250,11 @@ export function ListOptions({
             open={editModalOpen}
             setOpen={setEditModalOpen}
             list={list}
+          />
+          <SmartListLeaveOut
+            list={list}
+            open={leaveOutOpen}
+            setOpen={setLeaveOutOpen}
           />
         </>
       ) : (
