@@ -30,6 +30,7 @@ import { switchCase } from "@karakeep/shared/utils/switch";
 import { AuthedContext, Context } from "..";
 import { buildImpersonatingAuthedContext } from "../lib/impersonate";
 import { RuleEngine } from "../lib/ruleEngine";
+import { withoutColourLeftOut } from "../lib/colourLeftOut";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
 import { Bookmark } from "./bookmarks";
 import { ListInvitation } from "./listInvitations";
@@ -1149,11 +1150,14 @@ export class SmartList extends List {
     if (!parsedQuery.matcher) {
       return [];
     }
-    return await getBookmarkIdsFromMatcher(
+    const ids = await getBookmarkIdsFromMatcher(
       this.ctx,
       parsedQuery.matcher,
       newVisitedListIds,
     );
+    // Fork: a smart list asking for a colour leaves out what the colours do
+    // (List settings → Colours), but not lists its own rules name.
+    return await withoutColourLeftOut(this.ctx, parsedQuery.matcher, ids);
   }
 
   async getSize(): Promise<number> {

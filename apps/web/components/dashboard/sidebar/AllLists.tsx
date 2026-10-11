@@ -371,18 +371,17 @@ export default function AllLists({
               />
             </button>
             <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
-              {smartTree.data.length > 1 && (
-                <OrganiseListsDialog type="smart">
-                  <button
-                    type="button"
-                    title="Organise smart lists"
-                    aria-label="Organise smart lists"
-                    className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <Pencil className="size-4 p-px" strokeWidth={1.5} />
-                  </button>
-                </OrganiseListsDialog>
-              )}
+              {/* Always: List settings has the colours' left-out lists too. */}
+              <OrganiseListsDialog type="smart">
+                <button
+                  type="button"
+                  title="List settings"
+                  aria-label="List settings"
+                  className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Pencil className="size-4 p-px" strokeWidth={1.5} />
+                </button>
+              </OrganiseListsDialog>
               <SmartListDialog>
                 <button
                   type="button"
@@ -430,8 +429,8 @@ export default function AllLists({
                 <OrganiseListsDialog type="manual">
                   <button
                     type="button"
-                    title="Organise lists"
-                    aria-label="Organise lists"
+                    title="List settings"
+                    aria-label="List settings"
                     className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <Pencil className="size-4 p-px" strokeWidth={1.5} />

@@ -57,6 +57,7 @@ import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
+import { leftOutOfColours } from "../lib/colourLeftOut";
 import { userPictureIndex, vectorOf } from "../lib/pictureIndex";
 import { describedVector } from "../lib/pictureText";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
@@ -540,9 +541,6 @@ export const picturesAppRouter = router({
     .input(
       z.object({
         colour: z.string().max(20),
-        // Lists whose pictures it leaves out, each with everything under it
-        // (the colour pages' "Leave lists out…").
-        leaveOut: z.array(z.string()).max(5000).optional(),
         cursor: z.number().int().min(0).nullish(),
         limit: z.number().int().min(1).max(60).optional(),
       }),
@@ -556,19 +554,8 @@ export const picturesAppRouter = router({
       if (!query || !palettesEnabled) {
         return none;
       }
-      // As a smart list's "Lists doesn't contain" reads them.
-      const leftOut = new Set(
-        input.leaveOut?.length
-          ? await getBookmarkIdsFromMatcher(ctx, {
-              type: "or",
-              matchers: input.leaveOut.map((listId) => ({
-                type: "listId" as const,
-                listId,
-                inverse: false,
-              })),
-            })
-          : [],
-      );
+      // The lists left out of colours (List settings → Colours).
+      const leftOut = await leftOutOfColours(ctx);
       const ranked = (
         await ctx.db
           .select({

@@ -2,27 +2,39 @@
 
 import { useCallback } from "react";
 import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 
 const NONE: string[] = [];
 
 /**
- * Fork: the lists every colour page leaves out (its "…" → Leave lists out…),
- * kept in the account (lib/uiPreferences.tsx). Each takes everything under
- * it with it, as a smart list's "Lists doesn't contain" does — which is
- * what they become when the page is saved as a smart list.
+ * Fork: the lists left out of colours (List settings → Colours), kept in
+ * the account (lib/uiPreferences.tsx): the server leaves their pictures out
+ * of every colour page and every smart list that asks for a colour
+ * (packages/shared/colourLeftOut.ts). Each takes everything under it with
+ * it, as a smart list's "Lists doesn't contain" does.
  */
 export function useColourLeftOut(): string[] {
   return usePreference("colourLeftOutLists") ?? NONE;
 }
 
+/** Changes them; once the server has them, what they leave out reloads. */
 export function useSetColourLeftOut() {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
   const updatePreferences = useUpdatePreferences();
   return useCallback(
-    (listIds: string[]) =>
-      void updatePreferences({ colourLeftOutLists: listIds }),
-    [updatePreferences],
+    async (listIds: string[]) => {
+      await updatePreferences({ colourLeftOutLists: listIds });
+      void queryClient.invalidateQueries(api.pictures.byColour.pathFilter());
+      void queryClient.invalidateQueries(api.lists.stats.pathFilter());
+      void queryClient.invalidateQueries(
+        api.bookmarks.getBookmarks.pathFilter(),
+      );
+    },
+    [api, queryClient, updatePreferences],
   );
 }
 
@@ -65,7 +77,3 @@ export function leftOutTree(lists: ZBookmarkList[]) {
     unknown: (leftOut: string[]) => leftOut.filter((id) => !known.has(id)),
   };
 }
-
-/** The same lists, in any order. */
-export const sameLists = (a: string[], b: string[]) =>
-  a.length === b.length && new Set([...a, ...b]).size === a.length;

@@ -12,6 +12,7 @@ import { getServerAuthSession } from "@/server/auth";
 
 import type { ZGetBookmarksRequest } from "@karakeep/shared/types/bookmarks";
 
+import { ColourLeftOutChip } from "../lists/ColourLeftOutChip";
 import PageFilterChips from "./PageFilterChips";
 import UpdatableBookmarksGrid from "./UpdatableBookmarksGrid";
 
@@ -59,6 +60,8 @@ export default async function Bookmarks({
       {header}
       {showDivider && <Separator />}
       <PageFilterChips pageKey={sortKey} />
+      {/* Fork: a smart list asking for a colour — what it leaves out. */}
+      {query.listId && <ColourLeftOutChip listId={query.listId} />}
       <UpdatableBookmarksGrid
         // A new order (or a new shuffle), or filter, starts a fresh grid.
         key={JSON.stringify({ sort, filters })}
