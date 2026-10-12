@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { projectPath } from "@/lib/projects";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, ImageDown, Pencil, Trash2 } from "lucide-react";
 
 import type { ZProject } from "@karakeep/shared/types/projects";
 
@@ -17,11 +17,13 @@ import { DeleteProjectDialog, ProjectNameDialog } from "./ProjectDialogs";
 
 /**
  * Fork: a project's "…" — on its card, its sidebar row and its board:
- * Open (not on the board itself), Rename…, Delete….
+ * Open (not on the board itself), the board as a picture (on the board),
+ * Rename…, Delete….
  */
 export function ProjectOptions({
   project,
   onBoard = false,
+  onExport,
   onDeleted,
   onOpenChange,
   align = "end",
@@ -30,6 +32,8 @@ export function ProjectOptions({
   project: ZProject;
   /** On its own board: no Open. */
   onBoard?: boolean;
+  /** The board, downloaded as one picture. */
+  onExport?: (format: "png" | "jpeg") => void;
   onDeleted?: () => void;
   onOpenChange?: (open: boolean) => void;
   align?: "start" | "end";
@@ -63,6 +67,24 @@ export function ProjectOptions({
               <ExternalLink className="size-4" />
               <span>Open</span>
             </DropdownMenuItem>
+          )}
+          {onExport && (
+            <>
+              <DropdownMenuItem
+                className="flex gap-2"
+                onClick={() => onExport("png")}
+              >
+                <ImageDown className="size-4" />
+                <span>Download as PNG</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex gap-2"
+                onClick={() => onExport("jpeg")}
+              >
+                <ImageDown className="size-4" />
+                <span>Download as JPG</span>
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuItem
             className="flex gap-2"

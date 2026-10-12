@@ -14,6 +14,7 @@ import {
   placeNew,
   readingOrder,
   tidy,
+  tidyGap,
 } from "./projectLayout";
 
 const noOverlaps = (rects: Rect[]) => {
@@ -121,15 +122,18 @@ describe("projectLayout", () => {
     const get = (id: string) => out.get(id)!;
     // Starts where they started.
     expect(get("title")).toEqual({ x: 0, y: -100, w: 500, h: 40 });
-    // The median picture width, the shape kept.
-    expect(get("p1")).toMatchObject({ y: -100 + 40 + GAP, w: 200, h: 100 });
+    // The median picture width, the shape kept, with room round each.
+    const gap = tidyGap(200);
+    expect(gap).toBeGreaterThanOrEqual(32);
+    expect(get("p1")).toMatchObject({ y: -100 + 40 + gap, w: 200, h: 100 });
+    expect(get("p2").x - (get("p1").x + 200)).toBe(gap);
     expect(get("p2").w).toBe(200);
     expect(get("p2").h).toBe(200);
     // The section heading is under all of the first group.
     const firstGroup = ["p1", "p2", "p3"].map(get);
     const bottom = Math.max(...firstGroup.map((r) => r.y + r.h));
-    expect(get("section").y).toBe(bottom + GAP * 3);
-    expect(get("p4").y).toBe(get("section").y + 30 + GAP);
+    expect(get("section").y).toBe(bottom + gap * 2);
+    expect(get("p4").y).toBe(get("section").y + 30 + gap);
     noOverlaps([...out.values()]);
   });
 
@@ -138,7 +142,7 @@ describe("projectLayout", () => {
       { id: "h1", x: 0, y: 0, w: 100, h: 20, heading: true },
       { id: "h2", x: 0, y: 50, w: 100, h: 20, heading: true },
     ]);
-    expect(out.get("h2")!.y).toBe(20 + GAP);
+    expect(out.get("h2")!.y).toBe(20 + tidyGap(PICTURE_WIDTH));
   });
 
   test("fitView: the whole of it, centred, never above 100%", () => {

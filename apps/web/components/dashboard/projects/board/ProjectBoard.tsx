@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { boardPalette } from "@/lib/boardPalette";
+import { downloadFile } from "@/lib/downloadBookmarks";
 import { useIsPhone } from "@/lib/hooks/useIsPhone";
 import { projectSummary, useAddToProject } from "@/lib/projects";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,7 @@ import {
   Type,
   Undo2,
 } from "lucide-react";
+import { ErrorBoundary } from "react-error-boundary";
 import { toast as sonner } from "sonner";
 
 import type { Point } from "@karakeep/shared/projectLayout";
@@ -58,7 +61,7 @@ import {
   PROJECT_NOTE_SIZES,
 } from "@karakeep/shared/types/projects";
 
-import type { BoardActions, View } from "./BoardCanvas";
+import type { BoardActions, NoteKind, View } from "./BoardCanvas";
 import { ProjectOptions } from "../ProjectOptions";
 import {
   BoardCanvas,
@@ -68,12 +71,14 @@ import {
   zoomAround,
 } from "./BoardCanvas";
 import { NOTE_FONT, NOTE_LOOK } from "./BoardItem";
+import { exportBoard } from "./exportBoard";
 import {
   isBoardFile,
   seenPictureSizes,
   useUploadForBoard,
 } from "./boardPictures";
 import { PicturePanel } from "./PicturePanel";
+import type { Items } from "./useBoardState";
 import { useBoardState } from "./useBoardState";
 
 const NOTE_KINDS: Record<
@@ -213,9 +218,12 @@ function SelectionToolbar({
   return (
     <div
       ref={ref}
+      role="toolbar"
+      aria-label="Selection"
       className="absolute z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-popover/95 p-1 text-popover-foreground shadow-md backdrop-blur"
       style={{ left, top }}
       onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
       {style && (
@@ -326,10 +334,15 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Text's tool: the next click on the board puts this kind of note there.
+  const [placing, setPlacing] = useState<NoteKind | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [view, setView] = useState<View>(
     () => savedView(projectId) ?? { x: 0, y: 0, s: 1 },
   );
+  // Where the camera is this moment (the canvas moves it, and keeps this);
+  // `view` follows once it's still.
+  const camera = useRef<View>(view);
   const fitted = useRef(savedView(projectId) !== null);
   const { ref: fillRef, height } = useFillHeight();
 
@@ -354,34 +367,40 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
       ),
     [data.colours],
   );
-  const onBoard = useMemo(
+  // What's around the board (its colours, counts, the panel's ticks)
+  // follows the board when it's free to, not with every frame of a drag.
+  const settled = useDeferredValue(items);
+  const onBoardKey = useMemo(
     () =>
-      new Set(
-        Object.values(items).flatMap((i) =>
-          i.bookmarkId ? [i.bookmarkId] : [],
-        ),
-      ),
-    [items],
+      Object.values(settled)
+        .flatMap((i) => (i.bookmarkId ? [i.bookmarkId] : []))
+        .sort()
+        .join(","),
+    [settled],
+  );
+  const onBoard = useMemo(
+    () => new Set(onBoardKey ? onBoardKey.split(",") : []),
+    [onBoardKey],
   );
   const palette = useMemo(
     () =>
       boardPalette(
-        Object.values(items).flatMap((i) =>
+        Object.values(settled).flatMap((i) =>
           i.bookmarkId && data.colours[i.bookmarkId]
             ? [{ colours: data.colours[i.bookmarkId], area: i.w * i.h }]
             : [],
         ),
       ),
-    [items, data.colours],
+    [settled, data.colours],
   );
   const counts = useMemo(() => {
-    const all = Object.values(items);
+    const all = Object.values(settled);
     return {
       ...data.project,
       numPictures: all.filter((i) => i.kind === "bookmark").length,
       numNotes: all.filter((i) => i.kind === "note").length,
     };
-  }, [items, data.project]);
+  }, [settled, data.project]);
 
   // Remember where the board was looked at.
   useEffect(() => {
@@ -421,8 +440,9 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
 
   const middle = useCallback((): Point => {
     const s = size ?? { w: 800, h: 600 };
-    return { x: (s.w / 2 - view.x) / view.s, y: (s.h / 2 - view.y) / view.s };
-  }, [size, view]);
+    const v = camera.current;
+    return { x: (s.w / 2 - v.x) / v.s, y: (s.h / 2 - v.y) / v.s };
+  }, [size]);
 
   const rootFocus = () =>
     document
@@ -447,10 +467,15 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
   const upload = useUploadForBoard();
 
   const addNoteAt = useCallback(
-    (at: Point, kind: "heading" | "text" | "sticky" = "text") => {
+    (at: Point, kind: NoteKind = "text") => {
       const { style, w } = NOTE_KINDS[kind];
-      const h =
-        NOTE_FONT[style.size] * 1.25 + (style.colour === "none" ? 8 : 24);
+      // Its words start where it was asked for: the first line's left end,
+      // and its middle, at the point.
+      const size = NOTE_FONT[style.size];
+      const card = style.colour !== "none";
+      const padX = card ? Math.max(12, size * 0.5) : size * 0.15;
+      const padY = card ? Math.max(12, size * 0.5) : size * 0.1;
+      const h = size * 1.25 + padY * 2;
       const id = nanoid();
       commit((all) =>
         liftToTop(
@@ -462,8 +487,8 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
               bookmarkId: null,
               text: "",
               style,
-              x: Math.round(at.x - w / 2),
-              y: Math.round(at.y - h / 2),
+              x: Math.round(at.x - padX),
+              y: Math.round(at.y - padY - (size * 1.25) / 2),
               w,
               h,
               z: 0,
@@ -521,9 +546,38 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
   const zoomBy = useCallback(
     (factor: number) => {
       const s = size ?? { w: 800, h: 600 };
-      setView((v) => zoomAround(v, v.s * factor, s.w / 2, s.h / 2));
+      const v = camera.current;
+      setView(zoomAround(v, v.s * factor, s.w / 2, s.h / 2));
     },
     [size],
+  );
+
+  /** The board as one picture, to download. */
+  const exportAs = useCallback(
+    async (format: "png" | "jpeg") => {
+      const all = Object.values(current.current);
+      if (all.length === 0) {
+        sonner("Nothing on the board to download yet");
+        return;
+      }
+      const toastId = sonner.loading("Drawing the board…");
+      try {
+        const file = await exportBoard({
+          items: all,
+          bookmarks,
+          name: data.project.name,
+          format,
+        });
+        downloadFile(file);
+        sonner.success(`Downloading ${file.name}`, { id: toastId });
+      } catch (e) {
+        sonner.error("The board couldn't be downloaded", {
+          id: toastId,
+          description: e instanceof Error ? e.message : undefined,
+        });
+      }
+    },
+    [bookmarks, current, data.project.name],
   );
 
   const actions = useMemo<BoardActions>(
@@ -531,13 +585,18 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
       openBookmark: (bookmarkId) =>
         router.push(`/dashboard/preview/${bookmarkId}`, { scroll: false }),
       addNoteAt,
+      startPlacing: (kind) => {
+        setSelection(new Set());
+        setPlacing(kind);
+      },
+      stopPlacing: () => setPlacing(null),
       removeSelected,
       undo: board.undo,
       redo: board.redo,
       zoomBy,
       zoomTo: (s) => {
         const sz = size ?? { w: 800, h: 600 };
-        setView((v) => zoomAround(v, s, sz.w / 2, sz.h / 2));
+        setView(zoomAround(camera.current, s, sz.w / 2, sz.h / 2));
       },
       fit: () => showAll(),
       addBookmarksAt: (bookmarkIds, at) =>
@@ -575,12 +634,17 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
           return;
         }
         if (!text.trim()) {
-          // A note left empty goes; an emptied one can be undone.
-          commit((all) => {
-            const next = { ...all };
-            delete next[id];
-            return next;
-          });
+          // A note left empty goes: one that was never written as if it
+          // was never made, an emptied one so it can be undone.
+          if (note.text) {
+            commit((all) => {
+              const next = { ...all };
+              delete next[id];
+              return next;
+            });
+          } else {
+            board.discard(id);
+          }
           setSelection((was) => {
             const next = new Set(was);
             next.delete(id);
@@ -589,13 +653,23 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
           return;
         }
         if (text !== note.text) {
-          commit((all) => ({ ...all, [id]: { ...all[id], text } }));
+          const write = (all: Items): Items =>
+            all[id] ? { ...all, [id]: { ...all[id], text } } : all;
+          // A new note's first words are part of making it: one undo
+          // takes the note away, not just its words.
+          if (note.text) {
+            commit(write);
+          } else {
+            board.adjust(write);
+          }
         }
       },
     }),
     [
       add,
       addNoteAt,
+      board.adjust,
+      board.discard,
       board.redo,
       board.undo,
       commit,
@@ -634,6 +708,31 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
   }, [actions, middle]);
+
+  // The panel's own: the same each time, so it doesn't redraw with the board.
+  const latestAdd = useRef(actions.addBookmarksAt);
+  latestAdd.current = actions.addBookmarksAt;
+  const latestMiddle = useRef(middle);
+  latestMiddle.current = middle;
+  const addFromPanel = useCallback(
+    (ids: string[]) => latestAdd.current(ids, latestMiddle.current()),
+    [],
+  );
+  const closePanel = useCallback(() => setPanelOpen(false), []);
+
+  // Text's tool is put away with Esc, wherever the keys are.
+  useEffect(() => {
+    if (!placing) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPlacing(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placing]);
 
   const picked = useMemo(
     () => [...selection].flatMap((id) => (items[id] ? [items[id]] : [])),
@@ -719,7 +818,12 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
               and the new words are already being written. */}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2" title="Add words">
+              <Button
+                variant={placing ? "secondary" : "ghost"}
+                className="gap-2"
+                title="Add words: pick what, then click where"
+                aria-pressed={!!placing}
+              >
                 <Type className="size-4" />
                 <span className="hidden lg:inline">Text</span>
               </Button>
@@ -731,7 +835,7 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
             >
               <DropdownMenuItem
                 className="flex gap-2"
-                onClick={() => addNoteAt(middle(), "heading")}
+                onClick={() => actions.startPlacing("heading")}
               >
                 <Heading className="size-4" />
                 <span>Heading</span>
@@ -741,14 +845,14 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="flex gap-2"
-                onClick={() => addNoteAt(middle(), "text")}
+                onClick={() => actions.startPlacing("text")}
               >
                 <Type className="size-4" />
                 <span>Text</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="flex gap-2"
-                onClick={() => addNoteAt(middle(), "sticky")}
+                onClick={() => actions.startPlacing("sticky")}
               >
                 <StickyNote className="size-4" />
                 <span>Sticky note</span>
@@ -766,6 +870,7 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
           <ProjectOptions
             project={counts}
             onBoard
+            onExport={(format) => void exportAs(format)}
             onDeleted={() => router.push("/dashboard/projects")}
           >
             <Button
@@ -782,57 +887,73 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-xl border bg-muted/30">
         <div className="relative min-w-0 flex-1">
-          <BoardCanvas
-            items={items}
-            current={current}
-            commit={commit}
-            preview={board.preview}
-            adjust={board.adjust}
-            bookmarks={bookmarks}
-            placeholders={placeholders}
-            selection={selection}
-            setSelection={setSelection}
-            editing={editing}
-            setEditing={setEditing}
-            view={view}
-            setView={setView}
-            onSize={setSize}
-            actions={actions}
-            overlay={
-              size &&
-              !editing &&
-              picked.length > 0 && (
-                <SelectionToolbar
-                  picked={picked}
-                  view={view}
-                  size={size}
-                  onStyle={(style) =>
-                    commit((all) => {
-                      const next = { ...all };
-                      for (const item of picked) {
-                        if (item.kind === "note" && next[item.id]) {
-                          next[item.id] = {
-                            ...next[item.id],
-                            style: { ...next[item.id].style!, ...style },
-                          };
+          <ErrorBoundary
+            onError={(error) => console.error("[board]", error)}
+            fallbackRender={({ error, resetErrorBoundary }) => (
+              <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="font-medium">The board hit a snag.</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  {error instanceof Error ? error.message : String(error)}
+                </p>
+                <Button onClick={resetErrorBoundary}>Show it again</Button>
+              </div>
+            )}
+          >
+            <BoardCanvas
+              items={items}
+              current={current}
+              commit={commit}
+              preview={board.preview}
+              release={board.release}
+              adjust={board.adjust}
+              bookmarks={bookmarks}
+              placeholders={placeholders}
+              selection={selection}
+              setSelection={setSelection}
+              editing={editing}
+              setEditing={setEditing}
+              view={view}
+              camera={camera}
+              setView={setView}
+              onSize={setSize}
+              actions={actions}
+              placing={placing}
+              overlay={
+                size &&
+                !editing &&
+                picked.length > 0 && (
+                  <SelectionToolbar
+                    picked={picked}
+                    view={view}
+                    size={size}
+                    onStyle={(style) =>
+                      commit((all) => {
+                        const next = { ...all };
+                        for (const item of picked) {
+                          if (item.kind === "note" && next[item.id]) {
+                            next[item.id] = {
+                              ...next[item.id],
+                              style: { ...next[item.id].style!, ...style },
+                            };
+                          }
                         }
-                      }
-                      return next;
-                    })
-                  }
-                  onOpen={actions.openBookmark}
-                  onFront={() =>
-                    commit((all) => liftToTop(all, [...selection]))
-                  }
-                  onBack={() =>
-                    commit((all) => sinkToBottom(all, [...selection]))
-                  }
-                  onRemove={removeSelected}
-                  onTidy={() => tidyUp(selection)}
-                />
-              )
-            }
-          />
+                        return next;
+                      })
+                    }
+                    onOpen={actions.openBookmark}
+                    onFront={() =>
+                      commit((all) => liftToTop(all, [...selection]))
+                    }
+                    onBack={() =>
+                      commit((all) => sinkToBottom(all, [...selection]))
+                    }
+                    onRemove={removeSelected}
+                    onTidy={() => tidyUp(selection)}
+                  />
+                )
+              }
+            />
+          </ErrorBoundary>
           {empty && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
               <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-2xl border bg-background/90 p-6 text-center shadow-sm backdrop-blur">
@@ -879,8 +1000,8 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
         {panelOpen && (
           <PicturePanel
             onBoard={onBoard}
-            onAdd={(ids) => actions.addBookmarksAt(ids, middle())}
-            onClose={() => setPanelOpen(false)}
+            onAdd={addFromPanel}
+            onClose={closePanel}
             resizable={!isPhone}
             className={cn(
               "border-l",

@@ -27,6 +27,9 @@ export interface View {
   s: number;
 }
 
+/** What a note is made as (Text, the T key, a double-click). */
+export type NoteKind = "heading" | "text" | "sticky";
+
 export const MIN_SCALE = 0.05;
 export const MAX_SCALE = 4;
 /** A press that moves less than this is a click. */
@@ -35,9 +38,16 @@ const DRAG_SLOP = 3;
 const GRID = 24;
 /** How near (in screen pixels) an edge comes before it snaps to another. */
 const SNAP = 6;
+/** The camera is still this long after its last move. */
+const SETTLE_MS = 160;
+/** A mouse's pointer, for a press the browser gave no pointerdown for. */
+const MOUSE_POINTER = 1;
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
+
+const sameView = (a: View, b: View) =>
+  a.x === b.x && a.y === b.y && a.s === b.s;
 
 /** The view zoomed to `s`, the board point under (px, py) staying put. */
 export function zoomAround(view: View, s: number, px: number, py: number) {
@@ -76,6 +86,21 @@ export function sinkToBottom(items: Items, ids: readonly string[]): Items {
     next[item.id] = { ...item, z: --z };
   }
   return next;
+}
+
+/**
+ * A mouse press that came without its pointerdown, as WebKit (Safari, the
+ * Mac app) does for the first press after a drag and drop: the same press,
+ * as the pointer handlers take it. (A pointerdown the board handled stops
+ * the mouse events after it, so a press is never taken twice.)
+ */
+function asPointer(e: React.MouseEvent): React.PointerEvent {
+  return Object.assign(Object.create(e) as React.PointerEvent, {
+    pointerId: MOUSE_POINTER,
+    pointerType: "mouse",
+    stopPropagation: () => e.stopPropagation(),
+    preventDefault: () => e.preventDefault(),
+  });
 }
 
 interface Guide {
@@ -134,7 +159,7 @@ function snapBox(
     const touching = others.filter((o) =>
       [o.x, o.x + o.w / 2, o.x + o.w].some((v) => near(v, at)),
     );
-    const span = boundsOf([moved, ...touching])!;
+    const span = boundsOf([moved, ...touching]) ?? moved;
     guides.push({ axis: "x", at, from: span.y, to: span.y + span.h });
   }
   if (bestY) {
@@ -142,7 +167,7 @@ function snapBox(
     const touching = others.filter((o) =>
       [o.y, o.y + o.h / 2, o.y + o.h].some((v) => near(v, at)),
     );
-    const span = boundsOf([moved, ...touching])!;
+    const span = boundsOf([moved, ...touching]) ?? moved;
     guides.push({ axis: "y", at, from: span.x, to: span.x + span.w });
   }
   return { dx, dy, guides };
@@ -188,7 +213,11 @@ type Gesture =
 
 export interface BoardActions {
   openBookmark: (bookmarkId: string) => void;
-  addNoteAt: (at: Point, kind?: "heading" | "text" | "sticky") => void;
+  /** A note whose words start at `at` (a click, a double-click). */
+  addNoteAt: (at: Point, kind: NoteKind) => void;
+  /** Text's tool: the next click on the board puts this kind there. */
+  startPlacing: (kind: NoteKind) => void;
+  stopPlacing: () => void;
   removeSelected: () => void;
   undo: () => void;
   redo: () => void;
@@ -200,6 +229,12 @@ export interface BoardActions {
   editNote: (id: string, text: string) => void;
 }
 
+const PLACING_LABEL: Record<NoteKind, string> = {
+  heading: "heading",
+  text: "text",
+  sticky: "sticky note",
+};
+
 /**
  * Fork: a project's board — an endless sheet of dots, its pictures and
  * notes where they were put. Moved about with two fingers (or the wheel),
@@ -208,13 +243,20 @@ export interface BoardActions {
  * (⇧/⌘ adds), or by a box dragged round them; dragged to move, snapping to
  * their neighbours' edges and middles (⌥ holds it off); sized by a corner.
  * Pictures dragged from anywhere in vrana, or files from the computer, go
- * where they're dropped. ProjectBoard has the state and the actions.
+ * where they're dropped. With Text's tool on (`placing`), a click puts the
+ * words there. ProjectBoard has the state and the actions.
+ *
+ * The camera (pan and zoom) is moved here, on the page itself, frame by
+ * frame — not through React, which hears of it once it's still (`setView`)
+ * — and the board is its own layer while it moves; what's drawn at the
+ * board's scale (handles, guides, outlines) reads `--board-scale`.
  */
 export function BoardCanvas({
   items,
   current,
   commit,
   preview,
+  release,
   adjust,
   bookmarks,
   placeholders,
@@ -223,15 +265,19 @@ export function BoardCanvas({
   editing,
   setEditing,
   view,
+  camera,
   setView,
   onSize,
   actions,
+  placing,
   overlay,
 }: {
   items: Items;
   current: React.MutableRefObject<Items>;
   commit: (next: Items | ((items: Items) => Items), from?: Items) => void;
   preview: (next: Items) => void;
+  /** A gesture is over: the board's state takes in what it held back. */
+  release: () => void;
   adjust: (next: (items: Items) => Items) => void;
   bookmarks: ReadonlyMap<string, ZBookmark>;
   placeholders: ReadonlyMap<string, string>;
@@ -239,14 +285,24 @@ export function BoardCanvas({
   setSelection: (selection: ReadonlySet<string>) => void;
   editing: string | null;
   setEditing: (id: string | null) => void;
+  /** Where the camera is, as set from outside (Fit, the zoom buttons). */
   view: View;
-  setView: (view: View | ((view: View) => View)) => void;
+  /**
+   * Where it is this moment: kept here as it moves (`view` follows once
+   * it's still), for the page's own sums (the middle of the screen).
+   */
+  camera: React.MutableRefObject<View>;
+  /** Told where the camera came to rest. */
+  setView: (view: View) => void;
   onSize: (size: { w: number; h: number }) => void;
   actions: BoardActions;
+  /** Text's tool: the next click puts this kind of note there. */
+  placing: NoteKind | null;
   /** Drawn over the board, in screen space (the selection's toolbar). */
   overlay?: React.ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const touches = useRef(new Map<number, Point>());
   const space = useRef(false);
@@ -259,15 +315,92 @@ export function BoardCanvas({
   const [menu, setMenu] = useState<{ x: number; y: number; at: Point } | null>(
     null,
   );
+  // Something's being moved, sized or boxed: no toolbar over it.
+  const [busy, setBusy] = useState(false);
 
   // The latest of everything, for handlers that outlive a render.
-  const latest = useRef({ view, selection, editing, actions });
-  latest.current = { view, selection, editing, actions };
+  const latest = useRef({ selection, editing, actions, placing, setView });
+  latest.current = { selection, editing, actions, placing, setView };
+
+  // ---- The camera ----------------------------------------------------------
+
+  const viewRef = camera;
+  const cameraFrame = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [cameraMoving, setCameraMoving] = useState(false);
+  const cameraMovingRef = useRef(false);
+
+  /** The camera, onto the page: the board's place and scale, the dots. */
+  const paint = useCallback(() => {
+    cameraFrame.current = 0;
+    const v = viewRef.current;
+    const world = worldRef.current;
+    const root = rootRef.current;
+    if (!world || !root) {
+      return;
+    }
+    world.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.s})`;
+    world.style.setProperty("--board-scale", String(v.s));
+    const step = GRID * v.s * (v.s < 0.35 ? 4 : v.s < 0.7 ? 2 : 1);
+    root.style.backgroundSize = `${step}px ${step}px`;
+    root.style.backgroundPosition = `${v.x}px ${v.y}px`;
+  }, []);
+
+  /** Moves the camera now, and tells the page once it's still. */
+  const moveCamera = useCallback(
+    (next: View | ((v: View) => View)) => {
+      const v = typeof next === "function" ? next(viewRef.current) : next;
+      if (sameView(v, viewRef.current)) {
+        return;
+      }
+      viewRef.current = v;
+      if (!cameraFrame.current) {
+        cameraFrame.current = requestAnimationFrame(paint);
+      }
+      if (!cameraMovingRef.current) {
+        cameraMovingRef.current = true;
+        setCameraMoving(true);
+      }
+      if (settleTimer.current) {
+        clearTimeout(settleTimer.current);
+      }
+      settleTimer.current = setTimeout(() => {
+        settleTimer.current = null;
+        if (cameraFrame.current) {
+          cancelAnimationFrame(cameraFrame.current);
+          paint();
+        }
+        cameraMovingRef.current = false;
+        setCameraMoving(false);
+        latest.current.setView(viewRef.current);
+      }, SETTLE_MS);
+    },
+    [paint],
+  );
+
+  // Set from outside (Fit, the zoom buttons, where it was last time).
+  useLayoutEffect(() => {
+    if (!sameView(view, viewRef.current)) {
+      viewRef.current = view;
+      paint();
+    }
+  }, [view, paint]);
+  useLayoutEffect(() => {
+    paint();
+    return () => {
+      if (cameraFrame.current) {
+        cancelAnimationFrame(cameraFrame.current);
+      }
+      if (settleTimer.current) {
+        clearTimeout(settleTimer.current);
+      }
+    };
+  }, [paint]);
 
   // Where on the board a point on screen is.
   const toBoard = useCallback((clientX: number, clientY: number): Point => {
     const rect = rootRef.current?.getBoundingClientRect();
-    const { view: v } = latest.current;
+    const v = viewRef.current;
     return {
       x: (clientX - (rect?.left ?? 0) - v.x) / v.s,
       y: (clientY - (rect?.top ?? 0) - v.y) / v.s,
@@ -308,7 +441,7 @@ export function BoardCanvas({
       if (!g) {
         return;
       }
-      const v = latest.current.view;
+      const v = viewRef.current;
       switch (g.kind) {
         case "move": {
           if (e.pointerId !== g.pointerId) {
@@ -322,6 +455,7 @@ export function BoardCanvas({
           if (!g.moved) {
             g.moved = true;
             g.lifted = liftToTop(g.base, g.ids);
+            setBusy(true);
           }
           const lifted = g.lifted ?? g.base;
           let dx = sx / v.s;
@@ -394,7 +528,10 @@ export function BoardCanvas({
           ) {
             return;
           }
-          g.moved = true;
+          if (!g.moved) {
+            g.moved = true;
+            setBusy(true);
+          }
           const a = local(g.start.x, g.start.y);
           const b = local(e.clientX, e.clientY);
           const rect = {
@@ -420,7 +557,7 @@ export function BoardCanvas({
           if (e.pointerId !== g.pointerId) {
             return;
           }
-          setView({
+          moveCamera({
             ...g.view,
             x: g.view.x + e.clientX - g.start.x,
             y: g.view.y + e.clientY - g.start.y,
@@ -441,7 +578,7 @@ export function BoardCanvas({
           );
           const bx = (g.startMiddle.x - g.view.x) / g.view.s;
           const by = (g.startMiddle.y - g.view.y) / g.view.s;
-          setView({
+          moveCamera({
             s: scale,
             x: middle.x - bx * scale,
             y: middle.y - by * scale,
@@ -450,7 +587,7 @@ export function BoardCanvas({
         }
       }
     },
-    [current, local, preview, setSelection, setView, toBoard],
+    [current, local, moveCamera, preview, setSelection, toBoard],
   );
 
   const onWindowMove = useCallback(
@@ -475,12 +612,23 @@ export function BoardCanvas({
 
   const stopListening = useRef<() => void>(() => undefined);
 
+  /** Every gesture's end: the board takes in what it held back. */
+  const finish = useCallback(() => {
+    gesture.current = null;
+    setGuides([]);
+    setMarquee(null);
+    setPanning(false);
+    setBusy(false);
+    stopListening.current();
+    release();
+  }, [release]);
+
   const onWindowUp = useCallback(
     (e: PointerEvent) => {
       touches.current.delete(e.pointerId);
       const g = gesture.current;
       if (!g) {
-        stopListening.current();
+        finish();
         return;
       }
       if (g.kind === "pinch") {
@@ -489,17 +637,15 @@ export function BoardCanvas({
         }
         // The other finger carries on panning.
         const [left] = [...touches.current.entries()];
-        gesture.current = left
-          ? {
-              kind: "pan",
-              pointerId: left[0],
-              start: left[1],
-              view: latest.current.view,
-            }
-          : null;
-        if (!left) {
-          setPanning(false);
-          stopListening.current();
+        if (left) {
+          gesture.current = {
+            kind: "pan",
+            pointerId: left[0],
+            start: left[1],
+            view: viewRef.current,
+          };
+        } else {
+          finish();
         }
         return;
       }
@@ -514,33 +660,20 @@ export function BoardCanvas({
           pending.current = null;
         }
       }
-      switch (g.kind) {
-        case "move":
-          if (g.moved) {
-            commit(current.current, g.base);
-          } else if (g.unpick) {
-            const next = new Set(latest.current.selection);
-            next.delete(g.unpick);
-            setSelection(next);
-          }
-          break;
-        case "resize":
-          if (current.current !== g.base) {
-            commit(current.current, g.base);
-          }
-          break;
-        case "marquee":
-          break;
-        case "pan":
-          break;
+      if (g.kind === "move") {
+        if (g.moved) {
+          commit(current.current, g.base);
+        } else if (g.unpick) {
+          const next = new Set(latest.current.selection);
+          next.delete(g.unpick);
+          setSelection(next);
+        }
+      } else if (g.kind === "resize" && current.current !== g.base) {
+        commit(current.current, g.base);
       }
-      gesture.current = null;
-      setGuides([]);
-      setMarquee(null);
-      setPanning(false);
-      stopListening.current();
+      finish();
     },
-    [commit, current, handleMove, setSelection],
+    [commit, current, finish, handleMove, setSelection],
   );
 
   const listen = useCallback(() => {
@@ -564,10 +697,7 @@ export function BoardCanvas({
       return false;
     }
     const g = gesture.current;
-    if (g?.kind === "move" && g.moved) {
-      preview(g.base);
-    }
-    if (g?.kind === "resize") {
+    if ((g?.kind === "move" && g.moved) || g?.kind === "resize") {
       preview(g.base);
     }
     const [[ida, a], [idb, b]] = [...touches.current.entries()];
@@ -576,9 +706,10 @@ export function BoardCanvas({
       ids: [ida, idb],
       startDistance: Math.hypot(a.x - b.x, a.y - b.y),
       startMiddle: local((a.x + b.x) / 2, (a.y + b.y) / 2),
-      view: latest.current.view,
+      view: viewRef.current,
     };
     setGuides([]);
+    setBusy(true);
     listen();
     return true;
   }, [listen, local, preview]);
@@ -590,22 +721,47 @@ export function BoardCanvas({
         kind: "pan",
         pointerId: e.pointerId,
         start: { x: e.clientX, y: e.clientY },
-        view: latest.current.view,
+        view: viewRef.current,
       };
       setPanning(true);
+      setBusy(true);
       listen();
     },
     [listen],
   );
 
+  /** Text's tool on: the press puts the words there, and that's all it does. */
+  const placeAt = useCallback(
+    (e: React.PointerEvent) => {
+      const kind = latest.current.placing;
+      if (!kind) {
+        return false;
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      if (e.button === 0) {
+        latest.current.actions.addNoteAt(toBoard(e.clientX, e.clientY), kind);
+      }
+      latest.current.actions.stopPlacing();
+      return true;
+    },
+    [toBoard],
+  );
+
   const onItemPointerDown = useCallback(
     (e: React.PointerEvent, item: ZProjectItem) => {
       setMenu(null);
+      if (placeAt(e)) {
+        return;
+      }
       if (e.button === 2 || latest.current.editing === item.id) {
         e.stopPropagation();
         return;
       }
       e.stopPropagation();
+      // No mouse events after it (nor the page's text selection): the
+      // board takes it from here.
+      e.preventDefault();
       rootRef.current?.focus({ preventScroll: true });
       if (e.pointerType === "touch") {
         touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -648,17 +804,34 @@ export function BoardCanvas({
       };
       listen();
     },
-    [current, listen, setEditing, setSelection, startPan, startPinchIfTwo],
+    [
+      current,
+      listen,
+      placeAt,
+      setEditing,
+      setSelection,
+      startPan,
+      startPinchIfTwo,
+    ],
+  );
+  const onItemMouseDown = useCallback(
+    (e: React.MouseEvent, item: ZProjectItem) =>
+      onItemPointerDown(asPointer(e), item),
+    [onItemPointerDown],
   );
 
   const onBackgroundPointerDown = (e: React.PointerEvent) => {
     setMenu(null);
+    if (placeAt(e)) {
+      return;
+    }
     if (e.button === 2) {
       return;
     }
+    e.preventDefault();
     rootRef.current?.focus({ preventScroll: true });
     if (latest.current.editing) {
-      (document.activeElement as HTMLElement | null)?.blur();
+      (document.activeElement as HTMLElement | null)?.blur?.();
       setEditing(null);
     }
     if (e.pointerType === "touch") {
@@ -693,7 +866,7 @@ export function BoardCanvas({
     e.stopPropagation();
     e.preventDefault();
     const item = current.current[id];
-    if (!item) {
+    if (!item || e.button !== 0) {
       return;
     }
     const west = corner === "nw" || corner === "sw";
@@ -709,6 +882,7 @@ export function BoardCanvas({
         y: north ? item.y + item.h : item.y,
       },
     };
+    setBusy(true);
     listen();
   };
 
@@ -737,9 +911,9 @@ export function BoardCanvas({
           return;
         }
         const factor = Math.exp(-e.deltaY * unit * 0.01);
-        setView((v) => zoomAround(v, v.s * factor, p.x, p.y));
+        moveCamera((v) => zoomAround(v, v.s * factor, p.x, p.y));
       } else {
-        setView((v) => ({
+        moveCamera((v) => ({
           ...v,
           x: v.x - e.deltaX * unit,
           y: v.y - e.deltaY * unit,
@@ -754,7 +928,7 @@ export function BoardCanvas({
     };
     const onGestureStart = (e: Event) => {
       e.preventDefault();
-      gestureScale = latest.current.view.s;
+      gestureScale = viewRef.current.s;
     };
     const onGestureChange = (e: Event) => {
       e.preventDefault();
@@ -764,7 +938,7 @@ export function BoardCanvas({
       }
       const p = local(g.clientX, g.clientY);
       const from = gestureScale;
-      setView((v) => zoomAround(v, from * g.scale, p.x, p.y));
+      moveCamera((v) => zoomAround(v, from * g.scale, p.x, p.y));
     };
     const onGestureEnd = (e: Event) => {
       e.preventDefault();
@@ -780,7 +954,7 @@ export function BoardCanvas({
       el.removeEventListener("gesturechange", onGestureChange);
       el.removeEventListener("gestureend", onGestureEnd);
     };
-  }, [local, setView]);
+  }, [local, moveCamera]);
 
   // ---- Keys ---------------------------------------------------------------
 
@@ -800,7 +974,17 @@ export function BoardCanvas({
       }
       return;
     }
-    if ((e.key === "Backspace" || e.key === "Delete") && picked.size > 0) {
+    if (e.key === "Escape") {
+      if (latest.current.placing) {
+        a.stopPlacing();
+      } else {
+        setSelection(new Set());
+      }
+      setMenu(null);
+    } else if (
+      (e.key === "Backspace" || e.key === "Delete") &&
+      picked.size > 0
+    ) {
       e.preventDefault();
       a.removeSelected();
     } else if (mod && key === "z") {
@@ -816,9 +1000,6 @@ export function BoardCanvas({
     } else if (mod && key === "a") {
       e.preventDefault();
       setSelection(new Set(Object.keys(current.current)));
-    } else if (e.key === "Escape") {
-      setSelection(new Set());
-      setMenu(null);
     } else if (e.key.startsWith("Arrow") && picked.size > 0 && !mod) {
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
@@ -836,12 +1017,13 @@ export function BoardCanvas({
       });
     } else if (e.key === "Enter" && picked.size === 1) {
       const [id] = picked;
-      if (current.current[id]?.kind === "note") {
+      const item = current.current[id];
+      if (item?.kind === "note") {
         e.preventDefault();
         setEditing(id);
-      } else if (current.current[id]?.bookmarkId) {
+      } else if (item?.bookmarkId) {
         e.preventDefault();
-        a.openBookmark(current.current[id].bookmarkId!);
+        a.openBookmark(item.bookmarkId);
       }
     } else if (!mod && !e.altKey && (key === "=" || key === "+")) {
       a.zoomBy(1.25);
@@ -858,14 +1040,7 @@ export function BoardCanvas({
       a.zoomTo(1);
     } else if (!mod && !e.altKey && key === "t") {
       e.preventDefault();
-      const el = rootRef.current;
-      a.addNoteAt(
-        toBoard(
-          (el?.getBoundingClientRect().left ?? 0) + (el?.clientWidth ?? 0) / 2,
-          (el?.getBoundingClientRect().top ?? 0) + (el?.clientHeight ?? 0) / 2,
-        ),
-        "heading",
-      );
+      a.startPlacing("heading");
     }
   };
 
@@ -879,7 +1054,8 @@ export function BoardCanvas({
   // ---- Drops ------------------------------------------------------------
 
   const accepts = (e: React.DragEvent) =>
-    isBookmarkDrag(e) || e.dataTransfer.types.includes("Files");
+    !!e.dataTransfer &&
+    (isBookmarkDrag(e) || [...e.dataTransfer.types].includes("Files"));
 
   const onDragEnter = (e: React.DragEvent) => {
     if (!accepts(e)) {
@@ -919,7 +1095,7 @@ export function BoardCanvas({
       latest.current.actions.addBookmarksAt(ids, at);
       return;
     }
-    const files = [...e.dataTransfer.files].filter(isBoardFile);
+    const files = [...(e.dataTransfer.files ?? [])].filter(isBoardFile);
     if (files.length > 0) {
       latest.current.actions.addFilesAt(files, at);
     }
@@ -944,6 +1120,10 @@ export function BoardCanvas({
       e.preventDefault();
       e.stopPropagation();
       setMenu(null);
+      if (latest.current.placing) {
+        latest.current.actions.stopPlacing();
+        return;
+      }
       if (!latest.current.selection.has(item.id)) {
         setSelection(new Set([item.id]));
       }
@@ -954,7 +1134,7 @@ export function BoardCanvas({
     (item: ZProjectItem, w: number, h: number) => {
       adjust((all) => {
         const now = all[item.id];
-        if (!now || now.kind !== "bookmark") {
+        if (!now || now.kind !== "bookmark" || !(w > 0) || !(h > 0)) {
           return all;
         }
         const height = (now.w * h) / w;
@@ -967,7 +1147,7 @@ export function BoardCanvas({
   );
   const onNoteHeight = useCallback(
     (item: ZProjectItem, h: number) => {
-      if (h <= 0) {
+      if (!(h > 0)) {
         return;
       }
       adjust((all) => {
@@ -991,8 +1171,10 @@ export function BoardCanvas({
     selection.size > 1
       ? boundsOf([...selection].flatMap((id) => (items[id] ? [items[id]] : [])))
       : null;
-  const dotStep = GRID * view.s * (view.s < 0.35 ? 4 : view.s < 0.7 ? 2 : 1);
-  const handle = 10 / view.s;
+  // Sizes on the board that stay the same on screen, whatever the zoom.
+  const px = (n: number) => `calc(${n}px / var(--board-scale))`;
+  const less = (at: number, n: number) =>
+    `calc(${at}px - ${n}px / var(--board-scale))`;
 
   return (
     <div
@@ -1005,19 +1187,20 @@ export function BoardCanvas({
       className={cn(
         "relative size-full touch-none select-none overflow-hidden outline-none",
         "[--board-dot:hsl(var(--foreground)/0.13)]",
-        panning
-          ? "cursor-grabbing"
-          : spaceHeld
-            ? "cursor-grab"
-            : "cursor-default",
+        placing
+          ? "cursor-crosshair [&_[data-board-item]]:!cursor-crosshair"
+          : panning
+            ? "cursor-grabbing"
+            : spaceHeld
+              ? "cursor-grab"
+              : "cursor-default",
       )}
       style={{
         backgroundImage:
           "radial-gradient(circle, var(--board-dot) 1px, transparent 1.2px)",
-        backgroundSize: `${dotStep}px ${dotStep}px`,
-        backgroundPosition: `${view.x}px ${view.y}px`,
       }}
       onPointerDown={onBackgroundPointerDown}
+      onMouseDown={(e) => onBackgroundPointerDown(asPointer(e))}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
       onBlur={() => {
@@ -1025,15 +1208,17 @@ export function BoardCanvas({
         setSpaceHeld(false);
       }}
       onDoubleClick={(e) => {
-        if (
-          e.target === rootRef.current ||
-          (e.target as HTMLElement).dataset.boardWorld
-        ) {
+        const target = e.target as HTMLElement;
+        if (target === rootRef.current || target.dataset?.boardWorld) {
           actions.addNoteAt(toBoard(e.clientX, e.clientY), "text");
         }
       }}
       onContextMenu={(e) => {
         e.preventDefault();
+        if (placing) {
+          actions.stopPlacing();
+          return;
+        }
         const p = local(e.clientX, e.clientY);
         setMenu({ x: p.x, y: p.y, at: toBoard(e.clientX, e.clientY) });
       }}
@@ -1043,14 +1228,11 @@ export function BoardCanvas({
       onDrop={onDrop}
     >
       <div
+        ref={worldRef}
         data-board-world="1"
         className="absolute left-0 top-0 origin-top-left"
-        style={
-          {
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
-            "--board-scale": view.s,
-          } as React.CSSProperties
-        }
+        // Its own layer while the camera moves: no repainting the pictures.
+        style={{ willChange: cameraMoving ? "transform" : undefined }}
       >
         {ordered.map((item, rank) => (
           <BoardItem
@@ -1066,6 +1248,7 @@ export function BoardCanvas({
             selected={selection.has(item.id)}
             editing={editing === item.id}
             onPointerDown={onItemPointerDown}
+            onMouseDown={onItemMouseDown}
             onDoubleClick={onItemDoubleClick}
             onContextMenu={onItemContextMenu}
             onShape={onShape}
@@ -1077,10 +1260,10 @@ export function BoardCanvas({
           <div
             className="pointer-events-none absolute left-0 top-0 rounded-[4px] border-dashed border-primary/70"
             style={{
-              transform: `translate(${pickedBox.x - 6 / view.s}px, ${pickedBox.y - 6 / view.s}px)`,
-              width: pickedBox.w + 12 / view.s,
-              height: pickedBox.h + 12 / view.s,
-              borderWidth: 1 / view.s,
+              transform: `translate(${less(pickedBox.x, 6)}, ${less(pickedBox.y, 6)})`,
+              width: `calc(${pickedBox.w}px + 12px / var(--board-scale))`,
+              height: `calc(${pickedBox.h}px + 12px / var(--board-scale))`,
+              borderWidth: px(1),
               zIndex: ordered.length + 2,
             }}
           />
@@ -1093,13 +1276,17 @@ export function BoardCanvas({
               <div
                 key={corner}
                 aria-hidden
+                data-board-handle={corner}
                 onPointerDown={(e) => startResize(e, single.id, corner)}
+                onMouseDown={(e) =>
+                  startResize(asPointer(e), single.id, corner)
+                }
                 className="absolute left-0 top-0 touch-none rounded-[2px] border-primary bg-background"
                 style={{
-                  transform: `translate(${x - handle / 2}px, ${y - handle / 2}px)`,
-                  width: handle,
-                  height: handle,
-                  borderWidth: 1.5 / view.s,
+                  transform: `translate(${less(x, 5)}, ${less(y, 5)})`,
+                  width: px(10),
+                  height: px(10),
+                  borderWidth: px(1.5),
                   zIndex: ordered.length + 3,
                   cursor:
                     corner === "nw" || corner === "se"
@@ -1116,15 +1303,15 @@ export function BoardCanvas({
             style={
               g.axis === "x"
                 ? {
-                    transform: `translate(${g.at - 0.5 / view.s}px, ${g.from}px)`,
-                    width: 1 / view.s,
+                    transform: `translate(${less(g.at, 0.5)}, ${g.from}px)`,
+                    width: px(1),
                     height: g.to - g.from,
                     zIndex: ordered.length + 4,
                   }
                 : {
-                    transform: `translate(${g.from}px, ${g.at - 0.5 / view.s}px)`,
+                    transform: `translate(${g.from}px, ${less(g.at, 0.5)})`,
                     width: g.to - g.from,
-                    height: 1 / view.s,
+                    height: px(1),
                     zIndex: ordered.length + 4,
                   }
             }
@@ -1144,13 +1331,24 @@ export function BoardCanvas({
         />
       )}
 
-      {overlay}
+      {!busy && !cameraMoving && !placing && overlay}
+
+      {placing && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center">
+          <span className="rounded-full border bg-popover/95 px-3.5 py-1.5 text-sm text-popover-foreground shadow-sm backdrop-blur">
+            Click where the {PLACING_LABEL[placing]} goes · Esc to cancel
+          </span>
+        </div>
+      )}
 
       {menu && (
         <div
+          role="menu"
+          aria-label="Add to the board"
           className="absolute z-20 min-w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-md"
           style={{ left: menu.x, top: menu.y }}
           onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {(
             [
@@ -1167,6 +1365,7 @@ export function BoardCanvas({
             <button
               key={label}
               type="button"
+              role="menuitem"
               className="flex w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent"
               onClick={() => {
                 setMenu(null);

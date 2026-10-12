@@ -23,7 +23,15 @@ export interface Point {
 /** A new picture's width on the board. */
 export const PICTURE_WIDTH = 240;
 /** The room between things laid out together. */
-export const GAP = 16;
+export const GAP = 24;
+
+/**
+ * The room between things tidied up: more than a new block's, growing with
+ * the pictures, so a tidied board breathes rather than packs.
+ */
+export function tidyGap(width: number): number {
+  return Math.max(32, Math.round(width / 6));
+}
 /** A picture's height for its width when its size isn't known yet. */
 export const DEFAULT_ASPECT = 1.25;
 
@@ -189,7 +197,8 @@ export function tidy(items: readonly TidyItem[]): Map<string, Rect> {
   );
   const flowing = items.filter((i) => !i.heading).length;
   const columns = blockColumns(flowing);
-  const blockWidth = columns * width + (columns - 1) * GAP;
+  const gap = tidyGap(width);
+  const blockWidth = columns * width + (columns - 1) * gap;
 
   let top = bounds.y;
   let heights = Array.from({ length: columns }, () => top);
@@ -198,15 +207,16 @@ export function tidy(items: readonly TidyItem[]): Map<string, Rect> {
 
   for (const item of readingOrder(items)) {
     if (item.heading) {
-      // Under everything so far, a wider gap above it when it ends a group.
-      const y = filled ? Math.max(...heights) - GAP + GAP * 3 : top;
+      // Under everything so far, with twice the room above it when it ends
+      // a group.
+      const y = filled ? Math.max(...heights) - gap + gap * 2 : top;
       out.set(item.id, {
         x: bounds.x,
         y,
         w: Math.min(item.w, blockWidth),
         h: item.h,
       });
-      top = y + item.h + GAP;
+      top = y + item.h + gap;
       heights = Array.from({ length: columns }, () => top);
       filled = false;
       continue;
@@ -222,11 +232,11 @@ export function tidy(items: readonly TidyItem[]): Map<string, Rect> {
       ? atWidth(item, width)
       : { w: width, h: item.h };
     out.set(item.id, {
-      x: bounds.x + col * (width + GAP),
+      x: bounds.x + col * (width + gap),
       y: heights[col],
       ...size,
     });
-    heights[col] += size.h + GAP;
+    heights[col] += size.h + gap;
   }
   return out;
 }

@@ -66,6 +66,9 @@ export function useBoardState(
   const saving = useRef(false);
   const onArrivedRef = useRef(onArrived);
   onArrivedRef.current = onArrived;
+  // A gesture under way (preview), and the server's latest meanwhile.
+  const holding = useRef(false);
+  const waiting = useRef<readonly ZProjectItem[] | null>(null);
 
   const { mutateAsync: saveItems } = useMutation(
     api.projects.saveItems.mutationOptions(),
@@ -192,7 +195,13 @@ export function useBoardState(
   );
 
   /** Shown, not saved or kept: a drag as it goes. */
-  const preview = useCallback((next: Items) => show(next), [show]);
+  const preview = useCallback(
+    (next: Items) => {
+      holding.current = true;
+      show(next);
+    },
+    [show],
+  );
 
   /** Saved, but not worth an undo: a picture taking its real shape. */
   const adjust = useCallback(
@@ -204,6 +213,31 @@ export function useBoardState(
       }
       markChanges(before, value);
       show(value);
+      schedule();
+    },
+    [markChanges, schedule, show],
+  );
+
+  /**
+   * Something let go of before it was anything (a note left without
+   * words): gone, and its making with it, if that was the last change —
+   * ⌘Z doesn't bring back an empty note.
+   */
+  const discard = useCallback(
+    (id: string) => {
+      const before = current.current;
+      if (!before[id]) {
+        return;
+      }
+      const next = { ...before };
+      delete next[id];
+      const made = past.current[past.current.length - 1];
+      if (made && !made[id]) {
+        past.current.pop();
+        setHistoryVersion((v) => v + 1);
+      }
+      markChanges(before, next);
+      show(next);
       schedule();
     },
     [markChanges, schedule, show],
@@ -238,52 +272,77 @@ export function useBoardState(
   }, []);
 
   // The server's items, taken in.
-  useEffect(() => {
-    const now = current.current;
-    const fresh = itemsOf(serverItems);
-    const recent = (id: string) =>
-      Date.now() - (savedAt.current.get(id) ?? 0) < TRUST_SERVER_AFTER_MS;
-    const mine = (id: string) =>
-      dirty.current.has(id) || removed.current.has(id) || recent(id);
-    const next: Record<string, ZProjectItem> = {};
-    let changed = false;
-    for (const [id, item] of Object.entries(fresh)) {
-      if (mine(id)) {
-        if (now[id]) {
-          next[id] = now[id];
-        } else if (!removed.current.has(id) && !recent(id)) {
-          next[id] = item;
-        }
-        continue;
-      }
-      next[id] = now[id] && sameItem(now[id], item) ? now[id] : item;
-      changed ||= next[id] !== now[id];
-    }
-    for (const [id, item] of Object.entries(now)) {
-      if (!fresh[id]) {
+  const takeIn = useCallback(
+    (serverItems: readonly ZProjectItem[]) => {
+      const now = current.current;
+      const fresh = itemsOf(serverItems);
+      const recent = (id: string) =>
+        Date.now() - (savedAt.current.get(id) ?? 0) < TRUST_SERVER_AFTER_MS;
+      const mine = (id: string) =>
+        dirty.current.has(id) || removed.current.has(id) || recent(id);
+      const next: Record<string, ZProjectItem> = {};
+      let changed = false;
+      for (const [id, item] of Object.entries(fresh)) {
         if (mine(id)) {
-          next[id] = item;
-        } else {
-          changed = true;
+          if (now[id]) {
+            next[id] = now[id];
+          } else if (!removed.current.has(id) && !recent(id)) {
+            next[id] = item;
+          }
+          continue;
+        }
+        next[id] = now[id] && sameItem(now[id], item) ? now[id] : item;
+        changed ||= next[id] !== now[id];
+      }
+      for (const [id, item] of Object.entries(now)) {
+        if (!fresh[id]) {
+          if (mine(id)) {
+            next[id] = item;
+          } else {
+            changed = true;
+          }
         }
       }
-    }
-    if (!changed && Object.keys(next).length === Object.keys(now).length) {
+      if (!changed && Object.keys(next).length === Object.keys(now).length) {
+        return;
+      }
+      const arrived = [...expected.current].filter(
+        (id) => next[id] && !now[id],
+      );
+      if (arrived.length > 0) {
+        // Adding them can be undone like any other change.
+        past.current.push(now);
+        future.current = [];
+        arrived.forEach((id) => expected.current.delete(id));
+        setHistoryVersion((v) => v + 1);
+      }
+      show(next);
+      if (arrived.length > 0) {
+        onArrivedRef.current?.(arrived);
+      }
+    },
+    [show],
+  );
+
+  // Not while something's being moved or sized: it'd jump from under the
+  // pointer. Taken in as the gesture ends (release).
+  useEffect(() => {
+    if (holding.current) {
+      waiting.current = serverItems;
       return;
     }
-    const arrived = [...expected.current].filter((id) => next[id] && !now[id]);
-    if (arrived.length > 0) {
-      // Adding them can be undone like any other change.
-      past.current.push(now);
-      future.current = [];
-      arrived.forEach((id) => expected.current.delete(id));
-      setHistoryVersion((v) => v + 1);
+    takeIn(serverItems);
+  }, [serverItems, takeIn]);
+
+  /** A gesture is over: what the server sent meanwhile is taken in. */
+  const release = useCallback(() => {
+    holding.current = false;
+    const held = waiting.current;
+    waiting.current = null;
+    if (held) {
+      takeIn(held);
     }
-    show(next);
-    if (arrived.length > 0) {
-      onArrivedRef.current?.(arrived);
-    }
-  }, [serverItems, show]);
+  }, [takeIn]);
 
   // Saved before the page goes away, or out of sight.
   useEffect(() => {
@@ -306,11 +365,13 @@ export function useBoardState(
     commit,
     preview,
     adjust,
+    discard,
     undo,
     redo,
     canUndo: past.current.length > 0,
     canRedo: future.current.length > 0,
     expectArrival,
     flush,
+    release,
   };
 }

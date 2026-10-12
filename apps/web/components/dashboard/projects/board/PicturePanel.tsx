@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button, ButtonWithTooltip } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -76,6 +83,9 @@ function remember(key: string, value: number) {
 /**
  * The panel's left edge, to drag it wider or narrower (the board keeps
  * BOARD_ROOM); a double-click puts it back, the arrow keys move it too.
+ * A drag is followed on the whole window — by its mouse events when the
+ * press came without a pointerdown, as WebKit's first after a drag and
+ * drop does.
  */
 function ResizeHandle({
   width,
@@ -84,18 +94,36 @@ function ResizeHandle({
   width: number;
   setWidth: (width: number) => void;
 }) {
-  const drag = useRef<{ x: number; width: number; max: number } | null>(null);
-  const latest = useRef(width);
-  latest.current = width;
+  const stop = useRef<(() => void) | null>(null);
+  useEffect(() => () => stop.current?.(), []);
   const maxOf = (el: HTMLElement) =>
     (el.parentElement?.parentElement?.clientWidth ?? Infinity) - BOARD_ROOM;
   // As shown: a narrow window may hold it narrower than it was set.
   const shownOf = (el: HTMLElement) =>
     el.parentElement?.getBoundingClientRect().width ?? width;
-  const done = () => {
-    drag.current = null;
-    document.body.style.cursor = "";
-    remember(WIDTH.key, latest.current);
+  const start = (el: HTMLElement, x: number, by: "pointer" | "mouse") => {
+    stop.current?.();
+    const from = { x, width: shownOf(el), max: maxOf(el) };
+    let last: number | null = null;
+    const move = (e: MouseEvent) => {
+      last = clamp(from.width + from.x - e.clientX, WIDTH.min, from.max);
+      setWidth(last);
+    };
+    const end = () => {
+      window.removeEventListener(`${by}move`, move);
+      window.removeEventListener(`${by}up`, end);
+      window.removeEventListener("pointercancel", end);
+      stop.current = null;
+      document.body.style.cursor = "";
+      if (last !== null) {
+        remember(WIDTH.key, last);
+      }
+    };
+    window.addEventListener(`${by}move`, move);
+    window.addEventListener(`${by}up`, end);
+    window.addEventListener("pointercancel", end);
+    stop.current = end;
+    document.body.style.cursor = "col-resize";
   };
   return (
     <div
@@ -110,23 +138,17 @@ function ResizeHandle({
         if (e.button !== 0) {
           return;
         }
+        // No mouse events after it: the press is taken once.
         e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = {
-          x: e.clientX,
-          width: shownOf(e.currentTarget),
-          max: maxOf(e.currentTarget),
-        };
-        document.body.style.cursor = "col-resize";
+        start(e.currentTarget, e.clientX, "pointer");
       }}
-      onPointerMove={(e) => {
-        const d = drag.current;
-        if (d) {
-          setWidth(clamp(d.width + d.x - e.clientX, WIDTH.min, d.max));
+      onMouseDown={(e) => {
+        if (e.button !== 0) {
+          return;
         }
+        e.preventDefault();
+        start(e.currentTarget, e.clientX, "mouse");
       }}
-      onPointerUp={done}
-      onPointerCancel={done}
       onDoubleClick={() => {
         setWidth(WIDTH.initial);
         remember(WIDTH.key, WIDTH.initial);
@@ -282,7 +304,7 @@ function Thumb({
  * drags it wider (`resizable`), and its view options (the gear, as the main
  * grid has) size the pictures: the grid has as many columns as fit.
  */
-export function PicturePanel({
+export const PicturePanel = memo(function PicturePanel({
   onBoard,
   onAdd,
   onClose,
@@ -503,4 +525,4 @@ export function PicturePanel({
       </div>
     </aside>
   );
-}
+});

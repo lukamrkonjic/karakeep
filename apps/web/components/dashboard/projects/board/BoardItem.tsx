@@ -89,7 +89,7 @@ function PictureView({
   if (picture) {
     return (
       <div
-        className="relative size-full overflow-hidden rounded-[6px] shadow-[0_2px_8px_rgb(0_0_0/0.18)]"
+        className="relative size-full overflow-hidden rounded-[6px] shadow-[0_1px_3px_rgb(0_0_0/0.22)]"
         style={{ backgroundColor: placeholder ?? "hsl(var(--muted))" }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- the server's file, at whatever size the board shows it */}
@@ -97,6 +97,7 @@ function PictureView({
           src={picture.src}
           alt={title ?? ""}
           draggable={false}
+          loading="lazy"
           decoding="async"
           className="pointer-events-none size-full select-none object-cover"
           onLoad={(e) => {
@@ -127,7 +128,7 @@ function PictureView({
         ? bookmark.content.url
         : "";
   return (
-    <div className="flex size-full flex-col gap-1 overflow-hidden rounded-[6px] bg-card p-3 text-card-foreground shadow-[0_2px_8px_rgb(0_0_0/0.18)] ring-1 ring-border">
+    <div className="flex size-full flex-col gap-1 overflow-hidden rounded-[6px] bg-card p-3 text-card-foreground shadow-[0_1px_3px_rgb(0_0_0/0.22)] ring-1 ring-border">
       {title && (
         <p className="line-clamp-2 text-sm font-semibold leading-snug">
           {title}
@@ -275,6 +276,7 @@ export const BoardItem = memo(function BoardItem({
   selected,
   editing,
   onPointerDown,
+  onMouseDown,
   onDoubleClick,
   onContextMenu,
   onShape,
@@ -290,6 +292,8 @@ export const BoardItem = memo(function BoardItem({
   selected: boolean;
   editing: boolean;
   onPointerDown: (e: React.PointerEvent, item: ZProjectItem) => void;
+  /** A press the browser gave no pointerdown for (WebKit, after a drop). */
+  onMouseDown: (e: React.MouseEvent, item: ZProjectItem) => void;
   onDoubleClick: (e: React.MouseEvent, item: ZProjectItem) => void;
   onContextMenu: (e: React.MouseEvent, item: ZProjectItem) => void;
   /** A picture's real width and height, once it's loaded. */
@@ -299,6 +303,7 @@ export const BoardItem = memo(function BoardItem({
 }) {
   const note = item.kind === "note";
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- the board's own presses (onMouseDown: one WebKit gave no pointerdown for)
     <div
       data-board-item={item.id}
       className={cn(
@@ -317,6 +322,7 @@ export const BoardItem = memo(function BoardItem({
         borderRadius: 6,
       }}
       onPointerDown={(e) => onPointerDown(e, item)}
+      onMouseDown={(e) => onMouseDown(e, item)}
       onDoubleClick={(e) => onDoubleClick(e, item)}
       onContextMenu={(e) => onContextMenu(e, item)}
     >
