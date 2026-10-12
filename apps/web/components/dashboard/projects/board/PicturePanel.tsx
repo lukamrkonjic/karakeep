@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonWithTooltip } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import LoadingSpinner from "@/components/ui/spinner";
@@ -13,7 +18,7 @@ import { setBookmarkDragImage } from "@/lib/bookmarkDragImage";
 import { useIsTouch } from "@/lib/hooks/useIsPhone";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { Check, Grid3x3, Search, Square, X } from "lucide-react";
+import { Check, Search, Settings, X } from "lucide-react";
 import { useInView } from "react-intersection-observer";
 import Masonry from "react-masonry-css";
 
@@ -274,8 +279,8 @@ function Thumb({
  * search bar finds them). Drag one (or the ones picked) onto the board to
  * put them where they drop, or pick some and Add them to the middle of what
  * the board shows. Those already on the board are ticked. Its left edge
- * drags it wider (`resizable`), and the slider sizes the pictures: the grid
- * has as many columns as fit.
+ * drags it wider (`resizable`), and its view options (the gear, as the main
+ * grid has) size the pictures: the grid has as many columns as fit.
  */
 export function PicturePanel({
   onBoard,
@@ -349,16 +354,57 @@ export function PicturePanel({
       {resizable && <ResizeHandle width={width} setWidth={setWidth} />}
       <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
         <p className="font-medium">Add pictures</p>
-        <Button
-          variant="ghost"
-          size="none"
-          className="size-7 rounded-md"
-          aria-label="Close"
-          title="Close"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </Button>
+        <div className="flex items-center">
+          {/* As the main grid's view options: the pictures' size. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <ButtonWithTooltip
+                tooltip="View options"
+                delayDuration={100}
+                variant="ghost"
+                size="none"
+                className="size-7 rounded-md"
+                aria-label="View options"
+              >
+                <Settings className="size-4" />
+              </ButtonWithTooltip>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end">
+              <div className="px-2 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold">Picture size</span>
+                  <span className="text-sm text-muted-foreground">
+                    {columns} per row
+                  </span>
+                </div>
+                <Slider
+                  min={THUMB.min}
+                  max={THUMB.max}
+                  step={4}
+                  value={[thumb]}
+                  onValueChange={([value]) => setThumb(value)}
+                  onValueCommit={([value]) => remember(THUMB.key, value)}
+                  thumbLabels={["Picture size"]}
+                  className="w-full"
+                />
+                <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+                  <span>Small</span>
+                  <span>Large</span>
+                </div>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="none"
+            className="size-7 rounded-md"
+            aria-label="Close"
+            title="Close"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
       </div>
       <div className="flex flex-col gap-2 px-3 pb-3">
         <div className="flex items-center gap-1">
@@ -393,22 +439,6 @@ export function PicturePanel({
             className="h-9 pl-8 text-sm"
             aria-label="Search"
           />
-        </div>
-        <div
-          className="flex items-center gap-2.5 px-0.5 pt-1 text-muted-foreground"
-          title="Picture size"
-        >
-          <Grid3x3 className="size-3.5 shrink-0" />
-          <Slider
-            min={THUMB.min}
-            max={THUMB.max}
-            step={4}
-            value={[thumb]}
-            onValueChange={([value]) => setThumb(value)}
-            onValueCommit={([value]) => remember(THUMB.key, value)}
-            thumbLabels={["Picture size"]}
-          />
-          <Square className="size-3.5 shrink-0" />
         </div>
       </div>
       <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto px-3">
