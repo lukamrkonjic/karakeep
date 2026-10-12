@@ -27,6 +27,7 @@ import {
   FileDown,
   FileText,
   Hash,
+  LayoutGrid,
   Link,
   ListMinus,
   ListPlus,
@@ -37,6 +38,7 @@ import {
 } from "lucide-react";
 
 import BulkManageListsModal from "./bookmarks/BulkManageListsModal";
+import { AddToProjectDialog } from "./projects/AddToProjectDialog";
 import BulkTagModal from "./bookmarks/BulkTagModal";
 import { ArchivedActionIcon, FavouritedActionIcon } from "./bookmarks/icons";
 
@@ -47,6 +49,7 @@ export default function BulkBookmarksAction() {
     useState(false);
   const [manageListsModal, setManageListsModalOpen] = useState(false);
   const [bulkTagModal, setBulkTagModalOpen] = useState(false);
+  const [addToProjectOpen, setAddToProjectOpen] = useState(false);
   // Fork: the pictures of what's about to be deleted, for the dialog.
   const [deletePreview, setDeletePreview] = useState<{
     urls: (string | null)[];
@@ -197,6 +200,13 @@ export default function BulkBookmarksAction() {
   // Fork: done to many less often, so behind the card's "…".
   const moreActions = [
     {
+      // Fork: onto a project's board, staying in their lists.
+      name: "Add to project…",
+      icon: <LayoutGrid className="size-4" />,
+      action: () => setAddToProjectOpen(true),
+      isPending: false,
+    },
+    {
       name: count > 1 ? "Download as zip" : "Download",
       icon: <Download className="size-4" />,
       action: downloadSelected,
@@ -268,7 +278,8 @@ export default function BulkBookmarksAction() {
     isDeleteDialogOpen ||
     isRemoveFromListDialogOpen ||
     manageListsModal ||
-    bulkTagModal;
+    bulkTagModal ||
+    addToProjectOpen;
 
   return (
     <div>
@@ -349,6 +360,11 @@ export default function BulkBookmarksAction() {
         bookmarkIds={selectedBookmarks.map((b) => b.id)}
         open={bulkTagModal}
         setOpen={setBulkTagModalOpen}
+      />
+      <AddToProjectDialog
+        bookmarkIds={selectedBookmarks.map((b) => b.id)}
+        open={addToProjectOpen}
+        setOpen={setAddToProjectOpen}
       />
       {/* Fork: a card at the bottom while selecting, in the look of the
           app's menus — ✕ to stop, how many are picked (a chip in the blue

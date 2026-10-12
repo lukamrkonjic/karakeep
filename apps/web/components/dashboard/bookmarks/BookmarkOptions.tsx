@@ -26,6 +26,7 @@ import {
   FileDown,
   FileText,
   ImagePlus,
+  LayoutGrid,
   Link,
   List,
   ListX,
@@ -61,6 +62,7 @@ import { BookmarkedTextEditor } from "./BookmarkedTextEditor";
 import DeleteBookmarkConfirmationDialog from "./DeleteBookmarkConfirmationDialog";
 import { EditBookmarkDialog } from "./EditBookmarkDialog";
 import { ArchivedActionIcon, FavouritedActionIcon } from "./icons";
+import { AddToProjectDialog } from "../projects/AddToProjectDialog";
 import { useManageListsModal } from "./ManageListsModal";
 
 interface ActionItem {
@@ -124,6 +126,7 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
     useState(false);
   const [isTextEditorOpen, setTextEditorOpen] = useState(false);
   const [isEditBookmarkDialogOpen, setEditBookmarkDialogOpen] = useState(false);
+  const [addToProjectOpen, setAddToProjectOpen] = useState(false);
 
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -325,6 +328,15 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
       onClick: () => setManageListsModalOpen(true),
     },
     {
+      // Fork: onto a project's board (its pictures stay in their lists).
+      id: "add-to-project",
+      title: "Add to project…",
+      icon: <LayoutGrid className="mr-2 size-4" />,
+      visible: isOwner,
+      disabled: false,
+      onClick: () => setAddToProjectOpen(true),
+    },
+    {
       id: "remove-from-list",
       title: t("actions.remove_from_list"),
       icon: <ListX className="mr-2 size-4" />,
@@ -476,6 +488,11 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
   return (
     <>
       {manageListsModal}
+      <AddToProjectDialog
+        bookmarkIds={[bookmark.id]}
+        open={addToProjectOpen}
+        setOpen={setAddToProjectOpen}
+      />
       <EditBookmarkDialog
         bookmark={bookmark}
         open={isEditBookmarkDialogOpen}

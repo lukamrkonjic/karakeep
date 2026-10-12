@@ -57,7 +57,7 @@ import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
-import { leftOutOfColours } from "../lib/colourLeftOut";
+import { leftOutOfColours } from "../lib/leftOutLists";
 import { userPictureIndex, vectorOf } from "../lib/pictureIndex";
 import { describedVector } from "../lib/pictureText";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
@@ -554,7 +554,7 @@ export const picturesAppRouter = router({
       if (!query || !palettesEnabled) {
         return none;
       }
-      // The lists left out of colours (List settings → Colours).
+      // The lists the colour pages leave out (their "…" → Choose lists…).
       const leftOut = await leftOutOfColours(ctx);
       const ranked = (
         await ctx.db

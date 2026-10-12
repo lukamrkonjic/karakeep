@@ -1,22 +1,19 @@
 import { eq } from "drizzle-orm";
 
-import type { Matcher } from "@karakeep/shared/types/search";
-import { users } from "@karakeep/db/schema";
-import {
-  asksForColour,
-  colourLeftOutFor,
-} from "@karakeep/shared/colourLeftOut";
+import { smartListLeftOutTable, users } from "@karakeep/db/schema";
 import { parseUiPreferences } from "@karakeep/shared/types/uiPreferences";
 
 import type { AuthedContext } from "../index";
 import { getBookmarkIdsFromMatcher } from "./search";
 
 /**
- * Fork: the lists left out of colours (packages/shared/colourLeftOut.ts),
- * as the account keeps them, and what they hold.
+ * Fork: lists left out — of the colour pages (their "…" → Choose lists…,
+ * one choice for the account: `colourLeftOutLists`) and of a smart list
+ * (its own "…" → Choose lists…: smartListLeftOut). Picked as the tailored
+ * feed's lists are; a left-out list takes everything under it with it.
  */
 
-/** The lists the user leaves out of colours. */
+/** The lists the colour pages leave out. */
 export async function colourLeftOutLists(ctx: AuthedContext) {
   const row = await ctx.db.query.users.findFirst({
     where: eq(users.id, ctx.user.id),
@@ -46,19 +43,25 @@ export async function leftOutOfColours(ctx: AuthedContext) {
   return inLists(ctx, await colourLeftOutLists(ctx));
 }
 
-/**
- * A smart list's bookmarks without the lists left out of colours, when it
- * asks for a colour — but not those its own rules name.
- */
-export async function withoutColourLeftOut(
+/** The lists a smart list leaves out (none when it was never asked to). */
+export async function smartListLeftOut(ctx: AuthedContext, listId: string) {
+  const row = await ctx.db.query.smartListLeftOutTable.findFirst({
+    where: eq(smartListLeftOutTable.listId, listId),
+    columns: { lists: true },
+  });
+  return row?.lists ?? [];
+}
+
+/** A smart list's bookmarks without what the lists it leaves out hold. */
+export async function withoutLeftOut(
   ctx: AuthedContext,
-  matcher: Matcher,
+  listId: string,
   bookmarkIds: string[],
 ) {
-  if (!asksForColour(matcher)) {
+  if (bookmarkIds.length === 0) {
     return bookmarkIds;
   }
-  const leftOut = colourLeftOutFor(matcher, await colourLeftOutLists(ctx));
+  const leftOut = await smartListLeftOut(ctx, listId);
   if (leftOut.length === 0) {
     return bookmarkIds;
   }

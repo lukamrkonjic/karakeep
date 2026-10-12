@@ -22,8 +22,10 @@ export const zUiPreferencesSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   // The tailored feed's left-out lists (exclusions, so new lists join it).
   tailoredFeedExcluded: z.array(z.string()).max(5000).optional(),
-  // The lists every colour page leaves out (/dashboard/colour/…): each with
-  // everything under it, as a smart list's "Lists doesn't contain" reads.
+  // The lists every colour page leaves out (/dashboard/colour/…, its "…" →
+  // Choose lists…): each with everything under it, as a smart list's "Lists
+  // doesn't contain" reads. (Until 2026-10-12 smart lists asking for a
+  // colour left them out too; each now picks its own — smartListLeftOut.)
   colourLeftOutLists: z.array(z.string()).max(5000).optional(),
   // Each page's "…" Sort, by page key (apps/web/lib/pageSort.ts).
   pageSorts: z
@@ -44,6 +46,8 @@ export const zUiPreferencesSchema = z.object({
   sidebarOpenLists: z.array(z.string()).max(5000).optional(),
   // The sidebar's Smart lists section is folded away.
   smartListsFolded: z.boolean().optional(),
+  // The sidebar's Projects section is folded away.
+  projectsFolded: z.boolean().optional(),
   // Feed videos: play on hover, and whether with sound.
   hoverVideoAutoplay: z.boolean().optional(),
   hoverVideoSound: z.boolean().optional(),

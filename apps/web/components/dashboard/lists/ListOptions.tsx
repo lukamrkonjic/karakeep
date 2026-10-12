@@ -12,6 +12,7 @@ import { useTranslation } from "@/lib/i18n/client";
 import {
   DoorOpen,
   FolderInput,
+  ListChecks,
   Pencil,
   Plus,
   Rss,
@@ -35,6 +36,10 @@ import { ListSubscriptionsModal } from "./ListSubscriptionsModal";
 import { ManageCollaboratorsModal } from "./ManageCollaboratorsModal";
 import { MergeListModal } from "./MergeListModal";
 import { ShareListModal } from "./ShareListModal";
+import {
+  PrefetchSmartListLeftOut,
+  SmartListChooseLists,
+} from "./smart/SmartListChooseLists";
 import {
   PrefetchSmartListRules,
   SmartListDialog,
@@ -73,6 +78,7 @@ export function ListOptions({
   const [newNestedListModalOpen, setNewNestedListModalOpen] = useState(false);
   const [mergeListModalOpen, setMergeListModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [chooseListsOpen, setChooseListsOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [subscriptionsModalOpen, setSubscriptionsModalOpen] = useState(false);
@@ -92,6 +98,15 @@ export function ListOptions({
       visible: isOwner,
       disabled: false,
       onClick: () => setEditModalOpen(true),
+    },
+    {
+      // Fork: the lists a smart list shows, picked as the tailored feed's.
+      id: "choose-lists",
+      title: "Choose lists…",
+      icon: <ListChecks className="size-4" />,
+      visible: isOwner && list.type === "smart",
+      disabled: false,
+      onClick: () => setChooseListsOpen(true),
     },
     {
       id: "share",
@@ -236,6 +251,11 @@ export function ListOptions({
             setOpen={setEditModalOpen}
             list={list}
           />
+          <SmartListChooseLists
+            list={list}
+            open={chooseListsOpen}
+            setOpen={setChooseListsOpen}
+          />
         </>
       ) : (
         <>
@@ -275,9 +295,13 @@ export function ListOptions({
       />
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
-        {/* Fork: Edit then opens with the rules in place. */}
+        {/* Fork: Edit then opens with the rules in place, and Choose
+            lists with its ticks. */}
         {list.type === "smart" && isOwner && (
-          <PrefetchSmartListRules listId={list.id} />
+          <>
+            <PrefetchSmartListRules listId={list.id} />
+            <PrefetchSmartListLeftOut listId={list.id} />
+          </>
         )}
         <SelectMenuItem current={onThisList} />
         {visibleItems

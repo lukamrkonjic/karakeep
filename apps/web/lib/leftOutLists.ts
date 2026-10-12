@@ -10,11 +10,12 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 const NONE: string[] = [];
 
 /**
- * Fork: the lists left out of colours (List settings → Colours), kept in
- * the account (lib/uiPreferences.tsx): the server leaves their pictures out
- * of every colour page and every smart list that asks for a colour
- * (packages/shared/colourLeftOut.ts). Each takes everything under it with
- * it, as a smart list's "Lists doesn't contain" does.
+ * Fork: the lists the colour pages leave out (their "…" → Choose lists…),
+ * kept in the account (lib/uiPreferences.tsx): the server leaves their
+ * pictures out of every colour page (trpc lib/leftOutLists.ts). Each takes
+ * everything under it with it, as a smart list's "Lists doesn't contain"
+ * does — and as each smart list's own Choose lists… does
+ * (lists/smart/SmartListChooseLists.tsx).
  */
 export function useColourLeftOut(): string[] {
   return usePreference("colourLeftOutLists") ?? NONE;

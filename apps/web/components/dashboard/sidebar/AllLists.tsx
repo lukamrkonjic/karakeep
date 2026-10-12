@@ -34,6 +34,7 @@ import {
 } from "@karakeep/shared/utils/listUtils";
 
 import { TailoredFeedOptions } from "../feed/TailoredFeedOptions";
+import { ProjectsSidebarSection } from "../projects/ProjectsSidebarSection";
 import type { OpenState } from "../lists/CollapsibleBookmarkLists";
 import { CollapsibleBookmarkLists } from "../lists/CollapsibleBookmarkLists";
 import { EditListModal } from "../lists/EditListModal";
@@ -310,6 +311,14 @@ export default function AllLists({
           className="group my-0.5"
           linkClassName="py-1.5 px-2"
         />
+        {/* Fork: boards to lay pictures out on, apart from the lists. */}
+        <SidebarItem
+          logo={null}
+          name="Projects"
+          path="/dashboard/projects"
+          className="group my-0.5"
+          linkClassName="py-1.5 px-2"
+        />
         <SidebarItem
           logo={null}
           name={t("common.tags")}
@@ -342,12 +351,13 @@ export default function AllLists({
         />
       </ul>
 
-      {/* Fork: the pages above; your smart lists, then your lists, below —
-          scrolling together, each section's heading staying in view while
-          its rows scroll (and pushed up by the next section's). */}
+      {/* Fork: the pages above; your projects, smart lists, then lists,
+          below — scrolling together, each section's heading staying in view
+          while its rows scroll (and pushed up by the next section's). */}
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-scroll">
+        <ProjectsSidebarSection spaceAbove={pages} />
         <section aria-label="Smart lists">
-          {pages && <div aria-hidden className="h-4" />}
+          <div aria-hidden className="h-4" />
           <div className="sticky top-0 z-10 flex items-center justify-between bg-background py-2">
             <button
               type="button"
@@ -371,17 +381,18 @@ export default function AllLists({
               />
             </button>
             <div className="mr-1 flex items-center gap-0.5 text-muted-foreground">
-              {/* Always: List settings has the colours' left-out lists too. */}
-              <OrganiseListsDialog type="smart">
-                <button
-                  type="button"
-                  title="List settings"
-                  aria-label="List settings"
-                  className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Pencil className="size-4 p-px" strokeWidth={1.5} />
-                </button>
-              </OrganiseListsDialog>
+              {smartTree.data.length > 1 && (
+                <OrganiseListsDialog type="smart">
+                  <button
+                    type="button"
+                    title="Organise smart lists"
+                    aria-label="Organise smart lists"
+                    className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-4 p-px" strokeWidth={1.5} />
+                  </button>
+                </OrganiseListsDialog>
+              )}
               <SmartListDialog>
                 <button
                   type="button"
@@ -429,8 +440,8 @@ export default function AllLists({
                 <OrganiseListsDialog type="manual">
                   <button
                     type="button"
-                    title="List settings"
-                    aria-label="List settings"
+                    title="Organise lists"
+                    aria-label="Organise lists"
                     className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <Pencil className="size-4 p-px" strokeWidth={1.5} />

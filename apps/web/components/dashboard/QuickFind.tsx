@@ -22,6 +22,7 @@ import { buildSearchHref } from "@/lib/hooks/bookmark-search";
 import { useTranslation } from "@/lib/i18n/client";
 import { matchRank } from "@/lib/nameMatch";
 import { getOS } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
@@ -30,6 +31,7 @@ import {
   Hash,
   Highlighter,
   Home,
+  LayoutGrid,
   List,
   ListFilter,
   Newspaper,
@@ -46,6 +48,7 @@ import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 import { useSearchHistory } from "@karakeep/shared-react/hooks/search-history";
 import { useTagAutocomplete } from "@karakeep/shared-react/hooks/tags";
 import { useDebounce } from "@karakeep/shared-react/hooks/use-debounce";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 
 /** Somewhere Quick find goes (a list, a tag, a page), as remembered. */
 interface Place {
@@ -203,12 +206,18 @@ export default function QuickFind() {
   const term = (only ? typed.slice(1) : typed).trim().toLowerCase();
   const tagTerm = useDebounce(term, 150);
 
+  const api = useTRPC();
   const { data: lists } = useBookmarkLists(undefined, { enabled: open });
   const { data: tags } = useTagAutocomplete({
     nameContains: tagTerm,
     select: (data) => data.tags,
     enabled: open && only !== "lists" && tagTerm.length > 0,
   });
+
+  // Fork: a project is found by its name, like a page.
+  const { data: projects } = useQuery(
+    api.projects.list.queryOptions(undefined, { enabled: open }),
+  );
 
   const pages = useMemo(() => {
     const all: {
@@ -217,6 +226,8 @@ export default function QuickFind() {
       href: string;
       icon: LucideIcon;
       also?: string[];
+      /** Only once something's typed (a project), not in the opening list. */
+      typedOnly?: boolean;
     }[] = [
       {
         id: "home",
@@ -235,6 +246,13 @@ export default function QuickFind() {
         name: "Discover",
         href: "/dashboard/discover",
         icon: Compass,
+      },
+      {
+        id: "projects",
+        name: "Projects",
+        href: "/dashboard/projects",
+        icon: LayoutGrid,
+        also: ["boards", "moodboards"],
       },
       {
         id: "tags",
@@ -306,8 +324,17 @@ export default function QuickFind() {
         also: ["admin", "jobs"],
       });
     }
+    for (const project of projects?.projects ?? []) {
+      all.push({
+        id: `project:${project.id}`,
+        name: project.name,
+        href: `/dashboard/projects/${project.id}`,
+        icon: LayoutGrid,
+        typedOnly: true,
+      });
+    }
     return all;
-  }, [t, session?.user.role]);
+  }, [t, session?.user.role, projects]);
 
   const byId = useMemo(
     () => new Map((lists?.data ?? []).map((l) => [l.id, l])),
@@ -356,7 +383,9 @@ export default function QuickFind() {
       return [];
     }
     if (!term) {
-      return pages.map((page) => ({ page, rank: 0 }));
+      return pages
+        .filter((page) => !page.typedOnly)
+        .map((page) => ({ page, rank: 0 }));
     }
     return pages
       .map((page) => ({

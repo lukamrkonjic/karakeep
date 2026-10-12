@@ -39,11 +39,7 @@ import {
   useMoveBookmarkList,
 } from "@karakeep/shared-react/hooks/lists";
 
-import { ColourLeftOutPicker } from "./ColourLeftOutPicker";
-
 type ListType = ZBookmarkList["type"];
-/** Fork: its tabs — the two trees, and the lists left out of colours. */
-export type ListSettingsTab = ListType | "colours";
 
 /** A row's height, a level's indent and the grip's column, in pixels. */
 const ROW = 36;
@@ -263,33 +259,24 @@ function RowButton({
 }
 
 /**
- * Fork: List settings (the sidebar's pencils). Your lists as a tree, to put
- * in order and in one another — dragged (by the row with a mouse, by its
- * grip on a touch screen): between two rows to go there (further left or
- * right for the depth, where there's a choice), onto one to go inside it,
- * or onto the strip under them for the top level. Each row's arrows (and
- * the arrow keys on its grip) move it up or down, into the list above or
- * out of the one it's in. Lists and smart lists each have their tree, as in
- * the sidebar; Colours picks the lists left out of colours
- * (ColourLeftOutPicker). Opened by its trigger (`children`), or controlled
- * with `open`/`setOpen` (a colour page's "Without …" chip).
+ * Fork: your lists as a tree, to put in order and in one another — dragged
+ * (by the row with a mouse, by its grip on a touch screen): between two
+ * rows to go there (further left or right for the depth, where there's a
+ * choice), onto one to go inside it, or onto the strip under them for the
+ * top level. Each row's arrows (and the arrow keys on its grip) move it up
+ * or down, into the list above or out of the one it's in. Lists and smart
+ * lists each have their tree, as in the sidebar.
  */
 export function OrganiseListsDialog({
   type = "manual",
   children,
-  open: controlledOpen,
-  setOpen: setControlledOpen,
 }: {
-  /** The tab shown first. */
-  type?: ListSettingsTab;
-  children?: React.ReactNode;
-  open?: boolean;
-  setOpen?: (open: boolean) => void;
+  /** The tree shown first. */
+  type?: ListType;
+  children: React.ReactNode;
 }) {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = controlledOpen ?? ownOpen;
-  const setOpen = setControlledOpen ?? setOwnOpen;
-  const [tab, setTab] = useState<ListSettingsTab>(type);
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<ListType>(type);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -302,8 +289,7 @@ export function OrganiseListsDialog({
   const { data } = useBookmarkLists(undefined, { enabled: open });
   const lists = useMemo(() => data?.data ?? [], [data]);
   const byId = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
-  const treeType: ListType = tab === "colours" ? "manual" : tab;
-  const section = useMemo(() => sectionOf(lists, treeType), [lists, treeType]);
+  const section = useMemo(() => sectionOf(lists, tab), [lists, tab]);
   const rows = useMemo(() => rowsOf(section, folded), [section, folded]);
   const { mutate: moveList } = useMoveBookmarkList();
 
@@ -312,18 +298,12 @@ export function OrganiseListsDialog({
     setDrag(next);
   }, []);
 
-  // Each time it opens (by its trigger or from outside), it starts afresh.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
+  const onOpenChange = (next: boolean) => {
+    if (next) {
       setTab(type);
       setFolded(new Set());
       setSelected(null);
     }
-  }
-
-  const onOpenChange = (next: boolean) => {
     update(null);
     setOpen(next);
   };
@@ -620,7 +600,7 @@ export function OrganiseListsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
+      <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent
         // Held at the top, not centred: a list unfolding (a drag resting on
         // it) grows it downwards, the rows staying under the pointer.
@@ -631,11 +611,10 @@ export function OrganiseListsDialog({
         onEscapeKeyDown={(e) => dragRef.current && e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>List settings</DialogTitle>
+          <DialogTitle>Organise lists</DialogTitle>
           <DialogDescription>
-            {tab === "colours"
-              ? "Pictures in a list you untick don't show on the colour pages, nor in smart lists with a colour rule — unless that smart list's own rules name the list. Unticking a folder leaves out everything in it."
-              : "Drag a list between others to move it, or onto one to put it inside. The arrows on a row do the same."}
+            Drag a list between others to move it, or onto one to put it inside.
+            The arrows on a row do the same.
           </DialogDescription>
         </DialogHeader>
         <Tabs
@@ -643,23 +622,20 @@ export function OrganiseListsDialog({
           onValueChange={(value) => {
             update(null);
             setSelected(null);
-            setTab(value as ListSettingsTab);
+            setTab(value as ListType);
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <TabsList className="grid w-full shrink-0 grid-cols-3">
+          <TabsList className="grid w-full shrink-0 grid-cols-2">
             <TabsTrigger value="manual">Lists</TabsTrigger>
             <TabsTrigger value="smart">Smart lists</TabsTrigger>
-            <TabsTrigger value="colours">Colours</TabsTrigger>
           </TabsList>
           <TabsContent
             ref={scrollRef}
             value={tab}
             className="-mx-2 mt-3 min-h-0 flex-1 overflow-y-auto px-2 pb-2"
           >
-            {tab === "colours" ? (
-              <ColourLeftOutPicker listsData={data} />
-            ) : rows.length === 0 ? (
+            {rows.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 {tab === "smart" ? "No smart lists yet." : "No lists yet."}
               </p>

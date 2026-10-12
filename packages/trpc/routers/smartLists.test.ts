@@ -384,3 +384,95 @@ describe("Smart lists made of rules", () => {
     expect(await name("not_contains", "IMG_99")).toEqual(["Beach", untitled]);
   });
 });
+
+describe("Smart lists: Choose lists", () => {
+  test<CustomTestContext>("leaves out what's in the lists it doesn't pick", async ({
+    apiCallers,
+  }) => {
+    const api = apiCallers[0];
+    const games = await api.lists.create({ name: "Games", icon: "" });
+    const indie = await api.lists.create({
+      name: "Indie",
+      icon: "",
+      parentId: games.id,
+    });
+    const art = await api.lists.create({ name: "Art", icon: "" });
+    const inGames = await note(api, "in games");
+    const inIndie = await note(api, "in indie");
+    const inArtToo = await note(api, "in indie and art");
+    await note(api, "in no list");
+    await api.lists.addToList({ listId: games.id, bookmarkId: inGames });
+    await api.lists.addToList({ listId: indie.id, bookmarkId: inIndie });
+    await api.lists.addToList({ listId: indie.id, bookmarkId: inArtToo });
+    await api.lists.addToList({ listId: art.id, bookmarkId: inArtToo });
+    const smart = await api.lists.create({
+      name: "Everything",
+      icon: "",
+      type: "smart",
+      query: "-is:fav",
+    });
+    const held = async () =>
+      (await api.bookmarks.getBookmarks({ listId: smart.id })).bookmarks
+        .map((b) => b.title)
+        .sort();
+    const counted = async () => (await api.lists.stats()).stats.get(smart.id);
+
+    expect(await api.smartLists.leftOut({ listId: smart.id })).toEqual({
+      lists: [],
+    });
+    expect(await held()).toHaveLength(4);
+
+    // A folder takes what's under it; a picture in a left-out list is out
+    // even when another list has it too. Its sidebar count follows.
+    await api.smartLists.setLeftOut({
+      listId: smart.id,
+      lists: [games.id, games.id],
+    });
+    expect(await api.smartLists.leftOut({ listId: smart.id })).toEqual({
+      lists: [games.id],
+    });
+    expect(await held()).toEqual(["in no list"]);
+    expect(await counted()).toBe(1);
+
+    // One sub-list left out: the folder's own stay.
+    await api.smartLists.setLeftOut({ listId: smart.id, lists: [indie.id] });
+    expect(await held()).toEqual(["in games", "in no list"]);
+
+    // A list that's gone leaves nothing out; none is everything again.
+    await api.smartLists.setLeftOut({ listId: smart.id, lists: ["gone"] });
+    expect(await held()).toHaveLength(4);
+    await api.smartLists.setLeftOut({ listId: smart.id, lists: [] });
+    expect(await api.smartLists.leftOut({ listId: smart.id })).toEqual({
+      lists: [],
+    });
+    expect(await counted()).toBe(4);
+
+    // Only its owner, and only a smart list.
+    await expect(
+      apiCallers[1].smartLists.setLeftOut({ listId: smart.id, lists: [] }),
+    ).rejects.toThrow();
+    await expect(
+      apiCallers[1].smartLists.leftOut({ listId: smart.id }),
+    ).rejects.toThrow();
+    await expect(
+      api.smartLists.setLeftOut({ listId: art.id, lists: [] }),
+    ).rejects.toThrow(/Not a smart list/);
+  });
+
+  test<CustomTestContext>("goes with the smart list", async ({
+    apiCallers,
+    db,
+  }) => {
+    const api = apiCallers[0];
+    const games = await api.lists.create({ name: "Games", icon: "" });
+    const smart = await api.lists.create({
+      name: "Everything",
+      icon: "",
+      type: "smart",
+      query: "-is:fav",
+    });
+    await api.smartLists.setLeftOut({ listId: smart.id, lists: [games.id] });
+    await api.lists.delete({ listId: smart.id });
+    expect(await db.query.smartListLeftOutTable.findMany()).toEqual([]);
+  });
+});

@@ -1,0 +1,303 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import LoadingSpinner from "@/components/ui/spinner";
+import {
+  BOOKMARK_DRAG_MIME,
+  setDraggedBookmarkCount,
+} from "@/lib/bookmark-drag";
+import { setBookmarkDragImage } from "@/lib/bookmarkDragImage";
+import { useIsTouch } from "@/lib/hooks/useIsPhone";
+import { cn } from "@/lib/utils";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { Check, Search, X } from "lucide-react";
+import { useInView } from "react-intersection-observer";
+
+import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
+import { useTRPC } from "@karakeep/shared-react/trpc";
+import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
+
+import { BookmarkListSelector } from "../../lists/BookmarkListSelector";
+import { boardPictureOf, rememberPictureSize } from "./boardPictures";
+
+/** The value, once it's stopped changing for a moment. */
+function useSettled(value: string, ms: number) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return settled;
+}
+
+/** A page of bookmarks to pick from: a list's (or all), or a search's. */
+function usePickable(listId: string | null, text: string) {
+  const api = useTRPC();
+  const searching = text.trim().length > 0;
+  const browse = useInfiniteQuery(
+    api.bookmarks.getBookmarks.infiniteQueryOptions(
+      {
+        listId: listId ?? undefined,
+        archived: false,
+        includeContent: false,
+        limit: 40,
+      },
+      {
+        enabled: !searching,
+        initialCursor: null,
+        getNextPageParam: (page) => page.nextCursor,
+        placeholderData: keepPreviousData,
+      },
+    ),
+  );
+  const search = useInfiniteQuery(
+    api.pictures.search.infiniteQueryOptions(
+      { text, listIds: listId ? [listId] : undefined },
+      {
+        enabled: searching,
+        initialCursor: 0,
+        getNextPageParam: (page) => page.nextCursor,
+        placeholderData: keepPreviousData,
+      },
+    ),
+  );
+  const query = searching ? search : browse;
+  const bookmarks = useMemo(
+    () =>
+      (query.data?.pages ?? []).flatMap(
+        (page) => page.bookmarks as ZBookmark[],
+      ),
+    [query.data],
+  );
+  return {
+    bookmarks,
+    loading: query.isPending,
+    hasNextPage: query.hasNextPage,
+    fetchNextPage: query.fetchNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+  };
+}
+
+function Thumb({
+  bookmark,
+  picked,
+  onBoard,
+  draggedIds,
+  onToggle,
+}: {
+  bookmark: ZBookmark;
+  picked: boolean;
+  onBoard: boolean;
+  /** What a drag from it carries: the picked ones when it's one of them. */
+  draggedIds: () => string[];
+  onToggle: () => void;
+}) {
+  const picture = boardPictureOf(bookmark);
+  const title = getBookmarkTitle(bookmark);
+  const isTouch = useIsTouch();
+  return (
+    <button
+      type="button"
+      draggable={!isTouch}
+      onDragStart={(e) => {
+        const ids = draggedIds();
+        e.dataTransfer.setData(BOOKMARK_DRAG_MIME, ids.join(","));
+        e.dataTransfer.effectAllowed = "copy";
+        setDraggedBookmarkCount(ids.length);
+        setBookmarkDragImage(e, title ?? "", ids.length);
+      }}
+      onClick={onToggle}
+      title={title ?? undefined}
+      aria-pressed={picked}
+      className={cn(
+        "group relative mb-2 block w-full break-inside-avoid overflow-hidden rounded-md bg-muted text-left outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring",
+        picked && "ring-2 ring-primary ring-offset-2",
+      )}
+    >
+      {picture ? (
+        // eslint-disable-next-line @next/next/no-img-element -- the server's file, as the grid shows it
+        <img
+          src={picture.src}
+          alt={title ?? ""}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onLoad={(e) => rememberPictureSize(bookmark.id, e.currentTarget)}
+          className={cn(
+            "block h-auto w-full",
+            onBoard && !picked && "opacity-60",
+          )}
+        />
+      ) : (
+        <span className="line-clamp-4 block p-2 text-xs text-muted-foreground">
+          {title ??
+            (bookmark.content.type === "text" ? bookmark.content.text : "")}
+        </span>
+      )}
+      {(picked || onBoard) && (
+        <span
+          className={cn(
+            "absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full shadow",
+            picked
+              ? "bg-primary text-primary-foreground"
+              : "bg-background/90 text-foreground",
+          )}
+          title={onBoard ? "On the board" : undefined}
+        >
+          <Check className="size-3" strokeWidth={3} />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Fork: a board's Add pictures panel — your pictures, a list's (the
+ * picker at its top) or a search's (words, colours, what's in them, as the
+ * search bar finds them). Drag one (or the ones picked) onto the board to
+ * put them where they drop, or pick some and Add them to the middle of what
+ * the board shows. Those already on the board are ticked.
+ */
+export function PicturePanel({
+  onBoard,
+  onAdd,
+  onClose,
+  className,
+}: {
+  /** Bookmarks already on the board. */
+  onBoard: ReadonlySet<string>;
+  onAdd: (bookmarkIds: string[]) => void;
+  onClose: () => void;
+  className?: string;
+}) {
+  const [listId, setListId] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const settled = useSettled(text, 300);
+  const [picked, setPicked] = useState<string[]>([]);
+  const { bookmarks, loading, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    usePickable(listId, settled);
+  const { ref: endRef, inView } = useInView({ rootMargin: "400px" });
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const toggle = (id: string) =>
+    setPicked((was) =>
+      was.includes(id) ? was.filter((x) => x !== id) : [...was, id],
+    );
+
+  return (
+    <aside
+      aria-label="Add pictures"
+      className={cn("flex min-h-0 flex-col bg-background", className)}
+    >
+      <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
+        <p className="font-medium">Add pictures</p>
+        <Button
+          variant="ghost"
+          size="none"
+          className="size-7 rounded-md"
+          aria-label="Close"
+          title="Close"
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2 px-3 pb-3">
+        <div className="flex items-center gap-1">
+          <BookmarkListSelector
+            value={listId}
+            onChange={(id) => {
+              setListId(id);
+              setPicked([]);
+            }}
+            placeholder="All your pictures"
+            className="h-9 min-w-0 flex-1 truncate text-sm font-normal"
+          />
+          {listId && (
+            <Button
+              variant="ghost"
+              size="none"
+              className="size-9 shrink-0 rounded-md"
+              aria-label="All your pictures"
+              title="All your pictures"
+              onClick={() => setListId(null)}
+            >
+              <X className="size-4" />
+            </Button>
+          )}
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={listId ? "Search this list" : "Search"}
+            className="h-9 pl-8 text-sm"
+            aria-label="Search"
+          />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3">
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <LoadingSpinner />
+          </div>
+        ) : bookmarks.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Nothing here.
+          </p>
+        ) : (
+          <div className="columns-2 gap-2">
+            {bookmarks.map((bookmark) => (
+              <Thumb
+                key={bookmark.id}
+                bookmark={bookmark}
+                picked={picked.includes(bookmark.id)}
+                onBoard={onBoard.has(bookmark.id)}
+                draggedIds={() =>
+                  picked.includes(bookmark.id) ? picked : [bookmark.id]
+                }
+                onToggle={() => toggle(bookmark.id)}
+              />
+            ))}
+          </div>
+        )}
+        <div ref={endRef} className="h-px" />
+        {isFetchingNextPage && (
+          <div className="flex justify-center py-4">
+            <LoadingSpinner />
+          </div>
+        )}
+      </div>
+      <div className="border-t px-3 py-2.5">
+        {picked.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                onAdd(picked);
+                setPicked([]);
+              }}
+            >
+              Add {picked.length} to the board
+            </Button>
+            <Button variant="ghost" onClick={() => setPicked([])}>
+              Clear
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Drag pictures onto the board, or pick some and add them. Files from
+            your computer can be dropped on the board too.
+          </p>
+        )}
+      </div>
+    </aside>
+  );
+}

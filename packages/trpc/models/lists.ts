@@ -30,7 +30,7 @@ import { switchCase } from "@karakeep/shared/utils/switch";
 import { AuthedContext, Context } from "..";
 import { buildImpersonatingAuthedContext } from "../lib/impersonate";
 import { RuleEngine } from "../lib/ruleEngine";
-import { withoutColourLeftOut } from "../lib/colourLeftOut";
+import { withoutLeftOut } from "../lib/leftOutLists";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
 import { Bookmark } from "./bookmarks";
 import { ListInvitation } from "./listInvitations";
@@ -1155,9 +1155,8 @@ export class SmartList extends List {
       parsedQuery.matcher,
       newVisitedListIds,
     );
-    // Fork: a smart list asking for a colour leaves out what the colours do
-    // (List settings → Colours), but not lists its own rules name.
-    return await withoutColourLeftOut(this.ctx, parsedQuery.matcher, ids);
+    // Fork: and without the lists it leaves out ("…" → Choose lists…).
+    return await withoutLeftOut(this.ctx, this.list.id, ids);
   }
 
   async getSize(): Promise<number> {

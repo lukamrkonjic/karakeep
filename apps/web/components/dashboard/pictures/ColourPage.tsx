@@ -1,20 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BookmarksGrid from "@/components/dashboard/bookmarks/BookmarksGrid";
 import BookmarksGridSkeleton from "@/components/dashboard/bookmarks/BookmarksGridSkeleton";
-import { ColourLeftOutChip } from "@/components/dashboard/lists/ColourLeftOutChip";
-import { OrganiseListsDialog } from "@/components/dashboard/lists/OrganiseListsDialog";
+import {
+  ChooseListsDialog,
+  listCandidates,
+  useLeftOutTicks,
+} from "@/components/dashboard/lists/ChooseListsDialog";
 import { PageOptions } from "@/components/dashboard/PageOptions";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
+import { useColourLeftOut, useSetColourLeftOut } from "@/lib/leftOutLists";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { ListPlus, ListX } from "lucide-react";
+import { ListChecks, ListPlus } from "lucide-react";
 
-import { useCreateBookmarkList } from "@karakeep/shared-react/hooks/lists";
+import {
+  useBookmarkLists,
+  useCreateBookmarkList,
+} from "@karakeep/shared-react/hooks/lists";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import {
   COLOUR_FAMILIES,
@@ -25,7 +32,7 @@ import {
 
 /**
  * The pictures with a colour, or a family's colours, a page at a time —
- * none from the lists left out of colours (List settings → Colours).
+ * none from the lists the colour pages leave out (ColourChooseLists).
  */
 function useColourResults(colour: string) {
   const api = useTRPC();
@@ -65,6 +72,40 @@ function ColourResults({ colour }: { colour: string }) {
       hasNextPage={hasNextPage}
       fetchNextPage={() => void fetchNextPage()}
       isFetchingNextPage={isFetchingNextPage}
+    />
+  );
+}
+
+/**
+ * The colour pages' "…" → Choose lists…, as the tailored feed picks its
+ * lists: one choice for every colour, kept in the account and saved as it's
+ * ticked. A smart list of a colour picks its own.
+ */
+function ColourChooseLists({
+  open,
+  setOpen,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}) {
+  const { data: lists } = useBookmarkLists();
+  const candidates = useMemo(
+    () => listCandidates(lists?.data ?? []),
+    [lists?.data],
+  );
+  const setLeftOut = useSetColourLeftOut();
+  const ticks = useLeftOutTicks(
+    candidates,
+    useColourLeftOut(),
+    (next) => void setLeftOut(next),
+  );
+  return (
+    <ChooseListsDialog
+      title="Colours"
+      description="Pick the lists the colour pages show. A folder brings everything in it; open it to leave single sub-lists out."
+      ticks={ticks}
+      open={open}
+      setOpen={setOpen}
     />
   );
 }
@@ -159,19 +200,15 @@ export default function ColourPage({ colour: param }: { colour: string }) {
           label="Colour options"
           items={[
             {
-              id: "leave-out",
-              label: "Leave lists out…",
-              icon: <ListX className="size-4" />,
+              id: "lists",
+              label: "Choose lists…",
+              icon: <ListChecks className="size-4" />,
               onSelect: () => setSettingsOpen(true),
             },
           ]}
           sort={null}
         />
-        <OrganiseListsDialog
-          type="colours"
-          open={settingsOpen}
-          setOpen={setSettingsOpen}
-        />
+        <ColourChooseLists open={settingsOpen} setOpen={setSettingsOpen} />
       </div>
       <div className="flex flex-wrap gap-2">
         {COLOUR_FAMILIES.map((f) => (
@@ -197,7 +234,6 @@ export default function ColourPage({ colour: param }: { colour: string }) {
           />
         ))}
       </div>
-      <ColourLeftOutChip onOpen={() => setSettingsOpen(true)} />
       <ColourResults colour={query} />
     </div>
   );

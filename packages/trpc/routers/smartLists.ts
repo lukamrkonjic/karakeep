@@ -4,7 +4,10 @@ import { z } from "zod";
 
 import type { Matcher } from "@karakeep/shared/types/search";
 import type { ZSmartListRules } from "@karakeep/shared/types/smartLists";
-import { smartListRulesTable } from "@karakeep/db/schema";
+import {
+  smartListLeftOutTable,
+  smartListRulesTable,
+} from "@karakeep/db/schema";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import {
   compileSmartRules,
@@ -22,6 +25,7 @@ import {
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
+import { smartListLeftOut } from "../lib/leftOutLists";
 import { prepareDescription } from "../lib/pictureText";
 import { getBookmarkIdsFromMatcher } from "../lib/search";
 import { List } from "../models/lists";
@@ -65,6 +69,15 @@ async function saveRules(
       target: smartListRulesTable.listId,
       set: { rules, updatedAt },
     });
+}
+
+function ensureSmart(list: List) {
+  if (list.type !== "smart") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Not a smart list",
+    });
+  }
 }
 
 /** The descriptions a matcher asks the picture model about. */
@@ -141,6 +154,51 @@ export const smartListsAppRouter = router({
       );
       await saveRules(ctx, list.id, input.rules);
       return list.asZBookmarkList();
+    }),
+
+  /**
+   * The lists a smart list leaves out (its "…" → Choose lists…): what's in
+   * them, or in a list under one, isn't in it whatever its rules say.
+   */
+  leftOut: smartListsProcedure
+    .input(z.object({ listId: z.string() }))
+    .output(z.object({ lists: z.array(z.string()) }))
+    .use(ensureListAtLeastViewer)
+    .use(ensureListAtLeastOwner)
+    .query(async ({ ctx, input }) => {
+      ensureSmart(ctx.list);
+      return { lists: await smartListLeftOut(ctx, input.listId) };
+    }),
+
+  /** Leaves these lists out of the smart list; none leaves nothing out. */
+  setLeftOut: smartListsProcedure
+    .input(
+      z.object({
+        listId: z.string(),
+        lists: z.array(z.string().min(1).max(64)).max(5000),
+      }),
+    )
+    .output(z.object({ lists: z.array(z.string()) }))
+    .use(ensureListAtLeastViewer)
+    .use(ensureListAtLeastOwner)
+    .mutation(async ({ ctx, input }) => {
+      ensureSmart(ctx.list);
+      const lists = [...new Set(input.lists)];
+      if (lists.length === 0) {
+        await ctx.db
+          .delete(smartListLeftOutTable)
+          .where(eq(smartListLeftOutTable.listId, input.listId));
+        return { lists };
+      }
+      const updatedAt = new Date();
+      await ctx.db
+        .insert(smartListLeftOutTable)
+        .values({ listId: input.listId, userId: ctx.user.id, lists, updatedAt })
+        .onConflictDoUpdate({
+          target: smartListLeftOutTable.listId,
+          set: { lists, updatedAt },
+        });
+      return { lists };
     }),
 
   update: smartListsProcedure

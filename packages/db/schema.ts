@@ -18,6 +18,7 @@ import type { ZApiKeyScope } from "@karakeep/shared/types/apiKeys";
 import { API_KEY_FULL_ACCESS_SCOPE } from "@karakeep/shared/types/apiKeys";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import type { ZReaderViewReason } from "@karakeep/shared/types/bookmarks";
+import type { ZProjectNoteStyle } from "@karakeep/shared/types/projects";
 import type { ZSmartListRules } from "@karakeep/shared/types/smartLists";
 
 function createdAtField(colName = "createdAt") {
@@ -1264,6 +1265,89 @@ export const smartListRulesTable = sqliteTable("smartListRules", {
     .$defaultFn(() => new Date()),
 });
 
+// Fork: the lists a smart list leaves out (its "…" → Choose lists…, picked
+// as the tailored feed's are): what's in one of them, or in a list under
+// one, isn't in the smart list whatever its rules say. Each list stands for
+// itself and everything under it, so a list made in a left-out folder later
+// is left out too (apps/web/lib/leftOutLists.ts). No row: it leaves nothing
+// out.
+export const smartListLeftOutTable = sqliteTable("smartListLeftOut", {
+  listId: text("listId")
+    .notNull()
+    .primaryKey()
+    .references(() => bookmarkLists.id, { onDelete: "cascade" }),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  lists: text("lists", { mode: "json" }).notNull().$type<string[]>(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// Fork: projects — boards to lay pictures out on, apart from the lists
+// (packages/shared/types/projects.ts, routers/projects.ts). `updatedAt` moves
+// with every change to the project or its board: they're shown newest
+// first.
+export const projectsTable = sqliteTable(
+  "projects",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: createdAtField(),
+    updatedAt: integer("updatedAt", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("projects_userId_updatedAt_idx").on(t.userId, t.updatedAt)],
+);
+
+// What's on a project's board: a picture (one of the user's bookmarks —
+// shown, never moved or copied; it goes when the bookmark does) or a note,
+// each with its box in board pixels and its place in the stack (`z`, higher
+// on top). A bookmark is on a board once (SQLite's unique lets the notes'
+// nulls be). Ids are made by whoever adds them, so the board can undo.
+export const projectItemsTable = sqliteTable(
+  "projectItems",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    projectId: text("projectId")
+      .notNull()
+      .references(() => projectsTable.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["bookmark", "note"] }).notNull(),
+    bookmarkId: text("bookmarkId").references(() => bookmarks.id, {
+      onDelete: "cascade",
+    }),
+    text: text("text"),
+    style: text("style", { mode: "json" }).$type<ZProjectNoteStyle>(),
+    x: real("x").notNull(),
+    y: real("y").notNull(),
+    w: real("w").notNull(),
+    h: real("h").notNull(),
+    z: real("z").notNull().default(0),
+    createdAt: createdAtField(),
+  },
+  (t) => [
+    index("projectItems_projectId_idx").on(t.projectId),
+    unique("projectItems_projectId_bookmarkId_unique").on(
+      t.projectId,
+      t.bookmarkId,
+    ),
+    // Deleting a bookmark takes it off every board without a scan.
+    index("projectItems_bookmarkId_idx").on(t.bookmarkId),
+  ],
+);
+
 export const backupsTable = sqliteTable(
   "backups",
   {
@@ -1828,6 +1912,28 @@ export const userReadingProgressRelations = relations(
     user: one(users, {
       fields: [userReadingProgress.userId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const projectsRelations = relations(projectsTable, ({ one, many }) => ({
+  user: one(users, {
+    fields: [projectsTable.userId],
+    references: [users.id],
+  }),
+  items: many(projectItemsTable),
+}));
+
+export const projectItemsRelations = relations(
+  projectItemsTable,
+  ({ one }) => ({
+    project: one(projectsTable, {
+      fields: [projectItemsTable.projectId],
+      references: [projectsTable.id],
+    }),
+    bookmark: one(bookmarks, {
+      fields: [projectItemsTable.bookmarkId],
+      references: [bookmarks.id],
     }),
   }),
 );

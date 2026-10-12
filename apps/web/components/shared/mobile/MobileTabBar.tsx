@@ -18,6 +18,7 @@ import {
   Compass,
   Highlighter,
   Home,
+  LayoutGrid,
   LogOut,
   Menu,
   Moon,
@@ -44,6 +45,7 @@ import { useWhoAmI } from "@karakeep/shared-react/hooks/users";
 
 // Pages the More sheet leads to: its tab is lit while one is open.
 const MORE_PAGES = [
+  "/dashboard/projects",
   "/dashboard/discover",
   "/dashboard/favourites",
   "/dashboard/tags",
@@ -90,6 +92,12 @@ function MoreSheet({
           </div>
         </div>
       )}
+      <SheetItem
+        icon={<LayoutGrid />}
+        onClick={() => go("/dashboard/projects")}
+      >
+        Projects
+      </SheetItem>
       <SheetItem icon={<Compass />} onClick={() => go("/dashboard/discover")}>
         Discover
       </SheetItem>
