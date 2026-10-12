@@ -96,8 +96,7 @@ export default function ProjectsPage() {
           </span>
           <span className="font-medium">Make your first project</span>
           <span className="max-w-sm text-sm text-muted-foreground">
-            A board for a game, a room, a look: bring pictures in from your
-            lists, move them around, add notes, and keep it as your inspiration.
+            Bring pictures in from your lists, move them around and add notes.
           </span>
         </button>
       ) : (

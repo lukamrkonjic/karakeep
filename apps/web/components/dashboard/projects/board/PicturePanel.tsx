@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import LoadingSpinner from "@/components/ui/spinner";
 import {
   BOOKMARK_DRAG_MIME,
@@ -12,8 +13,9 @@ import { setBookmarkDragImage } from "@/lib/bookmarkDragImage";
 import { useIsTouch } from "@/lib/hooks/useIsPhone";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { Check, Search, X } from "lucide-react";
+import { Check, Grid3x3, Search, Square, X } from "lucide-react";
 import { useInView } from "react-intersection-observer";
+import Masonry from "react-masonry-css";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
@@ -30,6 +32,119 @@ function useSettled(value: string, ms: number) {
     return () => clearTimeout(timer);
   }, [value, ms]);
   return settled;
+}
+
+/** The panel's width, and its pictures': each viewer's own, kept here. */
+const WIDTH = { key: "vrana-board-panel-width", min: 260, initial: 380 };
+const THUMB = {
+  key: "vrana-board-panel-thumb",
+  min: 72,
+  max: 320,
+  initial: 140,
+};
+/** The board keeps at least this much of the room beside the panel. */
+const BOARD_ROOM = 240;
+/** Between pictures, and the grid's padding either side. */
+const GAP = 8;
+const PADDING = 24;
+
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+function remembered(key: string, fallback: number) {
+  try {
+    const value = Number(window.localStorage.getItem(key));
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key: string, value: number) {
+  try {
+    window.localStorage.setItem(key, String(Math.round(value)));
+  } catch {
+    // Not kept: it opens as it was.
+  }
+}
+
+/**
+ * The panel's left edge, to drag it wider or narrower (the board keeps
+ * BOARD_ROOM); a double-click puts it back, the arrow keys move it too.
+ */
+function ResizeHandle({
+  width,
+  setWidth,
+}: {
+  width: number;
+  setWidth: (width: number) => void;
+}) {
+  const drag = useRef<{ x: number; width: number; max: number } | null>(null);
+  const latest = useRef(width);
+  latest.current = width;
+  const maxOf = (el: HTMLElement) =>
+    (el.parentElement?.parentElement?.clientWidth ?? Infinity) - BOARD_ROOM;
+  // As shown: a narrow window may hold it narrower than it was set.
+  const shownOf = (el: HTMLElement) =>
+    el.parentElement?.getBoundingClientRect().width ?? width;
+  const done = () => {
+    drag.current = null;
+    document.body.style.cursor = "";
+    remember(WIDTH.key, latest.current);
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Panel width"
+      aria-valuenow={Math.round(width)}
+      tabIndex={0}
+      title="Drag to resize · double-click to reset"
+      className="group absolute inset-y-0 -left-1.5 z-10 w-3 cursor-col-resize touch-none outline-none"
+      onPointerDown={(e) => {
+        if (e.button !== 0) {
+          return;
+        }
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = {
+          x: e.clientX,
+          width: shownOf(e.currentTarget),
+          max: maxOf(e.currentTarget),
+        };
+        document.body.style.cursor = "col-resize";
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (d) {
+          setWidth(clamp(d.width + d.x - e.clientX, WIDTH.min, d.max));
+        }
+      }}
+      onPointerUp={done}
+      onPointerCancel={done}
+      onDoubleClick={() => {
+        setWidth(WIDTH.initial);
+        remember(WIDTH.key, WIDTH.initial);
+      }}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 96 : 24;
+        const by =
+          e.key === "ArrowLeft" ? step : e.key === "ArrowRight" ? -step : 0;
+        if (by) {
+          e.preventDefault();
+          const next = clamp(
+            shownOf(e.currentTarget) + by,
+            WIDTH.min,
+            maxOf(e.currentTarget),
+          );
+          setWidth(next);
+          remember(WIDTH.key, next);
+        }
+      }}
+    >
+      <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-transparent transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary group-active:bg-primary" />
+    </div>
+  );
 }
 
 /** A page of bookmarks to pick from: a list's (or all), or a search's. */
@@ -112,7 +227,7 @@ function Thumb({
       title={title ?? undefined}
       aria-pressed={picked}
       className={cn(
-        "group relative mb-2 block w-full break-inside-avoid overflow-hidden rounded-md bg-muted text-left outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring",
+        "group relative mb-2 block w-full overflow-hidden rounded-md bg-muted text-left outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring",
         picked && "ring-2 ring-primary ring-offset-2",
       )}
     >
@@ -158,20 +273,51 @@ function Thumb({
  * picker at its top) or a search's (words, colours, what's in them, as the
  * search bar finds them). Drag one (or the ones picked) onto the board to
  * put them where they drop, or pick some and Add them to the middle of what
- * the board shows. Those already on the board are ticked.
+ * the board shows. Those already on the board are ticked. Its left edge
+ * drags it wider (`resizable`), and the slider sizes the pictures: the grid
+ * has as many columns as fit.
  */
 export function PicturePanel({
   onBoard,
   onAdd,
   onClose,
+  resizable = false,
   className,
 }: {
   /** Bookmarks already on the board. */
   onBoard: ReadonlySet<string>;
   onAdd: (bookmarkIds: string[]) => void;
   onClose: () => void;
+  /** Beside the board, its width the viewer's (not over it, on a phone). */
+  resizable?: boolean;
   className?: string;
 }) {
+  const [width, setWidth] = useState(() =>
+    remembered(WIDTH.key, WIDTH.initial),
+  );
+  const [thumb, setThumb] = useState(() =>
+    clamp(remembered(THUMB.key, THUMB.initial), THUMB.min, THUMB.max),
+  );
+  // The grid's own width (no scrollbar), for its columns.
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Until it's measured: about the panel's width, so it opens in columns.
+  const [gridWidth, setGridWidth] = useState(() =>
+    resizable ? width : window.innerWidth,
+  );
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) {
+      return;
+    }
+    const observer = new ResizeObserver(() => setGridWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const columns = Math.max(
+    1,
+    Math.floor((gridWidth - PADDING + GAP) / (thumb + GAP)),
+  );
+
   const [listId, setListId] = useState<string | null>(null);
   const [text, setText] = useState("");
   const settled = useSettled(text, 300);
@@ -193,8 +339,14 @@ export function PicturePanel({
   return (
     <aside
       aria-label="Add pictures"
-      className={cn("flex min-h-0 flex-col bg-background", className)}
+      className={cn("relative flex min-h-0 flex-col bg-background", className)}
+      style={
+        resizable
+          ? { width, maxWidth: `calc(100% - ${BOARD_ROOM}px)` }
+          : undefined
+      }
     >
+      {resizable && <ResizeHandle width={width} setWidth={setWidth} />}
       <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
         <p className="font-medium">Add pictures</p>
         <Button
@@ -242,8 +394,24 @@ export function PicturePanel({
             aria-label="Search"
           />
         </div>
+        <div
+          className="flex items-center gap-2.5 px-0.5 pt-1 text-muted-foreground"
+          title="Picture size"
+        >
+          <Grid3x3 className="size-3.5 shrink-0" />
+          <Slider
+            min={THUMB.min}
+            max={THUMB.max}
+            step={4}
+            value={[thumb]}
+            onValueChange={([value]) => setThumb(value)}
+            onValueCommit={([value]) => remember(THUMB.key, value)}
+            thumbLabels={["Picture size"]}
+          />
+          <Square className="size-3.5 shrink-0" />
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3">
+      <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto px-3">
         {loading ? (
           <div className="flex justify-center py-10">
             <LoadingSpinner />
@@ -253,7 +421,12 @@ export function PicturePanel({
             Nothing here.
           </p>
         ) : (
-          <div className="columns-2 gap-2">
+          <Masonry
+            // In reading order, row by row, and steady as more load.
+            breakpointCols={columns}
+            className="-ml-2 flex w-auto"
+            columnClassName="pl-2"
+          >
             {bookmarks.map((bookmark) => (
               <Thumb
                 key={bookmark.id}
@@ -266,7 +439,7 @@ export function PicturePanel({
                 onToggle={() => toggle(bookmark.id)}
               />
             ))}
-          </div>
+          </Masonry>
         )}
         <div ref={endRef} className="h-px" />
         {isFetchingNextPage && (

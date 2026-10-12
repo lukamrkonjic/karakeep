@@ -99,21 +99,21 @@ export function ProjectNameDialog({
             <DialogDescription>
               {project
                 ? "Its board stays as it is."
-                : "A board of its own to lay pictures out on — for a game, a room, a look. Pictures stay in their lists too."}
+                : "A board to lay pictures out on. They stay in their lists too."}
             </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Name, e.g. Outpath"
+            placeholder="Name"
             maxLength={MAX_PROJECT_NAME_LENGTH}
             aria-label="Name"
           />
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What it's for (if you like)"
+            placeholder="Description (optional)"
             maxLength={MAX_PROJECT_DESCRIPTION_LENGTH}
             rows={2}
             aria-label="Description"

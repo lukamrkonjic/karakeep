@@ -881,9 +881,10 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
             onBoard={onBoard}
             onAdd={(ids) => actions.addBookmarksAt(ids, middle())}
             onClose={() => setPanelOpen(false)}
+            resizable={!isPhone}
             className={cn(
               "border-l",
-              isPhone ? "absolute inset-0 z-30 border-l-0" : "w-80 shrink-0",
+              isPhone ? "absolute inset-0 z-30 border-l-0" : "shrink-0",
             )}
           />
         )}
