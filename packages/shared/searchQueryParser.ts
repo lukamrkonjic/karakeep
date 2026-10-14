@@ -345,7 +345,8 @@ MATCHER.setPattern(
           case "colour:":
           case "color:#":
           case "colour:#": {
-            // And how much of the picture: color:red>=40%<=80%.
+            // And how much of the picture, color:red>=40%<=80%, and how
+            // near: color:#ab2b3b~80%.
             const range = parseColourRange(
               (qualifier.text.endsWith("#") ? "#" : "") + ident,
             );
@@ -363,6 +364,9 @@ MATCHER.setPattern(
                 inverse: !!minus,
                 ...(range.min === undefined ? {} : { min: range.min }),
                 ...(range.max === undefined ? {} : { max: range.max }),
+                ...(range.accuracy === undefined
+                  ? {}
+                  : { accuracy: range.accuracy }),
               },
             };
           }

@@ -50,6 +50,9 @@ const leaves: Matcher[] = [
   { type: "color", color: "red", inverse: false, min: 40 },
   { type: "color", color: "blue", inverse: false, max: 20 },
   { type: "color", color: "#286ff0", inverse: true, min: 0, max: 60 },
+  // How near.
+  { type: "color", color: "#ab2b3b", inverse: false, accuracy: 80 },
+  { type: "color", color: "red", inverse: true, min: 40, accuracy: 20 },
   {
     type: "dateAfter",
     dateAfter: new Date("2026-01-01T00:00:00.000Z"),

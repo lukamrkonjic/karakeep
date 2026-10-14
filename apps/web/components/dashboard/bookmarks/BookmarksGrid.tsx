@@ -225,12 +225,15 @@ export default function BookmarksGrid({
   fetchNextPage = () => ({}),
   isFetchingNextPage = false,
   showEditorCard = false,
+  endNote,
 }: {
   bookmarks: ZBookmark[];
   showEditorCard?: boolean;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   fetchNextPage?: () => void;
+  /** Fork: under the last of them, once there are no more (a search's). */
+  endNote?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const layout = useBookmarkLayout();
@@ -360,6 +363,7 @@ export default function BookmarksGrid({
           </ActionButton>
         </div>
       )}
+      {!hasNextPage && endNote}
 
       <KeyboardShortcutsDialog
         open={helpDialogOpen}

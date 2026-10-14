@@ -161,29 +161,58 @@ export function deltaE([l1, a1, b1]: Lab, [l2, a2, b2]: Lab): number {
 }
 
 /**
- * Search by colour: a colour within `SAME` counts fully as the one asked
- * for, one past `OTHER` not at all, and in between partly — so "that blue"
- * takes its lighter and darker shades too.
+ * How close a colour has to be to the one asked for to count, in percent
+ * (`color:#ab2b3b~80%`, the colour page's Accuracy). At the default, 50 —
+ * as search by colour has always matched — a colour counts fully within 8
+ * of it (deltaE) and partly up to 24, so "that blue" takes its lighter and
+ * darker shades too; towards 100 it keeps to the colour itself (8 at
+ * most), towards 0 it takes in the colours around it (up to 48). A
+ * family's is measured from its swatch (familyShare).
  */
-const SAME = 8;
-const OTHER = 24;
+export const COLOUR_ACCURACY_DEFAULT = 50;
 
-/** How much of the picture is the colour, 0–1 (see SAME and OTHER). */
-export function colourMatch(palette: PaletteColour[], target: Lab): number {
+const accuracyOf = (accuracy?: number) =>
+  Math.min(100, Math.max(0, accuracy ?? COLOUR_ACCURACY_DEFAULT));
+
+/** All of it up to `same`, none from `other`, and in between partly. */
+function nearness(distance: number, same: number, other: number): number {
+  return distance <= same
+    ? 1
+    : distance >= other
+      ? 0
+      : (other - distance) / (other - same);
+}
+
+/**
+ * How far from the colour asked for another counts fully (`same`) and at
+ * all (`other`), at an accuracy (COLOUR_ACCURACY_DEFAULT).
+ */
+export function colourReach(accuracy?: number): {
+  same: number;
+  other: number;
+} {
+  const a = accuracyOf(accuracy);
+  const other =
+    a >= COLOUR_ACCURACY_DEFAULT
+      ? 24 * 3 ** ((COLOUR_ACCURACY_DEFAULT - a) / 50)
+      : 24 * 2 ** ((COLOUR_ACCURACY_DEFAULT - a) / 50);
+  return { same: other / 3, other };
+}
+
+/** How much of the picture is the colour, 0–1, as near as `accuracy` asks. */
+export function colourMatch(
+  palette: PaletteColour[],
+  target: Lab,
+  accuracy?: number,
+): number {
+  const { same, other } = colourReach(accuracy);
   let score = 0;
   for (const colour of palette) {
     const lab = hexToLab(colour.hex);
     if (!lab) {
       continue;
     }
-    const distance = deltaE(lab, target);
-    const weight =
-      distance <= SAME
-        ? 1
-        : distance >= OTHER
-          ? 0
-          : (OTHER - distance) / (OTHER - SAME);
-    score += colour.share * weight;
+    score += colour.share * nearness(deltaE(lab, target), same, other);
   }
   return score;
 }
@@ -354,17 +383,47 @@ export function colourFamily([l, a, b]: Lab): ColourFamily {
   return l < 40 ? "red" : "pink";
 }
 
-/** How much of a picture is of a family's colours, 0–1. */
+const swatchLabs = new Map<ColourFamily, Lab>();
+function swatchLab(family: ColourFamily): Lab {
+  let lab = swatchLabs.get(family);
+  if (!lab) {
+    lab = hexToLab(FAMILY_SWATCHES[family])!;
+    swatchLabs.set(family, lab);
+  }
+  return lab;
+}
+
+/**
+ * How much of a picture is of a family's colours, 0–1. At the default
+ * accuracy, all of the family's; more keeps to those near its swatch (at
+ * 100, within 15 of it: the reds most like its red), less takes in its
+ * neighbours' colours near it too (at 0, within 30: red-oranges, wine).
+ */
 export function familyShare(
   palette: PaletteColour[],
   family: ColourFamily,
+  accuracy?: number,
 ): number {
+  const a = accuracyOf(accuracy);
+  const swatch = swatchLab(family);
   let share = 0;
   for (const colour of palette) {
     const lab = hexToLab(colour.hex);
-    if (lab && colourFamily(lab) === family) {
-      share += colour.share;
+    if (!lab) {
+      continue;
     }
+    const member = colourFamily(lab) === family;
+    let weight: number;
+    if (a === COLOUR_ACCURACY_DEFAULT) {
+      weight = member ? 1 : 0;
+    } else if (a > COLOUR_ACCURACY_DEFAULT) {
+      const other = (15 * 50) / (a - COLOUR_ACCURACY_DEFAULT);
+      weight = member ? nearness(deltaE(lab, swatch), other / 3, other) : 0;
+    } else {
+      const other = (30 * (COLOUR_ACCURACY_DEFAULT - a)) / 50;
+      weight = member ? 1 : nearness(deltaE(lab, swatch), other / 3, other);
+    }
+    share += colour.share * weight;
   }
   return share;
 }
@@ -401,18 +460,19 @@ export function parseColourQuery(text: string): string | null {
 }
 
 /**
- * How much of a picture answers a parsed colour query (parseColourQuery), and
- * whether that's enough for it to count.
+ * How much of a picture answers a parsed colour query (parseColourQuery), as
+ * near as `accuracy` asks — and whether that's enough for it to count.
  */
 export function colourQueryScore(
   palette: PaletteColour[],
   query: string,
+  accuracy?: number,
 ): number {
   if (isColourFamily(query)) {
-    return familyShare(palette, query);
+    return familyShare(palette, query, accuracy);
   }
   const target = hexToLab(query);
-  return target ? colourMatch(palette, target) : 0;
+  return target ? colourMatch(palette, target, accuracy) : 0;
 }
 
 /** How much of a picture a colour counts from: its family's, or a colour's. */
@@ -430,30 +490,39 @@ export interface ColourShare {
   max?: number;
 }
 
+/**
+ * How a colour is asked for: how much of the picture (ColourShare), and how
+ * near (`accuracy`, COLOUR_ACCURACY_DEFAULT when unset).
+ */
+export interface ColourTerms extends ColourShare {
+  accuracy?: number;
+}
+
 export function colourQueryMatches(
   palette: PaletteColour[],
   query: string,
-  share: ColourShare = {},
+  terms: ColourTerms = {},
 ): boolean {
-  const score = colourQueryScore(palette, query);
-  const min = share.min === undefined ? colourMinimum(query) : share.min / 100;
+  const score = colourQueryScore(palette, query, terms.accuracy);
+  const min = terms.min === undefined ? colourMinimum(query) : terms.min / 100;
   // A palette's shares can add up a hair over 1.
-  const max = share.max === undefined ? Infinity : share.max / 100 + 1e-9;
+  const max = terms.max === undefined ? Infinity : terms.max / 100 + 1e-9;
   return score >= min && score <= max;
 }
 
-/** A colour and how much of a picture it takes up (ColourShare). */
-export interface ColourRange extends ColourShare {
+/** A colour, how much of a picture it takes up and how near (ColourTerms). */
+export interface ColourRange extends ColourTerms {
   colour: string;
 }
 
 /**
  * "red", "red>=40%" (at least), "#286ff0<=20%" (at most), "red>=40%<=80%"
- * (between) — also with > and <, and without the % — as a colour
- * (parseColourQuery) and its share; null when it's none of those.
+ * (between) — also with > and <, and without the % — and "~80%" for its
+ * accuracy ("#ab2b3b~80%", "red>=40%~30%"), as a colour (parseColourQuery)
+ * and its terms; null when it's none of those.
  */
 export function parseColourRange(text: string): ColourRange | null {
-  const at = text.search(/[<>]/);
+  const at = text.search(/[<>~]/);
   const colour = parseColourQuery(at < 0 ? text : text.slice(0, at));
   if (!colour) {
     return null;
@@ -463,25 +532,38 @@ export function parseColourRange(text: string): ColourRange | null {
     return range;
   }
   const bounds = text.slice(at).replace(/\s+/g, "");
-  const bound = /([<>])=?(\d{1,3}(?:\.\d+)?)%?/y;
+  const bound = /([<>~])=?(\d{1,3}(?:\.\d+)?)%?/y;
   let read = 0;
   for (let found = bound.exec(bounds); found; found = bound.exec(bounds)) {
     const percent = Math.min(100, Number(found[2]));
     if (found[1] === ">") {
       range.min = percent;
-    } else {
+    } else if (found[1] === "<") {
       range.max = percent;
+    } else {
+      range.accuracy = percent;
     }
     read = bound.lastIndex;
   }
   return read === bounds.length ? range : null;
 }
 
-/** The other way: "red>=40%<=80%", what's unset (or all of it) left out. */
-export function formatColourRange({ colour, min, max }: ColourRange): string {
+/**
+ * The other way: "red>=40%<=80%~70%", what's unset or the default (all of
+ * it, an accuracy of 50) left out.
+ */
+export function formatColourRange({
+  colour,
+  min,
+  max,
+  accuracy,
+}: ColourRange): string {
   return (
     colour +
     (min === undefined ? "" : `>=${min}%`) +
-    (max === undefined || max >= 100 ? "" : `<=${max}%`)
+    (max === undefined || max >= 100 ? "" : `<=${max}%`) +
+    (accuracy === undefined || accuracy === COLOUR_ACCURACY_DEFAULT
+      ? ""
+      : `~${accuracy}%`)
   );
 }

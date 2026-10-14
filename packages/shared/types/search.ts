@@ -104,6 +104,9 @@ const zColorMatcher = z.object({
   // unset, from the colour's own minimum up to all of it.
   min: z.number().min(0).max(100).optional(),
   max: z.number().min(0).max(100).optional(),
+  // Fork: how near a colour has to be to count, in percent (color:red~80%);
+  // unset, 50 (utils/colours.ts COLOUR_ACCURACY_DEFAULT).
+  accuracy: z.number().min(0).max(100).optional(),
 });
 
 // Fork: in a list or anywhere under it, by its id — a smart list's rule

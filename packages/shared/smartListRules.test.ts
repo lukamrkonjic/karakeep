@@ -8,9 +8,11 @@ import {
   newSmartRule,
   SMART_FIELDS,
   smartRuleMatcher,
+  smartListColour,
   smartRulesFor,
   smartRulesFromQuery,
   suggestSmartListName,
+  withColourAccuracy,
 } from "./smartListRules";
 
 // Fork: a smart list's rules (the editor), as the search language and back.
@@ -78,6 +80,44 @@ describe("Smart list rules", () => {
       "#286ff0, 10–60%",
     );
     expect(suggestSmartListName(all(mostly))).toEqual("Red");
+  });
+
+  test("a colour rule: how near it has to be", () => {
+    const near: ZSmartRule = { field: "colour", op: "is", value: "red~80%" };
+    expect(compileSmartRules(all(near)).query).toEqual("color:red~80%");
+    expect(
+      smartRulesFromQuery("color:#ab2b3b>=10%~30%").groups[0].rules[0],
+    ).toEqual({ field: "colour", op: "is", value: "#ab2b3b>=10%~30%" });
+    expect(describeSmartValue("colour", "red~80%")).toEqual(
+      "Red, 80% accurate",
+    );
+    expect(describeSmartValue("colour", "red>=40%~50%")).toEqual(
+      "Red, at least 40%",
+    );
+
+    // A smart list of one colour: its page tunes it, the rest as written.
+    expect(smartListColour("color:red")).toEqual({ colour: "red" });
+    expect(smartListColour("is:fav colour:#AB2B3B~70%")).toEqual({
+      colour: "#ab2b3b",
+      accuracy: 70,
+    });
+    expect(withColourAccuracy("color:red", 80)).toEqual("color:red~80%");
+    expect(withColourAccuracy("is:fav  color:red>=40%~70% list:x", 50)).toEqual(
+      "is:fav  color:red>=40% list:x",
+    );
+    expect(withColourAccuracy("(color:#ab2b3b or is:fav)", 90)).toEqual(
+      "(color:#ab2b3b~90% or is:fav)",
+    );
+    // Not of one colour (none, two, a "not", the # alone): nothing to tune.
+    for (const query of [
+      "is:fav",
+      "color:red color:blue",
+      "-color:red",
+      "#ab2b3b",
+    ]) {
+      expect(smartListColour(query), query).toBeNull();
+      expect(withColourAccuracy(query, 80), query).toBeNull();
+    }
   });
 
   test("what the groups mean", () => {

@@ -784,6 +784,20 @@ describe("Search Query Parser", () => {
       min: 40,
       max: 80,
     });
+    // And how near (its accuracy).
+    expect(parseSearchQuery("color:#AB2B3B~80%").matcher).toEqual({
+      type: "color",
+      color: "#ab2b3b",
+      inverse: false,
+      accuracy: 80,
+    });
+    expect(parseSearchQuery("color:red>=40%~30%").matcher).toEqual({
+      type: "color",
+      color: "red",
+      inverse: false,
+      min: 40,
+      accuracy: 30,
+    });
     // A share that isn't one: words.
     expect(parseSearchQuery("color:red>=lots").matcher).toBeUndefined();
     // Not a colour: just words.

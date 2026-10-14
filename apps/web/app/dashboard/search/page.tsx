@@ -56,6 +56,16 @@ function SearchComp() {
           fetchNextPage={fetchNextPage}
           isFetchingNextPage={isFetchingNextPage}
           bookmarks={bookmarks}
+          // Everything that answers has been shown (routers/pictures.ts
+          // search finds only what truly does) — unless the pictures are
+          // still to join in.
+          endNote={
+            !picturesPreparing && (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No more results
+              </p>
+            )
+          }
         />
       ) : null}
     </div>

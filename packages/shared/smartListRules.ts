@@ -1,4 +1,5 @@
 import type { BookmarkKind, Matcher } from "./types/search";
+import type { ColourRange } from "./utils/colours";
 import type {
   ZSmartListRules,
   ZSmartRule,
@@ -12,6 +13,7 @@ import {
 } from "./searchQueryPrinter";
 import { BookmarkTypes } from "./types/bookmarks";
 import {
+  COLOUR_ACCURACY_DEFAULT,
   formatColourRange,
   isColourFamily,
   parseColourRange,
@@ -45,8 +47,9 @@ export type SmartValueKind =
   /** Lists' ids, comma-separated (smartListIds): one list, or several. */
   | "list"
   /**
-   * A colour family ("red") or a colour ("#286ff0"), and how much of the
-   * picture it takes up: "red>=40%<=80%" (utils/colours.ts ColourRange).
+   * A colour family ("red") or a colour ("#286ff0"), how much of the
+   * picture it takes up and how near it has to be: "red>=40%<=80%~70%"
+   * (utils/colours.ts ColourRange).
    */
   | "colour"
   /** What a bookmark is (SMART_KINDS). */
@@ -285,6 +288,9 @@ export const SMART_FIELDS: SmartField[] = [
             inverse: op === "is_not",
             ...(range.min === undefined ? {} : { min: range.min }),
             ...(range.max === undefined ? {} : { max: range.max }),
+            ...(range.accuracy === undefined
+              ? {}
+              : { accuracy: range.accuracy }),
           }
         : null;
     },
@@ -296,6 +302,7 @@ export const SMART_FIELDS: SmartField[] = [
               colour: m.color,
               min: m.min,
               max: m.max,
+              accuracy: m.accuracy,
             }),
           }
         : null,
@@ -688,13 +695,20 @@ export function describeSmartValue(
       const name = isColourFamily(range.colour)
         ? nameOf(range.colour)
         : range.colour;
-      const { min, max } = range;
-      if (max === undefined || max >= 100) {
-        return min === undefined ? name : `${name}, at least ${min}%`;
-      }
-      return min === undefined
-        ? `${name}, at most ${max}%`
-        : `${name}, ${min}–${max}%`;
+      const { min, max, accuracy } = range;
+      const share =
+        max === undefined || max >= 100
+          ? min === undefined
+            ? ""
+            : `, at least ${min}%`
+          : min === undefined
+            ? `, at most ${max}%`
+            : `, ${min}–${max}%`;
+      const near =
+        accuracy === undefined || accuracy === COLOUR_ACCURACY_DEFAULT
+          ? ""
+          : `, ${accuracy}% accurate`;
+      return name + share + near;
     }
     case "kind":
       return SMART_KINDS.find((k) => k.id === value)?.label ?? value;
@@ -775,4 +789,72 @@ export function suggestSmartListName(
     }
   }
   return "";
+}
+
+// A `color:` term in a query, as the parser reads it (`-color:` a "not").
+const COLOUR_TERM = /(^|[\s(])([-!]?)(colou?r:)(#?[^\s()]+)/g;
+
+/**
+ * The one colour a smart list's query asks for, and where its terms are
+ * written ("#ab2b3b~80%" after `color:`) — when it asks for exactly one,
+ * not as a "not". Its page tunes how near it has to be (its accuracy).
+ */
+function onlyColourTerm(
+  query: string,
+): { range: ColourRange; start: number; end: number } | null {
+  const colours: Matcher[] = [];
+  const walk = (m: Matcher) => {
+    if (m.type === "and" || m.type === "or") {
+      m.matchers.forEach(walk);
+    } else if (m.type === "color") {
+      colours.push(m);
+    }
+  };
+  const { matcher } = parseSearchQuery(query);
+  if (matcher) {
+    walk(matcher);
+  }
+  if (colours.length !== 1 || colours[0].type !== "color") {
+    return null;
+  }
+  if (colours[0].inverse) {
+    return null;
+  }
+  const terms = [...query.matchAll(COLOUR_TERM)];
+  if (terms.length !== 1 || terms[0][2]) {
+    return null;
+  }
+  const [term] = terms;
+  const start = term.index + term[1].length + term[3].length;
+  const end = term.index + term[0].length;
+  const range = parseColourRange(query.slice(start, end));
+  return range ? { range, start, end } : null;
+}
+
+/**
+ * The colour a smart list is of (`color:red`, `color:#ab2b3b~80%`, maybe
+ * with other rules), when its query asks for just one: its page shows how
+ * near it has to be, to tune. Null for any other query.
+ */
+export function smartListColour(query: string): ColourRange | null {
+  return onlyColourTerm(query)?.range ?? null;
+}
+
+/**
+ * The query with its one colour's accuracy changed and the rest as it was
+ * written; null when it isn't of one colour (smartListColour).
+ */
+export function withColourAccuracy(
+  query: string,
+  accuracy: number,
+): string | null {
+  const term = onlyColourTerm(query);
+  if (!term) {
+    return null;
+  }
+  return (
+    query.slice(0, term.start) +
+    formatColourRange({ ...term.range, accuracy }) +
+    query.slice(term.end)
+  );
 }

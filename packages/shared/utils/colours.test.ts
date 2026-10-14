@@ -4,6 +4,7 @@ import {
   colourFamily,
   colourMatch,
   colourQueryMatches,
+  colourReach,
   colourSortKey,
   deltaE,
   familyShare,
@@ -110,6 +111,65 @@ describe("colours", () => {
       colourMatch(mostlyBlue, blue),
     );
     expect(colourMatch(noBlue, blue)).toBe(0);
+  });
+
+  test("how near a colour has to be: its accuracy", () => {
+    // From crimson: 0.6 (the same), 11.5 (a brighter red), 19.1 (a
+    // red-orange), 37.3 (orange) apart.
+    const crimson = hexToLab("#ab2b3b")!;
+    const same = [{ hex: "#ad2d3c", share: 1 }];
+    const brighter = [{ hex: "#d62828", share: 1 }];
+    const redOrange = [{ hex: "#d9532c", share: 1 }];
+    const orange = [{ hex: "#f77f00", share: 1 }];
+    // The default is as search by colour always was.
+    expect(colourReach()).toEqual({ same: 8, other: 24 });
+    expect(colourReach(50)).toEqual(colourReach());
+    expect(colourReach(100).other).toBeCloseTo(8);
+    expect(colourReach(0).other).toBeCloseTo(48);
+    expect(colourMatch(same, crimson, 100)).toBe(1);
+    expect(colourMatch(brighter, crimson)).toBeCloseTo((24 - 11.5) / 16, 1);
+    expect(colourMatch(brighter, crimson, 90)).toBe(0);
+    expect(colourMatch(redOrange, crimson)).toBeGreaterThan(0);
+    expect(colourMatch(redOrange, crimson, 75)).toBe(0);
+    expect(colourMatch(orange, crimson)).toBe(0);
+    expect(colourMatch(orange, crimson, 0)).toBeGreaterThan(0.2);
+    // A page of crimson at 90% keeps to it; at 0 the oranges come in.
+    expect(colourQueryMatches(brighter, "#ab2b3b")).toBe(true);
+    expect(colourQueryMatches(brighter, "#ab2b3b", { accuracy: 90 })).toBe(
+      false,
+    );
+    expect(colourQueryMatches(orange, "#ab2b3b", { accuracy: 0 })).toBe(true);
+
+    // A family's is measured from its swatch: exact, a dark wine (16.8
+    // from red's red) is no longer red; loose, a coral pink (14.5) is.
+    const wine = [{ hex: "#8e1f2f", share: 1 }];
+    const coral = [{ hex: "#e05a6a", share: 1 }];
+    expect(familyShare(wine, "red")).toBe(1);
+    expect(familyShare(wine, "red", 75)).toBeGreaterThan(0.5);
+    expect(familyShare(wine, "red", 100)).toBe(0);
+    expect(familyShare(coral, "red")).toBe(0);
+    expect(familyShare(coral, "red", 0)).toBeGreaterThan(0.5);
+    const lightGrey = [{ hex: "#d8d8d8", share: 1 }];
+    expect(familyShare(lightGrey, "white")).toBe(0);
+    expect(familyShare(lightGrey, "white", 0)).toBe(1);
+
+    // Written ~80%, alone or after the share; 50 is left out.
+    expect(parseColourRange("#AB2B3B~80%")).toEqual({
+      colour: "#ab2b3b",
+      accuracy: 80,
+    });
+    expect(parseColourRange("red>=40%~30")).toEqual({
+      colour: "red",
+      min: 40,
+      accuracy: 30,
+    });
+    expect(parseColourRange("red~")).toBeNull();
+    expect(formatColourRange({ colour: "#ab2b3b", accuracy: 80 })).toBe(
+      "#ab2b3b~80%",
+    );
+    expect(formatColourRange({ colour: "red", min: 40, accuracy: 50 })).toBe(
+      "red>=40%",
+    );
   });
 
   test("sorted round the colour wheel, then the greys dark to light", () => {

@@ -79,14 +79,18 @@ export const SIMILAR_LEVELS = {
 } as const;
 
 /**
- * Search by description: how well a picture must match the words, as the
- * model's similarity between a text and a picture (a good match is about
- * 0.25–0.35; unrelated ones stay under 0.2).
+ * Search by description: how well a picture must match the words — at
+ * least `floor`, the model's similarity between a text and a picture (a
+ * good match is about 0.25–0.35; unrelated ones stay under 0.2) — and how
+ * far it must stand out from the rest of the user's pictures for those
+ * words (shared-server pictureVectors.ts StandOut): a short word like
+ * "ring" brings everything round over the floor, and the rings far above
+ * it.
  */
 export const DESCRIBE_LEVELS = {
-  strict: 0.26,
-  balanced: 0.23,
-  loose: 0.2,
+  strict: { floor: 0.26, spreads: 4, nearBest: 0.04 },
+  balanced: { floor: 0.23, spreads: 3, nearBest: 0.06 },
+  loose: { floor: 0.2, spreads: 2, nearBest: 0.08 },
 } as const;
 
 /**

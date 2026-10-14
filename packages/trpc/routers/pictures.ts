@@ -200,12 +200,27 @@ const SEARCH_DESCRIBE_WAIT_MS = 1500;
 /** By meaning: as searchBookmarks' hybrid search (routers/bookmarks.ts). */
 const MEANING_RESULTS = 100;
 const MEANING_SCORE_THRESHOLD = 0.6;
+/**
+ * But only this near ((1 + cosine) / 2: cosine 0.6) does meaning find a
+ * bookmark on its own; a looser one (down to cosine 0.2 — for a word like
+ * "ring", memes and comics) only helps rank what the words and the
+ * pictures find.
+ */
+const MEANING_FINDS = 0.8;
+
+/** A colour a query asks for, and how near (color:#ab2b3b~80%). */
+interface AskedColour {
+  colour: string;
+  accuracy?: number;
+}
 
 /** The colours a query asks for (color:red, #c8a27a), however nested. */
-function coloursIn(matcher: Matcher | undefined): string[] {
+function coloursIn(matcher: Matcher | undefined): AskedColour[] {
   switch (matcher?.type) {
     case "color":
-      return matcher.inverse ? [] : [matcher.color];
+      return matcher.inverse
+        ? []
+        : [{ colour: matcher.color, accuracy: matcher.accuracy }];
     case "and":
     case "or":
       return matcher.matchers.flatMap(coloursIn);
@@ -274,7 +289,7 @@ async function byMeaning(
   ctx: AuthedContext,
   words: string,
   allowed: string[] | null,
-): Promise<string[]> {
+): Promise<{ id: string; score: number }[]> {
   const { experimentalFeatures, embedding } = serverConfig;
   if (
     !experimentalFeatures.semanticSearch ||
@@ -300,7 +315,7 @@ async function byMeaning(
       limit: MEANING_RESULTS,
       rankingScoreThreshold: MEANING_SCORE_THRESHOLD,
     });
-    return found.hits.map((hit) => hit.id);
+    return found.hits.map(({ id, score }) => ({ id, score }));
   } catch (e) {
     logger.warn(`[search] Searching by meaning failed: ${e}`);
     return [];
@@ -333,8 +348,10 @@ async function byDescription(
     return null;
   }
   const loaded = await userPictureIndex(ctx.db, ctx.user.id);
+  const { floor, ...standOut } = DESCRIBE_LEVELS[level];
   return rankPictures(loaded.index, vector, {
-    minSimilarity: DESCRIBE_LEVELS[level],
+    minSimilarity: floor,
+    standOut,
     only: allowed ? (id) => allowed.has(id) : undefined,
     limit: MAX_RESULTS,
   }).map((r) => r.id);
@@ -343,7 +360,7 @@ async function byDescription(
 /** Pictures with any of the colours, the most of them first. */
 async function byColours(
   ctx: AuthedContext,
-  colours: string[],
+  colours: AskedColour[],
   allowed: ReadonlySet<string> | null,
 ): Promise<string[]> {
   if (colours.length === 0) {
@@ -361,8 +378,12 @@ async function byColours(
     .map((row) => {
       const palette = row.palette ?? [];
       const scores = colours
-        .filter((colour) => colourQueryMatches(palette, colour))
-        .map((colour) => colourQueryScore(palette, colour));
+        .filter(({ colour, accuracy }) =>
+          colourQueryMatches(palette, colour, { accuracy }),
+        )
+        .map(({ colour, accuracy }) =>
+          colourQueryScore(palette, colour, accuracy),
+        );
       return { id: row.id, match: scores.length ? Math.max(...scores) : -1 };
     })
     .filter((row) => row.match >= 0)
@@ -535,12 +556,14 @@ export const picturesAppRouter = router({
   /**
    * Search by colour: the user's pictures with the most of a colour (and
    * its lighter and darker shades) — or of a family's colours, "red" —
-   * first.
+   * first; as near as `accuracy` asks (utils/colours.ts
+   * COLOUR_ACCURACY_DEFAULT when unset).
    */
   byColour: picturesProcedure
     .input(
       z.object({
         colour: z.string().max(20),
+        accuracy: z.number().min(0).max(100).optional(),
         cursor: z.number().int().min(0).nullish(),
         limit: z.number().int().min(1).max(60).optional(),
       }),
@@ -568,11 +591,13 @@ export const picturesAppRouter = router({
         .filter(
           (row) =>
             !leftOut.has(row.id) &&
-            colourQueryMatches(row.colours ?? [], query),
+            colourQueryMatches(row.colours ?? [], query, {
+              accuracy: input.accuracy,
+            }),
         )
         .map((row) => ({
           id: row.id,
-          match: colourQueryScore(row.colours ?? [], query),
+          match: colourQueryScore(row.colours ?? [], query, input.accuracy),
         }))
         .sort((a, b) => b.match - a.match)
         .slice(0, MAX_COLOUR_RESULTS);
@@ -624,7 +649,10 @@ export const picturesAppRouter = router({
    * text embeddings, by meaning — the search language's qualifiers (list:,
    * is:fav…) narrowing all of it. Each ranks on its own and they're merged
    * by rank, so what several find rises; newest or oldest first, it's all
-   * of them by date. A new description's fingerprint can take the workers a
+   * of them by date. Only what truly answers is found — pictures that stand
+   * out for the words (DESCRIBE_LEVELS), a close meaning (MEANING_FINDS) —
+   * so the results end where the matches do. A new description's
+   * fingerprint can take the workers a
    * moment (the first time, the text model downloads): until it's there, the
    * rest answers, with `pictures: "preparing"`. With `listIds` (the search
    * bar's list chips), only what's in those lists — any of them, and what's
@@ -675,14 +703,25 @@ export const picturesAppRouter = router({
         if (pictureHits === null) {
           pictures = "preparing";
         }
-        const found = [wordHits, meaningHits, pictureHits ?? []];
-        // The words find; a colour only puts the most of it first.
-        const foundIds = new Set(found.flat());
+        // The words and the pictures find, and a close meaning; a looser
+        // meaning and a colour only put what's found first.
+        const found = [wordHits, pictureHits ?? []];
+        const foundIds = new Set([
+          ...found.flat(),
+          ...meaningHits
+            .filter((hit) => hit.score >= MEANING_FINDS)
+            .map((hit) => hit.id),
+        ]);
+        const meaningFirst = meaningHits
+          .map((hit) => hit.id)
+          .filter((id) => foundIds.has(id));
         const colourFirst = colourHits.filter((id) => foundIds.has(id));
         ranked =
           sortOrder === "relevance"
             ? reciprocalRankFusion(
-                [...found, colourFirst].map((ids) => ids.map((id) => ({ id }))),
+                [...found, meaningFirst, colourFirst].map((ids) =>
+                  ids.map((id) => ({ id })),
+                ),
               ).map((hit) => hit.id)
             : await byDate(ctx, [...foundIds], sortOrder);
       } else {

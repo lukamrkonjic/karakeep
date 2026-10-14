@@ -8,6 +8,7 @@ import {
   pictureDistance,
   rankPictures,
   sameKind,
+  standOutCutoff,
   sameLength,
   vectorToBuffer,
 } from "./pictureVectors";
@@ -100,5 +101,55 @@ describe("videos", () => {
     expect(sameKind(video(12), video(12.5))).toBe(true);
     expect(sameKind(video(12), video(20))).toBe(false);
     expect(sameKind(video(null), video(12))).toBe(false);
+  });
+});
+
+describe("what stands out for a description", () => {
+  // Pictures evenly from `from` to `to` alike.
+  const spread = (n: number, from: number, to: number) =>
+    Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
+  const standOut = { spreads: 3, nearBest: 0.06 };
+
+  test("far above the rest's spread, or near the best", () => {
+    // The rest round 0.19 (a robust deviation of 1.4826 × 0.02): standing
+    // out starts at 0.28 — but rings at 0.32 keep those down to 0.26.
+    const rest = spread(301, 0.15, 0.23);
+    expect(standOutCutoff([...rest, 0.3, 0.32], standOut)).toBeCloseTo(0.26);
+    expect(standOutCutoff([...rest, 0.36], standOut)).toBeCloseTo(
+      0.19 + 3 * 1.4826 * 0.02,
+      2,
+    );
+    // A subject much of the library shows keeps its pictures.
+    expect(
+      standOutCutoff(
+        [...spread(180, 0.15, 0.21), ...spread(120, 0.24, 0.3)],
+        standOut,
+      ),
+    ).toBeCloseTo(0.24);
+    // Too few pictures to tell.
+    expect(standOutCutoff(spread(50, 0.1, 0.3), standOut)).toBeNull();
+  });
+
+  test("ranked: only what stands out, over the floor", () => {
+    const like = (id: string, similarity: number) =>
+      at(id, (Math.acos(similarity) * 180) / Math.PI);
+    const index = buildPictureIndex([
+      ...spread(200, 0.15, 0.23).map((s, i) => like(`rest ${i}`, s)),
+      like("round", 0.24),
+      like("ring", 0.3),
+      like("best ring", 0.32),
+    ]);
+    const word = Float32Array.from([1, 0]);
+    const ids = (opts: Parameters<typeof rankPictures>[2]) =>
+      rankPictures(index, word, opts).map((r) => r.id);
+    expect(ids({ minSimilarity: 0.235 })).toEqual([
+      "best ring",
+      "ring",
+      "round",
+    ]);
+    expect(ids({ minSimilarity: 0.235, standOut })).toEqual([
+      "best ring",
+      "ring",
+    ]);
   });
 });

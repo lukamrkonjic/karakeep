@@ -113,8 +113,10 @@ export async function picturesShowing(
   }
   const { describeLevel } = await getPictureSettings(ctx.db, ctx.user.id);
   const loaded = await userPictureIndex(ctx.db, ctx.user.id);
+  const { floor, ...standOut } = DESCRIBE_LEVELS[describeLevel];
   return rankPictures(loaded.index, vector, {
-    minSimilarity: DESCRIBE_LEVELS[describeLevel],
+    minSimilarity: floor,
+    standOut,
   }).map((r) => r.id);
 }
 

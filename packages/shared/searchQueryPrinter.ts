@@ -81,6 +81,7 @@ export function matcherToQuery(matcher: Matcher): string {
         colour: matcher.color,
         min: matcher.min,
         max: matcher.max,
+        accuracy: matcher.accuracy,
       })}`;
     case "dateAfter":
       return `${not(matcher.inverse)}after:${day(matcher.dateAfter)}`;

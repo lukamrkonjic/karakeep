@@ -1,18 +1,34 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ColourAccuracy } from "@/components/dashboard/pictures/ColourAccuracy";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { isEmojiIcon } from "@/lib/emoji";
 import { usePageFilters, useSetPageFilters } from "@/lib/hooks/usePageFilter";
 import { useTranslation } from "@/lib/i18n/client";
 import { bookmarkFilterQuery, toggledFilter } from "@/lib/pageFilter";
 import { cn } from "@/lib/utils";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { MoreHorizontal, Star } from "lucide-react";
 
 import type { ZGetBookmarksRequest } from "@karakeep/shared/types/bookmarks";
+import { useEditBookmarkList } from "@karakeep/shared-react/hooks/lists";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import {
+  smartListColour,
+  withColourAccuracy,
+} from "@karakeep/shared/smartListRules";
 import { ZBookmarkList } from "@karakeep/shared/types/lists";
+import {
+  COLOUR_ACCURACY_DEFAULT,
+  isColourFamily,
+} from "@karakeep/shared/utils/colours";
 
 import NewBookmarkDialog from "../bookmarks/NewBookmarkDialog";
 import { ListOptions } from "./ListOptions";
@@ -74,6 +90,60 @@ function StarredLink({
       </button>
       <span aria-hidden>·</span>
     </>
+  );
+}
+
+/**
+ * Fork: a smart list of a colour (`color:red`, maybe with other rules): its
+ * Accuracy, as on the colour pages — but its own, kept in its query
+ * (`color:red~70%`) once the slider is still.
+ */
+function ColourListAccuracy({ list }: { list: ZBookmarkList }) {
+  const api = useTRPC();
+  const queryClient = useQueryClient();
+  const query = list.query ?? "";
+  const colour = useMemo(() => smartListColour(query), [query]);
+  const saved = colour?.accuracy ?? COLOUR_ACCURACY_DEFAULT;
+  // Shown until the list has it.
+  const [draft, setDraft] = useState<number | null>(null);
+  const { mutate: editList } = useEditBookmarkList({
+    onSuccess: () =>
+      void queryClient.invalidateQueries(api.lists.stats.pathFilter()),
+    onError: (e) => {
+      setDraft(null);
+      toast({ variant: "destructive", description: e.message });
+    },
+  });
+  useEffect(() => {
+    if (draft === null) {
+      return;
+    }
+    if (draft === saved) {
+      setDraft(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const next = withColourAccuracy(query, draft);
+      if (next) {
+        editList({ listId: list.id, query: next });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [draft, saved, query, list.id, editList]);
+  if (!colour) {
+    return null;
+  }
+  return (
+    <ColourAccuracy
+      value={draft ?? saved}
+      onChange={setDraft}
+      className="mr-1"
+      family={
+        isColourFamily(colour.colour)
+          ? colour.colour.charAt(0).toUpperCase() + colour.colour.slice(1)
+          : undefined
+      }
+    />
   );
 }
 
@@ -146,6 +216,10 @@ export default function ListHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center">
+        {list.type === "smart" &&
+          (list.userRole === "owner" || list.userRole === "editor") && (
+            <ColourListAccuracy list={list} />
+          )}
         {list.type === "manual" && <NewBookmarkDialog />}
         <ListOptions list={list}>
           <Button variant="ghost">

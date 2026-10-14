@@ -14,6 +14,7 @@ import { PageOptions } from "@/components/dashboard/PageOptions";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { useColourLeftOut, useSetColourLeftOut } from "@/lib/leftOutLists";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { ListChecks, ListPlus } from "lucide-react";
@@ -22,23 +23,29 @@ import {
   useBookmarkLists,
   useCreateBookmarkList,
 } from "@karakeep/shared-react/hooks/lists";
+import { useDebounce } from "@karakeep/shared-react/hooks/use-debounce";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import {
+  COLOUR_ACCURACY_DEFAULT,
   COLOUR_FAMILIES,
   FAMILY_SWATCHES,
+  formatColourRange,
   isColourFamily,
   parseColourQuery,
 } from "@karakeep/shared/utils/colours";
 
+import { ColourAccuracy } from "./ColourAccuracy";
+
 /**
- * The pictures with a colour, or a family's colours, a page at a time —
- * none from the lists the colour pages leave out (ColourChooseLists).
+ * The pictures with a colour, or a family's colours, a page at a time, as
+ * near as `accuracy` asks — none from the lists the colour pages leave out
+ * (ColourChooseLists).
  */
-function useColourResults(colour: string) {
+function useColourResults(colour: string, accuracy: number) {
   const api = useTRPC();
   return useInfiniteQuery(
     api.pictures.byColour.infiniteQueryOptions(
-      { colour },
+      { colour, accuracy },
       {
         initialCursor: 0,
         getNextPageParam: (page) => page.nextCursor,
@@ -49,9 +56,15 @@ function useColourResults(colour: string) {
 }
 
 /** The pictures with a colour in them, the most of it first. */
-function ColourResults({ colour }: { colour: string }) {
+function ColourResults({
+  colour,
+  accuracy,
+}: {
+  colour: string;
+  accuracy: number;
+}) {
   const { data, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useColourResults(colour);
+    useColourResults(colour, accuracy);
   if (error) {
     throw error;
   }
@@ -116,8 +129,10 @@ const nameOf = (family: string) =>
 /**
  * Fork: pictures by colour — a family's (red, beige…: the chips) or one
  * colour's, its lighter and darker shades too (the swatch picks any), the
- * most of it first (routers/pictures.ts byColour). Saved as a smart list
- * (`color:red`), it's a folder of that colour that keeps itself up to date.
+ * most of it first (routers/pictures.ts byColour), as near as its Accuracy
+ * asks (one for every colour page, kept in the account). Saved as a smart
+ * list (`color:red`, `color:#ab2b3b~80%`), it's a folder of that colour
+ * that keeps itself up to date.
  */
 export default function ColourPage({ colour: param }: { colour: string }) {
   const router = useRouter();
@@ -143,7 +158,11 @@ export default function ColourPage({ colour: param }: { colour: string }) {
     return () => clearTimeout(timer);
   }, [picked, shown, router]);
 
-  const total = useColourResults(query).data?.pages[0]?.total;
+  const accuracy = usePreference("colourAccuracy") ?? COLOUR_ACCURACY_DEFAULT;
+  const updatePreferences = useUpdatePreferences();
+  // The pictures follow the slider's pauses.
+  const asked = useDebounce(accuracy, 250);
+  const total = useColourResults(query, asked).data?.pages[0]?.total;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { mutate: createList, isPending: saving } = useCreateBookmarkList({
     onSuccess: (list) => router.push(`/dashboard/lists/${list.id}`),
@@ -152,9 +171,10 @@ export default function ColourPage({ colour: param }: { colour: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex min-w-0 items-center gap-4">
+      {/* On a phone, closer together: the colour's name keeps its room. */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-4">
         <label
-          className="relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-xl ring-1 ring-inset ring-black/10 dark:ring-white/15"
+          className="relative size-12 shrink-0 cursor-pointer overflow-hidden rounded-xl ring-1 ring-inset ring-black/10 dark:ring-white/15 sm:size-16"
           style={{ backgroundColor: picked }}
           title="Pick a colour"
         >
@@ -166,8 +186,8 @@ export default function ColourPage({ colour: param }: { colour: string }) {
             className="absolute inset-0 size-full cursor-pointer opacity-0"
           />
         </label>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-semibold leading-tight">
+        <div className="min-w-0 flex-1 pl-1 sm:pl-0">
+          <h1 className="truncate text-xl font-semibold leading-tight sm:text-2xl">
             {family ? nameOf(family) : query}
           </h1>
           <p className="mt-1 truncate text-sm text-muted-foreground">
@@ -176,6 +196,13 @@ export default function ColourPage({ colour: param }: { colour: string }) {
               : `${total.toLocaleString()} ${total === 1 ? "picture" : "pictures"}`}
           </p>
         </div>
+        <ColourAccuracy
+          value={accuracy}
+          onChange={(colourAccuracy) =>
+            void updatePreferences({ colourAccuracy })
+          }
+          family={family ? nameOf(family) : undefined}
+        />
         <Button
           variant="outline"
           size="sm"
@@ -188,7 +215,7 @@ export default function ColourPage({ colour: param }: { colour: string }) {
               // No emoji of its own: one can be picked in its settings.
               icon: "",
               type: "smart",
-              query: `color:${query}`,
+              query: `color:${formatColourRange({ colour: query, accuracy })}`,
             })
           }
         >
@@ -234,7 +261,7 @@ export default function ColourPage({ colour: param }: { colour: string }) {
           />
         ))}
       </div>
-      <ColourResults colour={query} />
+      <ColourResults colour={query} accuracy={asked} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   assets,
@@ -17,6 +17,7 @@ import {
   pictureTextQueryId,
   vectorToBuffer,
 } from "@karakeep/shared-server";
+import serverConfig from "@karakeep/shared/config";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { colourSortKey } from "@karakeep/shared/utils/colours";
 
@@ -47,6 +48,37 @@ vi.mock("@karakeep/shared/search", async (original) => ({
   }),
 }));
 beforeEach(() => wordIndex.clear());
+
+// Fork: search by meaning (text embeddings), faked — the hits and their
+// ranking scores; off unless a test turns it on.
+const meaningHits = vi.hoisted(() => ({
+  hits: [] as { id: string; score: number }[],
+}));
+vi.mock("@karakeep/shared/inference", () => ({
+  EmbeddingClientFactory: {
+    build: () => ({
+      generateEmbeddingFromText: async () => ({ embeddings: [[0.1, 0.2]] }),
+    }),
+  },
+}));
+vi.mock("@karakeep/shared/vectorStore", async (original) => ({
+  ...(await original<typeof import("@karakeep/shared/vectorStore")>()),
+  getVectorStoreClient: async () => ({
+    search: async () => ({ hits: meaningHits.hits, processingTimeMs: 0 }),
+  }),
+}));
+const meaningConfig = {
+  semanticSearch: serverConfig.experimentalFeatures.semanticSearch,
+  enableAutoIndexing: serverConfig.embedding.enableAutoIndexing,
+  isConfigured: serverConfig.embedding.isConfigured,
+};
+afterEach(() => {
+  meaningHits.hits = [];
+  serverConfig.experimentalFeatures.semanticSearch =
+    meaningConfig.semanticSearch;
+  serverConfig.embedding.enableAutoIndexing = meaningConfig.enableAutoIndexing;
+  serverConfig.embedding.isConfigured = meaningConfig.isConfigured;
+});
 
 type Api = CustomTestContext["apiCallers"][number];
 type DB = CustomTestContext["db"];
@@ -281,6 +313,39 @@ describe("Pictures", () => {
     await caller.pictures.updateSettings({ describeEnabled: false });
     expect(await search("red chair")).toMatchObject({ pictures: "off" });
     expect(titles(await search("red chair"))).toEqual(["c", "a"]);
+  });
+
+  test<CustomTestContext>("search: only what answers — a loose meaning ranks, a close one finds", async ({
+    apiCallers,
+    db,
+  }) => {
+    const caller = apiCallers[0];
+    const a = await picture(caller, db, "a", 0);
+    const b = await picture(caller, db, "b", 10);
+    const c = await picture(caller, db, "c", 35);
+    await picture(caller, db, "d", 45);
+    const description = normalizeDescription("ring");
+    await db.insert(pictureTextQueriesTable).values({
+      id: pictureTextQueryId(description),
+      text: description,
+      embedding: vectorToBuffer(at(90)),
+    });
+    serverConfig.experimentalFeatures.semanticSearch = true;
+    serverConfig.embedding.enableAutoIndexing = true;
+    serverConfig.embedding.isConfigured = true;
+    // By meaning: c close, a loosely (cosine 0.4), b close enough to be
+    // found on its own (cosine 0.64).
+    meaningHits.hits = [
+      { id: c, score: 0.9 },
+      { id: a, score: 0.7 },
+      { id: b, score: 0.82 },
+    ];
+    // What's in the pictures finds d and c; meaning puts c first and finds
+    // b — not a, which nothing else finds.
+    const found = await caller.pictures.search({ text: "ring" });
+    expect(titles(found)).toEqual(["c", "d", "b"]);
+    expect(found.nextCursor).toBeNull();
+    expect(found.total).toBe(3);
   });
 
   test<CustomTestContext>("a picture's file replaced by its crop, for good", async ({
@@ -553,6 +618,20 @@ describe("Pictures", () => {
     expect(titles(await api.pictures.byColour({ colour: "red" }))).toEqual([
       "red",
     ]);
+    // As near as asked: crimson takes in that red (11.5 from it) as a
+    // colour page always has, but not at 90% — nor saved so.
+    expect(titles(await api.pictures.byColour({ colour: "#ab2b3b" }))).toEqual([
+      "red",
+    ]);
+    expect(
+      (await api.pictures.byColour({ colour: "#ab2b3b", accuracy: 90 })).total,
+    ).toBe(0);
+    expect(
+      titles(await api.pictures.search({ text: "color:#ab2b3b" })),
+    ).toEqual(["red"]);
+    expect(
+      titles(await api.pictures.search({ text: "color:#ab2b3b~90%" })),
+    ).toEqual([]);
 
     // The lists the colour pages leave out (their "…" → Choose lists…):
     // what's in them, or in a list under them, isn't shown or counted on a

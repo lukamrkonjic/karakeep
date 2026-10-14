@@ -36,6 +36,7 @@ import {
   smartField,
 } from "@karakeep/shared/smartListRules";
 import {
+  COLOUR_ACCURACY_DEFAULT,
   COLOUR_FAMILIES,
   colourMinimum,
   FAMILY_SWATCHES,
@@ -184,6 +185,7 @@ function ColourShare({
       className="flex items-center gap-3 pl-1"
       title="How much of the picture is this colour"
     >
+      <span className={ROW_LABEL}>Amount</span>
       <Slider
         value={[low, high]}
         min={0}
@@ -206,9 +208,50 @@ function ColourShare({
   );
 }
 
+/** The colour rule's rows' names, as wide as the longest. */
+const ROW_LABEL = "w-16 shrink-0 text-xs text-muted-foreground";
+
 /**
- * A colour family (the colour page's chips) or a colour of your own, and
- * how much of the picture it's to take up (ColourShare).
+ * How near a colour has to be to count (utils/colours.ts
+ * COLOUR_ACCURACY_DEFAULT): looser takes in the shades around it, exact
+ * keeps to the colour. Left at the default, it stays out of the query.
+ */
+function ColourNearness({
+  accuracy,
+  onChange,
+}: {
+  accuracy?: number;
+  onChange: (accuracy?: number) => void;
+}) {
+  const value = accuracy ?? COLOUR_ACCURACY_DEFAULT;
+  return (
+    <div
+      className="flex items-center gap-3 pl-1"
+      title="How close a colour has to be to count: looser takes in the shades around it, exact keeps to the colour"
+    >
+      <span className={ROW_LABEL}>Accuracy</span>
+      <Slider
+        value={[value]}
+        min={0}
+        max={100}
+        step={5}
+        thumbLabels={["Accuracy"]}
+        onValueChange={([next]) =>
+          onChange(next === COLOUR_ACCURACY_DEFAULT ? undefined : next)
+        }
+        className="flex-1"
+      />
+      <span className="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        {value}%
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A colour family (the colour page's chips) or a colour of your own, how
+ * much of the picture it's to take up (ColourShare) and how near it has to
+ * be (ColourNearness).
  */
 function Colour({
   value,
@@ -221,11 +264,9 @@ function Colour({
   const range = parseColourRange(value);
   const colour = range?.colour ?? null;
   const own = colour && !isColourFamily(colour) ? colour : "#286ff0";
-  // Another colour keeps the share asked for.
+  // Another colour keeps the share and the accuracy asked for.
   const pick = (next: string) =>
-    onChange(
-      formatColourRange({ colour: next, min: range?.min, max: range?.max }),
-    );
+    onChange(formatColourRange({ ...range, colour: next }));
   return (
     <div className="flex flex-col gap-2">
       <Popover open={open} onOpenChange={setOpen}>
@@ -285,14 +326,22 @@ function Colour({
         </PopoverContent>
       </Popover>
       {colour && (
-        <ColourShare
-          colour={colour}
-          min={range?.min}
-          max={range?.max}
-          onChange={(min, max) =>
-            onChange(formatColourRange({ colour, min, max }))
-          }
-        />
+        <>
+          <ColourShare
+            colour={colour}
+            min={range?.min}
+            max={range?.max}
+            onChange={(min, max) =>
+              onChange(formatColourRange({ ...range, colour, min, max }))
+            }
+          />
+          <ColourNearness
+            accuracy={range?.accuracy}
+            onChange={(accuracy) =>
+              onChange(formatColourRange({ ...range, colour, accuracy }))
+            }
+          />
+        </>
       )}
     </div>
   );

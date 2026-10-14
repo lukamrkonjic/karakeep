@@ -27,6 +27,10 @@ export const zUiPreferencesSchema = z.object({
   // doesn't contain" reads. (Until 2026-10-12 smart lists asking for a
   // colour left them out too; each now picks its own — smartListLeftOut.)
   colourLeftOutLists: z.array(z.string()).max(5000).optional(),
+  // How near a colour has to be to count on the colour pages (their
+  // Accuracy, utils/colours.ts COLOUR_ACCURACY_DEFAULT): one for them all.
+  // A smart list of a colour keeps its own in its query (color:red~70%).
+  colourAccuracy: z.number().int().min(0).max(100).optional(),
   // Each page's "…" Sort, by page key (apps/web/lib/pageSort.ts).
   pageSorts: z
     .record(z.string().max(100), z.string().max(20))

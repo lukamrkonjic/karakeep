@@ -110,14 +110,62 @@ export interface RankedPicture {
 }
 
 /**
- * The pictures at least `minSimilarity` like `vector`, most alike first.
- * Embeddings are of length 1, so the similarity is their dot product.
+ * What it takes to stand out from the rest of a user's pictures, for a
+ * description (search by description): a word like "ring" has everything
+ * round a little like it, and the rings far more.
+ */
+export interface StandOut {
+  /** Robust standard deviations above the median of all the pictures. */
+  spreads: number;
+  /**
+   * Or as close as this to the best match: a subject much of the library
+   * shows lifts the median and the spread with it.
+   */
+  nearBest: number;
+}
+
+/** With fewer pictures than this, how they spread says too little. */
+export const STAND_OUT_MIN_PICTURES = 100;
+
+const middleOf = (sorted: ArrayLike<number>) => {
+  const half = sorted.length >> 1;
+  return sorted.length % 2
+    ? sorted[half]
+    : (sorted[half - 1] + sorted[half]) / 2;
+};
+
+/**
+ * Where what stands out starts among these similarities (StandOut): the
+ * median plus `spreads` times 1.4826 × the median absolute deviation (a
+ * standard deviation the matches themselves hardly move), or `nearBest`
+ * under the best, whichever is lower. Null with too few to tell.
+ */
+export function standOutCutoff(
+  similarities: ArrayLike<number>,
+  { spreads, nearBest }: StandOut,
+): number | null {
+  if (similarities.length < STAND_OUT_MIN_PICTURES) {
+    return null;
+  }
+  const sorted = Float64Array.from(similarities).sort();
+  const median = middleOf(sorted);
+  const deviation = middleOf(sorted.map((v) => Math.abs(v - median)).sort());
+  const best = sorted[sorted.length - 1];
+  return Math.min(median + spreads * 1.4826 * deviation, best - nearBest);
+}
+
+/**
+ * The pictures at least `minSimilarity` like `vector`, most alike first —
+ * and, with `standOut`, only those that stand out from the rest of the
+ * index (standOutCutoff). Embeddings are of length 1, so the similarity is
+ * their dot product.
  */
 export function rankPictures(
   index: PictureIndex,
   vector: Float32Array,
   opts: {
     minSimilarity: number;
+    standOut?: StandOut;
     /** Leave these out (the picture itself, say). */
     exclude?: ReadonlySet<string>;
     /** Only pictures this accepts. */
@@ -129,19 +177,27 @@ export function rankPictures(
   if (vector.length !== dims) {
     return [];
   }
-  const found: RankedPicture[] = [];
+  const similarities = new Float32Array(ids.length);
   for (let i = 0; i < ids.length; i++) {
     let dot = 0;
     const offset = i * dims;
     for (let d = 0; d < dims; d++) {
       dot += vectors[offset + d] * vector[d];
     }
+    similarities[i] = dot;
+  }
+  const cutoff = opts.standOut
+    ? standOutCutoff(similarities, opts.standOut)
+    : null;
+  const least = Math.max(opts.minSimilarity, cutoff ?? -Infinity);
+  const found: RankedPicture[] = [];
+  for (let i = 0; i < ids.length; i++) {
     if (
-      dot >= opts.minSimilarity &&
+      similarities[i] >= least &&
       !opts.exclude?.has(ids[i]) &&
       (!opts.only || opts.only(ids[i]))
     ) {
-      found.push({ id: ids[i], similarity: dot });
+      found.push({ id: ids[i], similarity: similarities[i] });
     }
   }
   found.sort((a, b) => b.similarity - a.similarity);
