@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
+import { useAssetUrl } from "@/lib/assetUrl";
 import type { MediaSize } from "@/lib/mediaSizes";
 import { knownMediaSize, probeImageSize } from "@/lib/mediaSizes";
 import {
@@ -12,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { ExternalLink, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
-import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
 import { CropPicture } from "./CropPicture";
 import { ZoomableImage } from "./ZoomableImage";
@@ -77,6 +77,7 @@ export function getPreviewMedia(bookmark: ZBookmark): PreviewMedia | null {
  * file's header as it arrives.
  */
 function useMediaSize(media: PreviewMedia): MediaSize | null {
+  const getAssetUrl = useAssetUrl();
   const known = () =>
     knownMediaSize(media.assetId) ?? knownMediaSize(media.posterAssetId);
   const [size, setSize] = useState<MediaSize | null>(known);
@@ -109,6 +110,7 @@ export function MediaFitPreview({
    */
   crop?: { bookmarkId: string; assetId: string; fileName?: string | null };
 }) {
+  const getAssetUrl = useAssetUrl();
   const [cropping, setCropping] = useState(false);
   // One remembered setting for every preview (lib/previewDetails.ts).
   const panelOpen = !usePreviewDetailsHidden();

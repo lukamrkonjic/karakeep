@@ -422,6 +422,100 @@ async function byDate(
     .map((row) => row.id);
 }
 
+/** What `search` takes. */
+export const zPictureSearchInput = z.object({
+  text: z.string().max(1000),
+  listIds: z.array(z.string()).max(50).optional(),
+  sortOrder: zSortOrder.optional(),
+  cursor: z.number().int().min(0).nullish(),
+});
+
+/**
+ * The search bar's search (`search` below). Fork: `only` keeps it to these
+ * bookmarks whatever the query says — a guest link's (routers/guestShares.ts),
+ * which searches as the link's owner, within the lists it shows.
+ */
+export async function searchPictures(
+  ctx: AuthedContext,
+  input: z.infer<typeof zPictureSearchInput>,
+  only?: string[],
+) {
+  const sortOrder = input.sortOrder ?? "relevance";
+  const parsed = parseSearchQuery(input.text);
+  const matcher = withinLists(parsed.matcher, input.listIds);
+  const words = parsed.text.trim();
+  const settings = await getPictureSettings(ctx.db, ctx.user.id);
+  let pictures: "on" | "preparing" | "off" = settings.describeEnabled
+    ? "on"
+    : "off";
+  let allowedIds = matcher
+    ? await getBookmarkIdsFromMatcher(ctx, matcher)
+    : null;
+  if (only) {
+    const within = new Set(only);
+    allowedIds = allowedIds ? allowedIds.filter((id) => within.has(id)) : only;
+  }
+  const allowed = allowedIds ? new Set(allowedIds) : null;
+  const colours = settings.palettesEnabled ? coloursIn(matcher) : [];
+
+  let ranked: string[];
+  if (allowedIds?.length === 0) {
+    ranked = [];
+  } else if (words) {
+    const [wordHits, meaningHits, pictureHits, colourHits] = await Promise.all([
+      byWords(ctx, words, allowedIds),
+      byMeaning(ctx, words, allowedIds),
+      settings.describeEnabled
+        ? byDescription(ctx, words, allowed, settings.describeLevel)
+        : [],
+      byColours(ctx, colours, allowed),
+    ]);
+    if (pictureHits === null) {
+      pictures = "preparing";
+    }
+    // The words and the pictures find, and a close meaning; a looser
+    // meaning and a colour only put what's found first.
+    const found = [wordHits, pictureHits ?? []];
+    const foundIds = new Set([
+      ...found.flat(),
+      ...meaningHits
+        .filter((hit) => hit.score >= MEANING_FINDS)
+        .map((hit) => hit.id),
+    ]);
+    const meaningFirst = meaningHits
+      .map((hit) => hit.id)
+      .filter((id) => foundIds.has(id));
+    const colourFirst = colourHits.filter((id) => foundIds.has(id));
+    ranked =
+      sortOrder === "relevance"
+        ? reciprocalRankFusion(
+            [...found, meaningFirst, colourFirst].map((ids) =>
+              ids.map((id) => ({ id })),
+            ),
+          ).map((hit) => hit.id)
+        : await byDate(ctx, [...foundIds], sortOrder);
+  } else {
+    // Qualifiers only (is:fav, list:…): all they match, by date — for a
+    // colour, the most of it first.
+    const dated = await byDate(
+      ctx,
+      allowedIds,
+      sortOrder === "asc" ? "asc" : "desc",
+    );
+    if (sortOrder === "relevance" && colours.length > 0) {
+      const first = await byColours(ctx, colours, allowed);
+      const firstIds = new Set(first);
+      ranked = [...first, ...dated.filter((id) => !firstIds.has(id))];
+    } else {
+      ranked = dated;
+    }
+  }
+  return {
+    ...(await pageOf(ctx, ranked, input.cursor ?? 0, PAGE)),
+    pictures,
+  };
+}
+
 export const picturesAppRouter = router({
   settings: picturesProcedure
     .output(zPictureSettingsSchema)
@@ -659,92 +753,13 @@ export const picturesAppRouter = router({
    * under them.
    */
   search: picturesProcedure
-    .input(
-      z.object({
-        text: z.string().max(1000),
-        listIds: z.array(z.string()).max(50).optional(),
-        sortOrder: zSortOrder.optional(),
-        cursor: z.number().int().min(0).nullish(),
-      }),
-    )
+    .input(zPictureSearchInput)
     .output(
       zPageOfPictures.extend({
         pictures: z.enum(["on", "preparing", "off"]),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      const sortOrder = input.sortOrder ?? "relevance";
-      const parsed = parseSearchQuery(input.text);
-      const matcher = withinLists(parsed.matcher, input.listIds);
-      const words = parsed.text.trim();
-      const settings = await getPictureSettings(ctx.db, ctx.user.id);
-      let pictures: "on" | "preparing" | "off" = settings.describeEnabled
-        ? "on"
-        : "off";
-      const allowedIds = matcher
-        ? await getBookmarkIdsFromMatcher(ctx, matcher)
-        : null;
-      const allowed = allowedIds ? new Set(allowedIds) : null;
-      const colours = settings.palettesEnabled ? coloursIn(matcher) : [];
-
-      let ranked: string[];
-      if (allowedIds?.length === 0) {
-        ranked = [];
-      } else if (words) {
-        const [wordHits, meaningHits, pictureHits, colourHits] =
-          await Promise.all([
-            byWords(ctx, words, allowedIds),
-            byMeaning(ctx, words, allowedIds),
-            settings.describeEnabled
-              ? byDescription(ctx, words, allowed, settings.describeLevel)
-              : [],
-            byColours(ctx, colours, allowed),
-          ]);
-        if (pictureHits === null) {
-          pictures = "preparing";
-        }
-        // The words and the pictures find, and a close meaning; a looser
-        // meaning and a colour only put what's found first.
-        const found = [wordHits, pictureHits ?? []];
-        const foundIds = new Set([
-          ...found.flat(),
-          ...meaningHits
-            .filter((hit) => hit.score >= MEANING_FINDS)
-            .map((hit) => hit.id),
-        ]);
-        const meaningFirst = meaningHits
-          .map((hit) => hit.id)
-          .filter((id) => foundIds.has(id));
-        const colourFirst = colourHits.filter((id) => foundIds.has(id));
-        ranked =
-          sortOrder === "relevance"
-            ? reciprocalRankFusion(
-                [...found, meaningFirst, colourFirst].map((ids) =>
-                  ids.map((id) => ({ id })),
-                ),
-              ).map((hit) => hit.id)
-            : await byDate(ctx, [...foundIds], sortOrder);
-      } else {
-        // Qualifiers only (is:fav, list:…): all they match, by date — for a
-        // colour, the most of it first.
-        const dated = await byDate(
-          ctx,
-          allowedIds,
-          sortOrder === "asc" ? "asc" : "desc",
-        );
-        if (sortOrder === "relevance" && colours.length > 0) {
-          const first = await byColours(ctx, colours, allowed);
-          const firstIds = new Set(first);
-          ranked = [...first, ...dated.filter((id) => !firstIds.has(id))];
-        } else {
-          ranked = dated;
-        }
-      }
-      return {
-        ...(await pageOf(ctx, ranked, input.cursor ?? 0, PAGE)),
-        pictures,
-      };
-    }),
+    .query(({ ctx, input }) => searchPictures(ctx, input)),
 
   /**
    * A picture's file, replaced for good by another — its crop (the web app

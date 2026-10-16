@@ -9,7 +9,13 @@ import {
 
 import { toWebReadableStream } from "./upload";
 
-export async function serveAsset(c: Context, assetId: string, userId: string) {
+export async function serveAsset(
+  c: Context,
+  assetId: string,
+  userId: string,
+  // Fork: a guest link's files may be taken away again (guestShares.ts).
+  cacheControl = "private, max-age=31536000, immutable",
+) {
   const [metadata, size] = await Promise.all([
     readAssetMetadata({
       userId,
@@ -25,7 +31,7 @@ export async function serveAsset(c: Context, assetId: string, userId: string) {
   // Default Headers
   c.header("Content-type", metadata.contentType);
   c.header("X-Content-Type-Options", "nosniff");
-  c.header("Cache-Control", "private, max-age=31536000, immutable");
+  c.header("Cache-Control", cacheControl);
   c.header(
     "Content-Security-Policy",
     [

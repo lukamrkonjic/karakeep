@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useAssetUrl } from "@/lib/assetUrl";
 import { usePreference } from "@/lib/uiPreferences";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
-
-import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
 import { PreviewLink } from "../preview/PreviewLink";
 import { GatedImage } from "./GatedImage";
@@ -56,6 +55,7 @@ export function BookmarkVideo({
   /** Start playing on mount — the preview modal, opened by clicking a tile. */
   autoPlay?: boolean;
 }) {
+  const getAssetUrl = useAssetUrl();
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLElement>(null);
   const hoverRef = useRef<HTMLVideoElement>(null);

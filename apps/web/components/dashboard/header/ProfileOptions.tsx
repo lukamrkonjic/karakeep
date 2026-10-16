@@ -16,6 +16,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { useSession } from "@/lib/auth/client";
 import { useTranslation } from "@/lib/i18n/client";
 import { useInBookmarkGridStore } from "@/lib/store/useInBookmarkGridStore";
+import { useGuestShareStore } from "@/lib/store/useGuestShareStore";
 import { useKeyboardNavigationStore } from "@/lib/store/useKeyboardNavigationStore";
 import {
   BookOpen,
@@ -26,6 +27,7 @@ import {
   Paintbrush,
   Puzzle,
   Settings,
+  Share2,
   Shield,
   Sun,
   Twitter,
@@ -69,6 +71,7 @@ export default function SidebarProfileOptions() {
   const setShortcutsDialogOpen = useKeyboardNavigationStore(
     (state) => state.setShortcutsDialogOpen,
   );
+  const shareWithGuest = useGuestShareStore((state) => state.show);
 
   const avatarImage = whoami?.image ?? null;
   const avatarUrl = useMemo(() => avatarImage ?? null, [avatarImage]);
@@ -111,6 +114,10 @@ export default function SidebarProfileOptions() {
             <Highlighter className="mr-2 size-4" />
             {t("common.highlights")}
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => shareWithGuest()}>
+          <Share2 className="mr-2 size-4" />
+          Share with a guest…
         </DropdownMenuItem>
         <Separator className="my-2" />
         <DropdownMenuItem asChild>

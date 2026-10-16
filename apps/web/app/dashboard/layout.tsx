@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import QuickFind from "@/components/dashboard/QuickFind";
+import { GuestShareDialog } from "@/components/dashboard/lists/GuestShareDialog";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
 import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
@@ -87,6 +88,8 @@ export default async function Dashboard({
         </SidebarLayout>
         {/* Fork: ⌘F / Ctrl+F. */}
         <QuickFind />
+        {/* Fork: Share with a guest… (profile menu, More, a list's "…"). */}
+        <GuestShareDialog />
       </ReaderSettingsProvider>
     </UserSettingsContextProvider>
   );

@@ -1348,6 +1348,49 @@ export const projectItemsTable = sqliteTable(
   ],
 );
 
+// Fork: guest links — someone without an account looks through the lists
+// ticked for a link (guestShareLists), and nothing else, read-only
+// (routers/guestShares.ts, app/share/[token]). The token is the link's
+// secret: a new one (Reset link) and the old address stops working.
+export const guestSharesTable = sqliteTable(
+  "guestShares",
+  {
+    id: text("id")
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    name: text("name").notNull(),
+    // The bookmarks' notes are yours unless you say otherwise.
+    showNotes: integer("showNotes", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: createdAtField(),
+  },
+  (t) => [index("guestShares_userId_idx").on(t.userId)],
+);
+
+// The lists a guest link shows, each on its own: a list made later, even in
+// a ticked folder, isn't shown until it's ticked. Goes with its list.
+export const guestShareListsTable = sqliteTable(
+  "guestShareLists",
+  {
+    shareId: text("shareId")
+      .notNull()
+      .references(() => guestSharesTable.id, { onDelete: "cascade" }),
+    listId: text("listId")
+      .notNull()
+      .references(() => bookmarkLists.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.shareId, t.listId] }),
+    index("guestShareLists_listId_idx").on(t.listId),
+  ],
+);
+
 export const backupsTable = sqliteTable(
   "backups",
   {

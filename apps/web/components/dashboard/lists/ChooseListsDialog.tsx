@@ -88,6 +88,46 @@ export function useExcludedTicks(
 }
 
 /**
+ * Ticks kept as the lists taken in, each on its own — a guest link's: a list
+ * made later, even in a ticked folder, isn't in until it's ticked. Ticking a
+ * folder takes in everything in it as it is now.
+ */
+export function useIncludedTicks(
+  candidates: ZBookmarkList[],
+  included: string[],
+  setIncluded: (included: string[]) => void,
+): ListTicks {
+  const subtree = useMemo(() => subtreeOf(candidates), [candidates]);
+  const known = useMemo(
+    () => new Set(candidates.map((l) => l.id)),
+    [candidates],
+  );
+  const kept = new Set(included);
+  const tickOf = (id: string): Tick => {
+    const ids = subtree(id);
+    const n = ids.filter((x) => kept.has(x)).length;
+    return n === ids.length ? "on" : n === 0 ? "off" : "mixed";
+  };
+  return {
+    tickOf,
+    toggle: (id) => {
+      const ids = subtree(id);
+      const next = new Set(kept);
+      if (tickOf(id) === "on") {
+        ids.forEach((x) => next.delete(x));
+      } else {
+        ids.forEach((x) => next.add(x));
+      }
+      setIncluded([...next]);
+    },
+    selectAll: () => setIncluded(candidates.map((l) => l.id)),
+    clear: () => setIncluded([]),
+    kept: included.filter((id) => known.has(id)).length,
+    total: candidates.length,
+  };
+}
+
+/**
  * Ticks kept as the fewest left-out lists, each standing for everything
  * under it (a smart list's, the colour pages'): a list made later in a
  * left-out folder is left out too. Unticking a folder leaves out all of it;
@@ -165,7 +205,6 @@ export function ChooseListsDialog({
   open: boolean;
   setOpen: (open: boolean) => void;
 }) {
-  const { data: lists } = useBookmarkLists(undefined, { enabled: open });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
@@ -174,63 +213,85 @@ export function ChooseListsDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            {loading
-              ? "Loading…"
-              : ticks.kept === ticks.total
-                ? `All ${ticks.total} lists`
-                : `${ticks.kept} of ${ticks.total} lists`}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={loading}
-              onClick={ticks.selectAll}
-            >
-              Select all
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={loading}
-              onClick={ticks.clear}
-            >
-              Clear
-            </Button>
-          </div>
-        </div>
-        <div
-          className={cn(
-            "-mx-2 min-h-0 flex-1 overflow-y-auto px-2",
-            loading && "pointer-events-none opacity-50",
-          )}
-        >
-          <CollapsibleBookmarkLists
-            listsData={lists}
-            filter={(node) =>
-              node.item.type === "manual" && node.item.userRole === "owner"
-            }
-            render={({ node, level, open: expanded, numBookmarks }) =>
-              node.item.type === "manual" ? (
-                <ListTickRow
-                  list={node.item}
-                  level={level}
-                  tick={ticks.tickOf(node.item.id)}
-                  onToggle={() => ticks.toggle(node.item.id)}
-                  folder={node.children.length > 0}
-                  open={expanded}
-                  numBookmarks={numBookmarks}
-                />
-              ) : null
-            }
-          />
-        </div>
+        <ChooseListsBody ticks={ticks} loading={loading} enabled={open} />
         <DialogFooter>
           <Button onClick={() => setOpen(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The picker itself — "N of M lists", Select all, Clear and the tree with its
+ * ticks — for a dialog of its own around it (Share with a guest…). `enabled`:
+ * fetch the lists (while the dialog is open).
+ */
+export function ChooseListsBody({
+  ticks,
+  loading = false,
+  enabled = true,
+}: {
+  ticks: ListTicks;
+  loading?: boolean;
+  enabled?: boolean;
+}) {
+  const { data: lists } = useBookmarkLists(undefined, { enabled });
+  return (
+    <>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">
+          {loading
+            ? "Loading…"
+            : ticks.kept === ticks.total
+              ? `All ${ticks.total} lists`
+              : `${ticks.kept} of ${ticks.total} lists`}
+        </span>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={loading}
+            onClick={ticks.selectAll}
+          >
+            Select all
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={loading}
+            onClick={ticks.clear}
+          >
+            Clear
+          </Button>
+        </div>
+      </div>
+      <div
+        className={cn(
+          "-mx-2 min-h-0 flex-1 overflow-y-auto px-2",
+          loading && "pointer-events-none opacity-50",
+        )}
+      >
+        <CollapsibleBookmarkLists
+          listsData={lists}
+          filter={(node) =>
+            node.item.type === "manual" && node.item.userRole === "owner"
+          }
+          render={({ node, level, open: expanded, numBookmarks }) =>
+            node.item.type === "manual" ? (
+              <ListTickRow
+                list={node.item}
+                level={level}
+                tick={ticks.tickOf(node.item.id)}
+                onToggle={() => ticks.toggle(node.item.id)}
+                folder={node.children.length > 0}
+                open={expanded}
+                numBookmarks={numBookmarks}
+              />
+            ) : null
+          }
+        />
+      </div>
+    </>
   );
 }

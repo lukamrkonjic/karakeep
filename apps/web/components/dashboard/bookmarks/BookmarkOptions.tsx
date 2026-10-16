@@ -18,6 +18,7 @@ import useUpload from "@/lib/hooks/upload-file";
 import { useIsPhone } from "@/lib/hooks/useIsPhone";
 import { startSelection } from "@/lib/selection";
 import { useCardSheetStore } from "@/lib/store/useCardSheetStore";
+import { useGuestShareStore } from "@/lib/store/useGuestShareStore";
 import { useTranslation } from "@/lib/i18n/client";
 import {
   Archive,
@@ -28,6 +29,7 @@ import {
   ImagePlus,
   LayoutGrid,
   Link,
+  Share2,
   List,
   ListX,
   MoreHorizontal,
@@ -58,6 +60,7 @@ import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 import { getBookmarkTitle } from "@karakeep/shared/utils/bookmarkUtils";
 
+import { useGuestLinkFor } from "../lists/GuestShareDialog";
 import { BookmarkedTextEditor } from "./BookmarkedTextEditor";
 import DeleteBookmarkConfirmationDialog from "./DeleteBookmarkConfirmationDialog";
 import { EditBookmarkDialog } from "./EditBookmarkDialog";
@@ -109,6 +112,13 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
   const sheetOpen = useCardSheetStore((state) => state.openFor === bookmark.id);
   const openSheet = useCardSheetStore((state) => state.open);
   const closeSheet = useCardSheetStore((state) => state.close);
+  // Fork: Copy guest link — looked up only while the menu is open.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const guestLink = useGuestLinkFor(
+    bookmark.id,
+    isOwner && (menuOpen || sheetOpen),
+  );
+  const shareWithGuest = useGuestShareStore((state) => state.show);
 
   useEffect(() => {
     // This code only runs in the browser
@@ -317,6 +327,25 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
           (bookmark.content as ZBookmarkedLink).url,
         );
         toast.success(t("toasts.bookmarks.clipboard_copied"));
+      },
+    },
+    {
+      // Fork: a guest link that opens on this one (Share with a guest…).
+      id: "copy-guest-link",
+      title: "Copy guest link",
+      icon: <Share2 className="mr-2 size-4" />,
+      visible: isOwner,
+      disabled: !isClipboardAvailable || guestLink === undefined,
+      onClick: () => {
+        if (guestLink) {
+          void navigator.clipboard.writeText(guestLink.url);
+          toast.success(`Copied — “${guestLink.name}” opens on it`);
+        } else {
+          toast.info(
+            "It isn't in a list you share yet: tick one of its lists here.",
+          );
+          shareWithGuest();
+        }
       },
     },
     {
@@ -558,7 +587,7 @@ export default function BookmarkOptions({ bookmark }: { bookmark: ZBookmark }) {
           </BottomSheet>
         </>
       ) : (
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"

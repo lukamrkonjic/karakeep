@@ -6,6 +6,7 @@ import { backupsAppRouter } from "./backups";
 import { bookmarksAppRouter } from "./bookmarks";
 import { configAppRouter } from "./config";
 import { feedsAppRouter } from "./feeds";
+import { guestSharesAppRouter } from "./guestShares";
 import { highlightsAppRouter } from "./highlights";
 import { importSessionsRouter } from "./importSessions";
 import { discoverAppRouter } from "./discover";
@@ -60,6 +61,8 @@ export const appRouter = router({
   smartLists: smartListsAppRouter,
   // Fork: projects — boards to lay pictures out on, apart from the lists.
   projects: projectsAppRouter,
+  // Fork: guest links (Share with a guest…).
+  guestShares: guestSharesAppRouter,
   config: configAppRouter,
 });
 // export type definition of API

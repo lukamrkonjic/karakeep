@@ -19,9 +19,15 @@ const sizes = new Map<string, MediaSize>();
 // Kept for this many assets, the least recently seen going first.
 const MAX_SIZES = 5000;
 
-/** "/api/assets/abc" (any origin, any query) → "abc". */
+/**
+ * "/api/assets/abc" (any origin, any query) → "abc"; a guest link's too
+ * ("/api/public/shares/<token>/assets/abc", lib/assetUrl.tsx).
+ */
 function assetIdOf(url: string): string | null {
-  return /\/api\/assets\/([^/?#]+)/.exec(url)?.[1] ?? null;
+  return (
+    /\/api\/(?:public\/shares\/[^/]+\/)?assets\/([^/?#]+)/.exec(url)?.[1] ??
+    null
+  );
 }
 
 export function rememberMediaSize(assetId: string, w: number, h: number) {

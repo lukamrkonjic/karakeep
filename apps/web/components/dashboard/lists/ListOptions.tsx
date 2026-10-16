@@ -9,6 +9,7 @@ import {
 import { useShowArchived } from "@/components/utils/useShowArchived";
 import { useShowSublists } from "@/components/utils/useShowSublists";
 import { useTranslation } from "@/lib/i18n/client";
+import { useGuestShareStore } from "@/lib/store/useGuestShareStore";
 import {
   DoorOpen,
   FolderInput,
@@ -17,6 +18,7 @@ import {
   Plus,
   Rss,
   Share,
+  Share2,
   Square,
   SquareCheck,
   Trash2,
@@ -80,6 +82,7 @@ export function ListOptions({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [chooseListsOpen, setChooseListsOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const shareWithGuest = useGuestShareStore((state) => state.show);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [subscriptionsModalOpen, setSubscriptionsModalOpen] = useState(false);
 
@@ -115,6 +118,15 @@ export function ListOptions({
       visible: isOwner,
       disabled: false,
       onClick: () => setShareModalOpen(true),
+    },
+    {
+      // Fork: a guest link with this list in it (GuestShareDialog).
+      id: "share-with-guest",
+      title: "Share with a guest…",
+      icon: <Share2 className="size-4" />,
+      visible: isOwner && list.type === "manual",
+      disabled: false,
+      onClick: () => shareWithGuest(list.id),
     },
     {
       id: "manage-collaborators",

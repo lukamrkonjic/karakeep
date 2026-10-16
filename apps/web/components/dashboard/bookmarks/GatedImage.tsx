@@ -3,10 +3,9 @@
 import { useEffect } from "react";
 import Image from "next/image";
 import { imageLoadGate } from "@/lib/assetLoadGate";
+import { useAssetUrl } from "@/lib/assetUrl";
 import { useNearViewportLoadSlot } from "@/lib/hooks/useNearViewportLoadSlot";
 import { cn } from "@/lib/utils";
-
-import { getAssetUrl } from "@karakeep/shared/utils/assetUtils";
 
 /**
  * Renders the actual <Image> only once granted a load slot (see
@@ -34,6 +33,7 @@ export function GatedImage({
     imageLoadGate,
     { rootMargin: "600px" },
   );
+  const getAssetUrl = useAssetUrl();
 
   // Safety net: don't hold the slot forever if load/error never fires.
   useEffect(() => {

@@ -11,6 +11,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { useSession } from "@/lib/auth/client";
 import { haptic } from "@/lib/haptic";
 import { useTranslation } from "@/lib/i18n/client";
+import { useGuestShareStore } from "@/lib/store/useGuestShareStore";
 import { cn } from "@/lib/utils";
 import {
   Archive,
@@ -26,6 +27,7 @@ import {
   Paintbrush,
   Search,
   Settings,
+  Share2,
   Shield,
   Star,
   Sun,
@@ -69,6 +71,7 @@ function MoreSheet({
   const { data: whoami } = useWhoAmI();
   const toggleTheme = useToggleTheme();
   const { theme } = useTheme();
+  const shareWithGuest = useGuestShareStore((state) => state.show);
   const go = (href: string) => {
     onOpenChange(false);
     router.push(href);
@@ -115,6 +118,15 @@ function MoreSheet({
         onClick={() => go("/dashboard/highlights")}
       >
         {t("common.highlights")}
+      </SheetItem>
+      <SheetItem
+        icon={<Share2 />}
+        onClick={() => {
+          onOpenChange(false);
+          shareWithGuest();
+        }}
+      >
+        Share with a guest…
       </SheetItem>
       <Separator className="my-2" />
       <SheetItem
