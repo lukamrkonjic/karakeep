@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -45,7 +45,7 @@ export function NotePreview({ note, bookmarkId, className }: NotePreviewProps) {
             {note}
           </div>
           <div className="flex justify-end">
-            <Link href={`/dashboard/preview/${bookmarkId}`}>
+            <PreviewLink href={`/dashboard/preview/${bookmarkId}`}>
               <Button
                 variant="outline"
                 size="sm"
@@ -55,7 +55,7 @@ export function NotePreview({ note, bookmarkId, className }: NotePreviewProps) {
                 {t("actions.edit_notes")}
                 <ExternalLink className="size-4" />
               </Button>
-            </Link>
+            </PreviewLink>
           </div>
         </div>
       </PopoverContent>

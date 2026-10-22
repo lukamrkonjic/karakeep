@@ -33,12 +33,15 @@ export function ThemePreferenceSync() {
   return null;
 }
 
-export function useToggleTheme() {
-  const { theme, setTheme } = useTheme();
+/**
+ * Fork: the account's theme — "system" follows the computer's light or dark
+ * mode (macOS, Windows, iOS), as it changes. Settings → User Info.
+ */
+export function useSetThemePreference() {
+  const { setTheme } = useTheme();
   const updatePreferences = useUpdatePreferences();
-  const next = theme == "dark" ? "light" : "dark";
-  return () => {
-    setTheme(next);
-    void updatePreferences({ theme: next });
+  return (theme: "light" | "dark" | "system") => {
+    setTheme(theme);
+    void updatePreferences({ theme }, { immediate: true });
   };
 }

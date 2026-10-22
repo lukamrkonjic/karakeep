@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
 import { Button } from "@/components/ui/button";
@@ -184,7 +185,7 @@ function Picture({
   const host = sourceHost(picture.sourceUrl);
   return (
     <div className="flex w-56 flex-col gap-2 text-xs">
-      <Link
+      <PreviewLink
         href={`/dashboard/preview/${picture.bookmarkId}`}
         className="relative flex h-56 items-center justify-center overflow-hidden rounded-md bg-muted"
       >
@@ -201,7 +202,7 @@ function Picture({
             Video
           </span>
         )}
-      </Link>
+      </PreviewLink>
       <div className="flex flex-col gap-0.5 text-muted-foreground">
         <span className="truncate text-sm text-foreground">
           {picture.title || "Untitled"}
@@ -394,5 +395,23 @@ export function DuplicatePictures() {
         </>
       )}
     </div>
+  );
+}
+
+/** How many groups of duplicates there are, for the section's heading. */
+export function DuplicatePicturesSummary() {
+  const api = useTRPC();
+  const level =
+    usePreference("duplicatePicturesMatch") ?? DEFAULT_DUPLICATE_MATCH_LEVEL;
+  const { data } = useQuery(api.duplicatePictures.list.queryOptions({ level }));
+  if (!data) {
+    return null;
+  }
+  return data.total === 0 ? (
+    <>None found</>
+  ) : (
+    <>
+      {data.total.toLocaleString()} {data.total === 1 ? "group" : "groups"}
+    </>
   );
 }

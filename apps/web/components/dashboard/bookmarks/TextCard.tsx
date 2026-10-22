@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { BookmarkMarkdownComponent } from "@/components/dashboard/bookmarks/BookmarkMarkdownComponent";
 import {
   bookmarkLayoutSwitch,
@@ -92,7 +92,7 @@ export default function TextCard({
               videoNode ??
               (banner ? (
                 <div className="relative size-full flex-1">
-                  <Link href={`/dashboard/preview/${bookmark.id}`}>
+                  <PreviewLink href={`/dashboard/preview/${bookmark.id}`}>
                     <Image
                       alt="card banner"
                       fill={true}
@@ -100,7 +100,7 @@ export default function TextCard({
                       className={cn("flex-1", className)}
                       src={getAssetUrl(banner.id)}
                     />
-                  </Link>
+                  </PreviewLink>
                 </div>
               ) : (
                 <div

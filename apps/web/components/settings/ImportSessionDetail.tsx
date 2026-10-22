@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
@@ -611,14 +612,14 @@ export default function ImportSessionDetail({
                     </TableCell>
                     <TableCell>
                       {item.resultBookmarkId ? (
-                        <Link
+                        <PreviewLink
                           href={`/dashboard/preview/${item.resultBookmarkId}`}
                           className="flex items-center gap-1 text-sm text-primary hover:text-primary/80"
                           prefetch={false}
                         >
                           <ExternalLink className="h-3 w-3" />
                           {t("settings.import_sessions.detail.view_bookmark")}
-                        </Link>
+                        </PreviewLink>
                       ) : (
                         <span className="text-sm text-muted-foreground">—</span>
                       )}

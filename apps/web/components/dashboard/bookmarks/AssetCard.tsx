@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { useBookmarkLayout } from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 import { FileText } from "lucide-react";
@@ -26,7 +26,7 @@ function AssetImage({
   switch (bookmarkedAsset.assetType) {
     case "image": {
       return (
-        <Link href={`/dashboard/preview/${bookmark.id}`}>
+        <PreviewLink href={`/dashboard/preview/${bookmark.id}`}>
           <Image
             alt="asset"
             src={getAssetUrl(bookmarkedAsset.assetId)}
@@ -34,7 +34,7 @@ function AssetImage({
             unoptimized
             className={className}
           />
-        </Link>
+        </PreviewLink>
       );
     }
     case "pdf": {
@@ -52,7 +52,7 @@ function AssetImage({
         );
       }
       return (
-        <Link href={`/dashboard/preview/${bookmark.id}`}>
+        <PreviewLink href={`/dashboard/preview/${bookmark.id}`}>
           <Image
             alt="asset"
             src={getAssetUrl(screenshotAssetId)}
@@ -60,7 +60,7 @@ function AssetImage({
             unoptimized
             className={className}
           />
-        </Link>
+        </PreviewLink>
       );
     }
     case "video": {

@@ -3,7 +3,7 @@
 import type { BookmarksLayoutTypes } from "@/lib/userLocalSettings/types";
 import type { ReactNode } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { useSession } from "@/lib/auth/client";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useClientConfig } from "@/lib/clientConfig";
@@ -58,12 +58,12 @@ function BottomRow({
     <div className="justify flex w-full shrink-0 justify-between text-gray-500">
       <div className="flex items-center gap-2 overflow-hidden text-nowrap font-light">
         {footer && <>{footer}•</>}
-        <Link
+        <PreviewLink
           href={`/dashboard/preview/${bookmark.id}`}
           suppressHydrationWarning
         >
           <BookmarkFormattedCreatedAt createdAt={bookmark.createdAt} />
-        </Link>
+        </PreviewLink>
       </div>
       <BookmarkActionBar bookmark={bookmark} />
     </div>
@@ -313,8 +313,12 @@ function GridView({
 }: Props & { layout: BookmarksLayoutTypes }) {
   // Fork: the whole card drags onto a list (useBookmarkDrag).
   const drag = useBookmarkDrag(bookmark);
-  const { showNotes, showTags, showTitle, imageFit } =
-    useBookmarkDisplaySettings();
+  const display = useBookmarkDisplaySettings();
+  const { showTitle, imageFit } = display;
+  // Fork: masonry is a wall of pictures — no notes or tags on its cards, and
+  // View options leaves those switches out there.
+  const showNotes = layout !== "masonry" && display.showNotes;
+  const showTags = layout !== "masonry" && display.showTags;
   const imgFitClass = switchCase(imageFit, {
     cover: "object-cover",
     contain: "object-contain",
@@ -417,13 +421,13 @@ function CompactView({
             <p className="flex shrink-0 gap-2 text-gray-500">•{footer}</p>
           )}
           <p className="text-gray-500">•</p>
-          <Link
+          <PreviewLink
             href={`/dashboard/preview/${bookmark.id}`}
             suppressHydrationWarning
             className="shrink-0 gap-2 text-gray-500"
           >
             <BookmarkFormattedCreatedAt createdAt={bookmark.createdAt} />
-          </Link>
+          </PreviewLink>
         </div>
         {/* Fork: under the selection overlay while selecting — the whole
             card is the button then. */}

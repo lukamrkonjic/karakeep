@@ -282,7 +282,7 @@ export default function QuickFind() {
       {
         id: "cleanups",
         name: t("cleanups.cleanups"),
-        href: "/dashboard/cleanups",
+        href: "/settings/cleanups",
         icon: Paintbrush,
         also: ["duplicates", "suggestions"],
       },

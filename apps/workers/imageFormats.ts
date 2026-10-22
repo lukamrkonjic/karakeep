@@ -1,3 +1,5 @@
+import { promises as fs } from "fs";
+
 import { IMAGE_ASSET_TYPES } from "@karakeep/shared/assetdb";
 
 /**
@@ -56,4 +58,58 @@ export async function convertForStorage(
   const sharp = await loadSharp();
   const info = await sharp(inputPath).rotate().png().toFile(outputPath);
   return info.size;
+}
+
+/**
+ * What a downloaded file really is, by its bytes, for when the server's
+ * Content-Type says nothing useful (`application/octet-stream`, `image/jpg`,
+ * none at all). A picture any browser shows comes back as its own type; one
+ * that can only be decoded (TIFF, SVG, HEIF) as `convert` — stored as a PNG
+ * of it. Null when it's neither a picture nor a video we can keep.
+ */
+export async function identifyFile(
+  filePath: string,
+  kind: "image" | "video",
+): Promise<{ contentType: string; convert: boolean } | null> {
+  const head = Buffer.alloc(64);
+  const handle = await fs.open(filePath, "r");
+  try {
+    await handle.read(head, 0, head.length, 0);
+  } finally {
+    await handle.close();
+  }
+  if (kind === "video") {
+    if (head.toString("latin1", 4, 8) === "ftyp") {
+      return { contentType: "video/mp4", convert: false };
+    }
+    if (head.readUInt32BE(0) === 0x1a45dfa3) {
+      return {
+        contentType: head.includes("webm", 0, "latin1")
+          ? "video/webm"
+          : "video/x-matroska",
+        convert: false,
+      };
+    }
+    return null;
+  }
+  const sharp = await loadSharp();
+  let metadata;
+  try {
+    metadata = await sharp(filePath).metadata();
+  } catch {
+    return null; // not something libvips can decode
+  }
+  const kept: Record<string, string> = {
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  const own =
+    metadata.format === "heif" && metadata.compression === "av1"
+      ? "image/avif"
+      : kept[metadata.format ?? ""];
+  return own && IMAGE_ASSET_TYPES.has(own)
+    ? { contentType: own, convert: false }
+    : { contentType: `image/${metadata.format ?? "unknown"}`, convert: true };
 }

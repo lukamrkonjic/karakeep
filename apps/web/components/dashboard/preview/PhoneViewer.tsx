@@ -1,5 +1,6 @@
 "use client";
 
+import { openPreviewInPlace } from "@/lib/previewNavigation";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookmarkVideo } from "@/components/dashboard/bookmarks/BookmarkVideo";
@@ -81,7 +82,10 @@ export function PhoneViewer({
     target
       ? () => {
           haptic();
-          router.replace(`/dashboard/preview/${target.id}`, { scroll: false });
+          const href = `/dashboard/preview/${target.id}`;
+          if (!openPreviewInPlace(href, true)) {
+            router.replace(href, { scroll: false });
+          }
         }
       : undefined;
 

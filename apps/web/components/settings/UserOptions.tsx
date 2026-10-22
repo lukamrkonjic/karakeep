@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSetThemePreference } from "@/components/theme-provider";
 import { toast } from "@/components/ui/sonner";
 import { useClientConfig } from "@/lib/clientConfig";
 import { useTranslation } from "@/lib/i18n/client";
-import { useUpdatePreferences } from "@/lib/uiPreferences";
+import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 import { useInterfaceLang } from "@/lib/userLocalSettings/bookmarksLayout";
 import { updateInterfaceLang } from "@/lib/userLocalSettings/userLocalSettings";
 import { useUserSettings } from "@/lib/userSettings";
@@ -53,6 +54,31 @@ const LanguageSelect = () => {
             {name}
           </SelectItem>
         ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
+// Fork: was the profile menu's Light/Dark toggle; now with System, which
+// follows the computer.
+const ThemeSelect = () => {
+  const { t } = useTranslation();
+  const theme = usePreference("theme") ?? "system";
+  const setThemePreference = useSetThemePreference();
+  return (
+    <Select
+      value={theme}
+      onValueChange={(val) =>
+        setThemePreference(val as "light" | "dark" | "system")
+      }
+    >
+      <SelectTrigger className="h-11">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="system">System</SelectItem>
+        <SelectItem value="light">{t("options.light_mode")}</SelectItem>
+        <SelectItem value="dark">{t("options.dark_mode")}</SelectItem>
       </SelectContent>
     </Select>
   );
@@ -150,6 +176,11 @@ export default function UserOptions() {
             {t("settings.info.interface_lang")}
           </Label>
           <LanguageSelect />
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Appearance</Label>
+          <ThemeSelect />
         </div>
 
         <FormField

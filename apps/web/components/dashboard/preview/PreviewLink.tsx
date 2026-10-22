@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import useBulkActionsStore from "@/lib/bulkActions";
-import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
+import { previewIdOf, useOpenPreview } from "@/lib/previewNavigation";
 
 // A mouse press that comes up this soon, this close to where it went down,
 // opens the preview wherever the pointer is by then.
@@ -12,13 +11,10 @@ const PRESS_MS = 600;
 const PRESS_SLOP_PX = 10;
 
 /**
- * Fork: a link that opens a bookmark's preview. Its route is dynamic, so
- * Next doesn't fetch it ahead as the link scrolls into view, and a click
- * waited for the server before anything showed. This fetches it in full as
- * the pointer comes onto the link (or a finger touches it): by the click it's
- * there, and the preview opens at once. (Prefetching only runs in
- * production; `router.prefetch` is Next's own, with its full kind — what
- * `<Link prefetch>` does, for one link at a time.)
+ * Fork: a link that opens a bookmark's preview — in place, over the page
+ * (lib/previewNavigation.ts): nothing is fetched from the server first, so
+ * it opens at once and can never land on the preview's own page. Ctrl/⌘-,
+ * Shift- and middle-clicks are the browser's (a new tab or window).
  *
  * A mouse press opens it too when the browser drops the click: when the
  * tile moved under the pointer between down and up (pictures above it
@@ -29,13 +25,17 @@ const PRESS_SLOP_PX = 10;
 export const PreviewLink = React.forwardRef<
   HTMLAnchorElement,
   React.ComponentPropsWithoutRef<typeof Link> & { href: string }
->(function PreviewLink(
-  { onPointerEnter, onPointerDown, onTouchStart, onClick, ...props },
-  ref,
-) {
-  const router = useRouter();
-  const prefetch = () =>
-    router.prefetch(props.href, { kind: PrefetchKind.FULL });
+>(function PreviewLink({ onPointerDown, onClick, ...props }, ref) {
+  const openPreview = useOpenPreview();
+  // Any other link (a card set to open the original) is a plain one.
+  const isPreview =
+    previewIdOf(props.href.split(/[?#]/)[0] ?? "") !== null &&
+    (!props.target || props.target === "_self");
+  const open = () =>
+    openPreview(props.href, {
+      replace: props.replace,
+      scroll: props.scroll ?? true,
+    });
   // When a press last opened it, so the click after it is let go.
   const openedAt = React.useRef(-Infinity);
   const endPress = React.useRef<(() => void) | undefined>(undefined);
@@ -57,12 +57,7 @@ export const PreviewLink = React.forwardRef<
         return;
       }
       openedAt.current = performance.now();
-      const scroll = props.scroll ?? true;
-      if (props.replace) {
-        router.replace(props.href, { scroll });
-      } else {
-        router.push(props.href, { scroll });
-      }
+      open();
     };
     const onUp = (ev: PointerEvent) => {
       if (ev.pointerId === pointerId && ev.button === 0) {
@@ -86,15 +81,10 @@ export const PreviewLink = React.forwardRef<
     <Link
       ref={ref}
       {...props}
-      onPointerEnter={(e) => {
-        onPointerEnter?.(e);
-        if (e.pointerType === "mouse") {
-          prefetch();
-        }
-      }}
       onPointerDown={(e) => {
         onPointerDown?.(e);
         if (
+          isPreview &&
           e.pointerType === "mouse" &&
           e.button === 0 &&
           !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)
@@ -102,17 +92,28 @@ export const PreviewLink = React.forwardRef<
           watchPress(e);
         }
       }}
-      onTouchStart={(e) => {
-        onTouchStart?.(e);
-        prefetch();
-      }}
       onClick={(e) => {
         onClick?.(e);
         if (performance.now() - openedAt.current < 1000) {
           // The press already opened it.
           openedAt.current = -Infinity;
           e.preventDefault();
+          return;
         }
+        if (
+          !isPreview ||
+          e.defaultPrevented ||
+          e.button !== 0 ||
+          e.ctrlKey ||
+          e.metaKey ||
+          e.shiftKey ||
+          e.altKey
+        ) {
+          return;
+        }
+        // A tap, a key press, or a click the press didn't catch.
+        e.preventDefault();
+        open();
       }}
     />
   );

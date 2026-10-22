@@ -187,8 +187,9 @@ export const zDiscoverItemSchema = z.object({
   thumbUrl: z.string(),
   width: z.number().nullable(),
   height: z.number().nullable(),
-  // The pin's page.
-  pinUrl: z.string(),
+  // The pin's page, or the website it was saved from; none for a pin that
+  // only came with an opaque id (its page is blank).
+  pinUrl: z.string().nullable(),
   // The list it's suggested for, where Keep files it.
   suggestedList: z
     .object({ id: z.string(), name: z.string(), icon: z.string() })

@@ -17,7 +17,7 @@ beforeEach<CustomTestContext>(defaultBeforeEach(true));
 describe("List subscriptions", () => {
   const board = "https://www.pinterest.com/luka/art/";
 
-  test<CustomTestContext>("whole carousels unless asked for only the first", async ({
+  test<CustomTestContext>("only a carousel's first picture unless asked for all", async ({
     apiCallers,
   }) => {
     const caller = apiCallers[0];
@@ -34,7 +34,7 @@ describe("List subscriptions", () => {
 
     expect(
       await caller.listSubscriptions.create({ listId: list.id, url: board }),
-    ).toMatchObject({ wholeCarousel: true, lastStatus: "pending" });
+    ).toMatchObject({ wholeCarousel: false, lastStatus: "pending" });
     await caller.listSubscriptions.create({
       listId: other.id,
       url: board,
@@ -50,7 +50,7 @@ describe("List subscriptions", () => {
     expect(
       all.subscriptions.map((s) => [s.listName, s.wholeCarousel]).sort(),
     ).toEqual([
-      ["Art", true],
+      ["Art", false],
       ["Other", false],
     ]);
   });

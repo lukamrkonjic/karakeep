@@ -66,3 +66,23 @@ export function parsePinterestBoardUrl(
   }
   return { origin: url.origin, path: `/${user}/${board}/`, slug: board };
 }
+
+/**
+ * A pin's page. Pinterest hands visitors an opaque id for most pins
+ * ("e1_AfqP…") whose page is blank, so only an all-digits id makes a link
+ * that opens; null for the rest.
+ */
+export function pinterestPinUrl(pinId: string): string | null {
+  return /^\d+$/.test(pinId) ? `https://www.pinterest.com/pin/${pinId}/` : null;
+}
+
+/** The pin id in a pin's page address (`…/pin/<id>/`), any id form. */
+export function pinIdFromUrl(url: string | null | undefined): string | null {
+  return /pinterest\.[a-z.]+\/pin\/([^/?#]+)/i.exec(url ?? "")?.[1] ?? null;
+}
+
+/** A link to a pin page that never opens: its id is an opaque visitor one. */
+export function isOpaquePinUrl(url: string | null | undefined): boolean {
+  const id = pinIdFromUrl(url);
+  return id !== null && !/^\d+$/.test(id);
+}

@@ -1,7 +1,10 @@
 import { fetchWithProxy } from "network";
 
 import logger from "@karakeep/shared/logger";
-import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
+import {
+  parsePinterestBoardUrl,
+  pinterestPinUrl,
+} from "@karakeep/shared/utils/pinterest";
 
 /**
  * Reads a PUBLIC Pinterest board.
@@ -22,6 +25,12 @@ import { parsePinterestBoardUrl } from "@karakeep/shared/utils/pinterest";
  * pages, follow it as items of their own (`partOf` it), for subscriptions
  * that take whole carousels. A feed also carries "story" modules (related
  * interests and the like); those are skipped.
+ *
+ * Since October 2026 a visitor gets most pins under an opaque id
+ * ("e1_AfqP…") whose page is blank. It is stable, so it still names the pin
+ * in the ledger, but a bookmark links to the pin's real page: its all-digits
+ * id comes from the board widget's API (`pidgets`), which lists the newest
+ * 50 pins — the new ones a sync takes. An older pin links to the board.
  */
 
 import type {
@@ -60,6 +69,8 @@ export interface Pin {
   grid_title?: unknown;
   title?: unknown;
   description?: unknown;
+  /** The website the pin was saved from. */
+  link?: unknown;
   images?: PinImages;
   videos?: { video_list?: VideoList } | null;
   /**
@@ -311,7 +322,10 @@ function hashOf(url: string): string | null {
 }
 
 /** The pin's own item, and which of an idea pin's pages that is. */
-function ownItemOf(pin: Pin): { item: SubscriptionItem; page: number } | null {
+function ownItemOf(
+  pin: Pin,
+  pageUrl: string | null,
+): { item: SubscriptionItem; page: number } | null {
   if (!pin.id || (pin.type && pin.type !== "pin")) {
     return null;
   }
@@ -357,7 +371,10 @@ function ownItemOf(pin: Pin): { item: SubscriptionItem; page: number } | null {
       externalId: pin.id,
       mediaKey,
       title: firstString(pin.grid_title, pin.title, pin.description),
-      sourceUrl: `https://www.pinterest.com/pin/${pin.id}/`,
+      sourceUrl:
+        pinterestPinUrl(pin.id) ??
+        pageUrl ??
+        `https://www.pinterest.com/pin/${pin.id}/`,
       media,
     },
     page,
@@ -420,9 +437,15 @@ function restOf(
   });
 }
 
-/** A pin as items: its own, then the rest of a carousel or an idea pin. */
-export function itemsOf(pin: Pin): SubscriptionItem[] {
-  const own = ownItemOf(pin);
+/**
+ * A pin as items: its own, then the rest of a carousel or an idea pin.
+ * `pageUrl`: where to link a pin whose id has no page (an opaque one).
+ */
+export function itemsOf(
+  pin: Pin,
+  pageUrl: string | null = null,
+): SubscriptionItem[] {
+  const own = ownItemOf(pin, pageUrl);
   return own ? [own.item, ...restOf(pin, own.item, own.page)] : [];
 }
 
@@ -479,18 +502,8 @@ export async function fetchPinterestBoard(
     | undefined;
   const boardId = boardData?.id ?? boardIdFromKey(feed.key);
 
-  const items: SubscriptionItem[] = [];
-  const seen = new Set<string>();
-  const take = (pins: Pin[]) => {
-    for (const pin of pins) {
-      for (const item of itemsOf(pin)) {
-        if (!seen.has(item.externalId)) {
-          seen.add(item.externalId);
-          items.push(item);
-        }
-      }
-    }
-  };
+  const pins: Pin[] = [];
+  const take = (page: Pin[]) => pins.push(...page);
 
   /**
    * A page of the board's pins, asked for the way the site's own front-end
@@ -574,7 +587,91 @@ export async function fetchPinterestBoard(
     complete = next.pins.length === 0 || !bookmark || bookmark === "-end-";
   }
 
+  // The pins' real pages, by picture; an older pin links to the board.
+  const pinIds = await newestPinIds(path, opts.signal);
+  const boardPage = `https://www.pinterest.com${path}`;
+  const items: SubscriptionItem[] = [];
+  const seen = new Set<string>();
+  for (const pin of pins) {
+    const key = pictureKeyOf(pin);
+    const pinId = key ? pinIds.get(key) : undefined;
+    const pageUrl = (pinId ? pinterestPinUrl(pinId) : null) ?? boardPage;
+    for (const item of itemsOf(pin, pageUrl)) {
+      if (!seen.has(item.externalId)) {
+        seen.add(item.externalId);
+        items.push(item);
+      }
+    }
+  }
+
   return { name: boardData?.name ?? null, items, complete };
+}
+
+/** The hash a pin's picture is named by (its image signature). */
+function pictureKeyOf(pin: Pin): string | null {
+  const signature = firstString(pin.image_signature);
+  if (signature) {
+    return signature;
+  }
+  const orig = mediaUrl(pin.images?.orig?.url);
+  return orig ? hashOf(orig) : null;
+}
+
+/**
+ * The all-digits ids of a board's newest pins (the widget API lists 50),
+ * by the hash their picture is named by. Empty when it won't answer: the
+ * pins then link to the board.
+ */
+async function newestPinIds(
+  boardPath: string,
+  signal?: AbortSignal,
+): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  try {
+    const resp = await fetchWithProxy(
+      `https://api.pinterest.com/v3/pidgets/boards${boardPath}pins/`,
+      {
+        headers: { "user-agent": UA, accept: "application/json" },
+        signal,
+      },
+    );
+    if (!resp.ok) {
+      logger.warn(
+        `[subscription] Pinterest's board widget answered HTTP ${resp.status}; pins link to the board`,
+      );
+      return ids;
+    }
+    const json = (await resp.json()) as {
+      data?: {
+        pins?: {
+          id?: unknown;
+          images?: Record<string, { url?: unknown } | undefined>;
+          embed?: { src?: unknown } | null;
+        }[];
+      };
+    };
+    for (const pin of json.data?.pins ?? []) {
+      if (typeof pin.id !== "string" || !/^\d+$/.test(pin.id)) {
+        continue;
+      }
+      for (const url of [
+        pin.embed?.src,
+        ...Object.values(pin.images ?? {}).map((image) => image?.url),
+      ]) {
+        const media = mediaUrl(url);
+        const hash = media ? hashOf(media) : null;
+        if (hash && !ids.has(hash)) {
+          ids.set(hash, pin.id);
+        }
+      }
+    }
+  } catch (error) {
+    signal?.throwIfAborted();
+    logger.warn(
+      `[subscription] Couldn't read Pinterest's board widget (${error instanceof Error ? error.message : String(error)}); pins link to the board`,
+    );
+  }
+  return ids;
 }
 
 // Fork: Discover (apps/workers/workers/pictures/discoverWorker.ts) —
@@ -684,6 +781,11 @@ export interface DiscoverCandidate {
   /** The picture itself, whoever pinned it (its image signature). */
   mediaKey: string | null;
   title: string | null;
+  /**
+   * Where the pin can be looked at: its page when its id has one, else the
+   * website it was saved from.
+   */
+  pageUrl: string | null;
   /** What the page shows: a mid-size copy, and its size. */
   thumb: { url: string; width: number | null; height: number | null };
   /** What Keep downloads, best first. */
@@ -708,9 +810,25 @@ export function discoverCandidateOf(pin: Pin): DiscoverCandidate | null {
   const size = (v: unknown) => (typeof v === "number" && v > 0 ? v : null);
   return {
     pinId: own.externalId,
+    pageUrl: pinterestPinUrl(own.externalId) ?? websiteOf(pin),
     mediaKey: own.mediaKey,
     title: own.title,
     thumb: { url, width: size(shown?.width), height: size(shown?.height) },
     media: own.media,
   };
+}
+
+/** The website a pin was saved from, if it's one a browser opens. */
+function websiteOf(pin: Pin): string | null {
+  if (typeof pin.link !== "string") {
+    return null;
+  }
+  try {
+    const url = new URL(pin.link);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }

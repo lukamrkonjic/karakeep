@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { useUserSettings } from "@/lib/userSettings";
 import { Loader2 } from "lucide-react";
 
@@ -35,9 +35,9 @@ function LinkTitle({ bookmark }: { bookmark: ZBookmarkTypeLink }) {
   const { onClickUrl, urlTarget } = useOnClickUrl(bookmark);
   const parsedUrl = new URL(bookmark.content.url);
   return (
-    <Link href={onClickUrl} target={urlTarget} rel="noreferrer">
+    <PreviewLink href={onClickUrl} target={urlTarget} rel="noreferrer">
       {getBookmarkTitle(bookmark) ?? parsedUrl.host}
-    </Link>
+    </PreviewLink>
   );
 }
 
@@ -78,7 +78,7 @@ function LinkImage({
   }
 
   return (
-    <Link
+    <PreviewLink
       href={onClickUrl}
       target={urlTarget}
       rel="noreferrer"
@@ -94,7 +94,7 @@ function LinkImage({
           </span>
         )}
       </div>
-    </Link>
+    </PreviewLink>
   );
 }
 

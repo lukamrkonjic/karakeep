@@ -35,7 +35,7 @@ export type ZListSubscription = z.infer<typeof zListSubscriptionSchema>;
 export const zNewListSubscriptionSchema = z.object({
   listId: z.string(),
   url: z.string().min(1),
-  wholeCarousel: z.boolean().default(true),
+  wholeCarousel: z.boolean().default(false),
   skipNearDuplicates: z.boolean().default(false),
 });
 

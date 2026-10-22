@@ -1,5 +1,6 @@
 "use client";
 
+import { openPreviewInPlace } from "@/lib/previewNavigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/client";
@@ -349,9 +350,12 @@ function useBookmarkOpenHotkeys({
   useHotkeys(
     "o,enter",
     () =>
-      withFocusedBookmark((bookmark) =>
-        router.push(`/dashboard/preview/${bookmark.id}`),
-      ),
+      withFocusedBookmark((bookmark) => {
+        const href = `/dashboard/preview/${bookmark.id}`;
+        if (!openPreviewInPlace(href)) {
+          router.push(href);
+        }
+      }),
     { enabled: !disabled && isNavigating, preventDefault: true },
     [disabled, isNavigating, router, withFocusedBookmark],
   );

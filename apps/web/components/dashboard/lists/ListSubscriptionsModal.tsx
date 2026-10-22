@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
@@ -152,8 +152,15 @@ export function ListSubscriptionsModal({
   const api = useTRPC();
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
-  const [wholeCarousel, setWholeCarousel] = useState(true);
+  // Off every time the dialog opens: a carousel's other pictures are only
+  // taken when asked for, board by board.
+  const [wholeCarousel, setWholeCarousel] = useState(false);
   const [skipNearDuplicates, setSkipNearDuplicates] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setWholeCarousel(false);
+    }
+  }, [open]);
 
   const subscriptionsQuery = api.listSubscriptions.list.queryOptions({
     listId,
@@ -175,6 +182,7 @@ export function ListSubscriptionsModal({
     api.listSubscriptions.create.mutationOptions({
       onSuccess: () => {
         setUrl("");
+        setWholeCarousel(false);
         void invalidate();
       },
       onError,

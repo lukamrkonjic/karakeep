@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BookmarkPageOptions } from "@/components/dashboard/PageOptions";
 import QuickFind from "@/components/dashboard/QuickFind";
+import { PreviewHost } from "@/components/dashboard/preview/PreviewHost";
 import { GuestShareDialog } from "@/components/dashboard/lists/GuestShareDialog";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
 import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
@@ -88,6 +89,8 @@ export default async function Dashboard({
         </SidebarLayout>
         {/* Fork: ⌘F / Ctrl+F. */}
         <QuickFind />
+        {/* Fork: previews open over the page, never as a page of their own. */}
+        <PreviewHost />
         {/* Fork: Share with a guest… (profile menu, More, a list's "…"). */}
         <GuestShareDialog />
       </ReaderSettingsProvider>

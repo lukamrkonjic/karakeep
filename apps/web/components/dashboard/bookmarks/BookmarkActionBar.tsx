@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Maximize2 } from "lucide-react";
@@ -29,12 +29,12 @@ export default function BookmarkActionBar({
         />
       )}
       {showExpand && (
-        <Link
+        <PreviewLink
           href={`/dashboard/preview/${bookmark.id}`}
           className={cn(buttonVariants({ variant: "ghost" }), "px-2")}
         >
           <Maximize2 size={16} />
-        </Link>
+        </PreviewLink>
       )}
       <BookmarkOptions bookmark={bookmark} />
     </div>

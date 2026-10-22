@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AllLists from "@/components/dashboard/sidebar/AllLists";
-import { useToggleTheme } from "@/components/theme-provider";
 import { BottomSheet, SheetItem } from "@/components/ui/bottom-sheet";
 import { Separator } from "@/components/ui/separator";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -22,18 +21,14 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
-  Moon,
   Newspaper,
-  Paintbrush,
   Search,
   Settings,
   Share2,
   Shield,
   Star,
-  Sun,
   Tag,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import { useWhoAmI } from "@karakeep/shared-react/hooks/users";
@@ -53,7 +48,6 @@ const MORE_PAGES = [
   "/dashboard/tags",
   "/dashboard/archive",
   "/dashboard/highlights",
-  "/dashboard/cleanups",
   "/settings",
   "/admin",
 ];
@@ -69,8 +63,6 @@ function MoreSheet({
   const router = useRouter();
   const { data: session } = useSession();
   const { data: whoami } = useWhoAmI();
-  const toggleTheme = useToggleTheme();
-  const { theme } = useTheme();
   const shareWithGuest = useGuestShareStore((state) => state.show);
   const go = (href: string) => {
     onOpenChange(false);
@@ -129,12 +121,6 @@ function MoreSheet({
         Share with a guest…
       </SheetItem>
       <Separator className="my-2" />
-      <SheetItem
-        icon={<Paintbrush />}
-        onClick={() => go("/dashboard/cleanups")}
-      >
-        {t("cleanups.cleanups")}
-      </SheetItem>
       <SheetItem icon={<Settings />} onClick={() => go("/settings")}>
         {t("settings.user_settings")}
       </SheetItem>
@@ -144,12 +130,6 @@ function MoreSheet({
         </SheetItem>
       )}
       <Separator className="my-2" />
-      <SheetItem
-        icon={theme === "dark" ? <Sun /> : <Moon />}
-        onClick={toggleTheme}
-      >
-        {theme === "dark" ? t("options.light_mode") : t("options.dark_mode")}
-      </SheetItem>
       <SheetItem icon={<LogOut />} onClick={() => go("/logout")}>
         {t("actions.sign_out")}
       </SheetItem>

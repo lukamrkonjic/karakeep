@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { redirect, useRouter } from "next/navigation";
-import { useToggleTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,45 +22,19 @@ import {
   Highlighter,
   Keyboard,
   LogOut,
-  Moon,
-  Paintbrush,
   Puzzle,
   Settings,
   Share2,
   Shield,
-  Sun,
   Twitter,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 
 import { useWhoAmI } from "@karakeep/shared-react/hooks/users";
 
 import { AdminNoticeBadge } from "../../admin/AdminNotices";
 
-function DarkModeToggle() {
-  const { t } = useTranslation();
-  const { theme } = useTheme();
-
-  if (theme == "dark") {
-    return (
-      <>
-        <Sun className="mr-2 size-4" />
-        <span>{t("options.light_mode")}</span>
-      </>
-    );
-  } else {
-    return (
-      <>
-        <Moon className="mr-2 size-4" />
-        <span>{t("options.dark_mode")}</span>
-      </>
-    );
-  }
-}
-
 export default function SidebarProfileOptions() {
   const { t } = useTranslation();
-  const toggleTheme = useToggleTheme();
   const { data: session } = useSession();
   const { data: whoami } = useWhoAmI();
   const router = useRouter();
@@ -137,21 +110,15 @@ export default function SidebarProfileOptions() {
             </Link>
           </DropdownMenuItem>
         )}
-        <Separator className="my-2" />
-        <DropdownMenuItem asChild>
-          <Link href="/dashboard/cleanups">
-            <Paintbrush className="mr-2 size-4" />
-            {t("cleanups.cleanups")}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={toggleTheme}>
-          <DarkModeToggle />
-        </DropdownMenuItem>
+        {/* Fork: Cleanups and Light/Dark mode moved to Settings. */}
         {inBookmarkGrid && (
-          <DropdownMenuItem onClick={() => setShortcutsDialogOpen(true)}>
-            <Keyboard className="mr-2 size-4" />
-            {t("keyboard_shortcuts.title")}
-          </DropdownMenuItem>
+          <>
+            <Separator className="my-2" />
+            <DropdownMenuItem onClick={() => setShortcutsDialogOpen(true)}>
+              <Keyboard className="mr-2 size-4" />
+              {t("keyboard_shortcuts.title")}
+            </DropdownMenuItem>
+          </>
         )}
         <Separator className="my-2" />
         <DropdownMenuItem asChild>

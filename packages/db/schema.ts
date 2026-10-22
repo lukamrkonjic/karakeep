@@ -868,7 +868,8 @@ export const instagramSessionsTable = sqliteTable("instagramSessions", {
 
 // What the subscriptions have taken. It answers two questions: has this
 // subscription already handled an item (then never touch it again, even if
-// its bookmark was since moved or deleted), and does the user already have
+// its bookmark was since moved or deleted — unless it was only skipped, see
+// skipReason), and does the user already have
 // this picture (then link that bookmark instead of downloading a copy).
 // Rows outlive their subscription so that re-adding a board doesn't download
 // the whole board again.
@@ -896,6 +897,9 @@ export const listSubscriptionImportsTable = sqliteTable(
     bookmarkId: text("bookmarkId").references(() => bookmarks.id, {
       onDelete: "set null",
     }),
+    // Why it couldn't be downloaded (yet). Such an item is tried again on
+    // later syncs, after the new ones; null once it's handled for good.
+    skipReason: text("skipReason"),
   },
   (t) => [
     index("listSubscriptionImports_subscriptionId_idx").on(t.subscriptionId),
@@ -1200,6 +1204,9 @@ export const discoverItemsTable = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     pinId: text("pinId").notNull(),
+    // Where the pin can be looked at: its page, or (when Pinterest only gave
+    // an opaque id, whose page is blank) the website it was saved from.
+    pageUrl: text("pageUrl"),
     // Pinterest's image signature: the picture itself, whoever pinned it.
     mediaKey: text("mediaKey"),
     title: text("title"),

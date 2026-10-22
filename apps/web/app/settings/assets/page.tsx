@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import {
   SettingsPage,
   SettingsSection,
@@ -117,14 +118,14 @@ export default function AssetsSettingsPage() {
                   </TableCell>
                   <TableCell>
                     {asset.bookmarkId ? (
-                      <Link
+                      <PreviewLink
                         href={`/dashboard/preview/${asset.bookmarkId}`}
                         className="flex items-center gap-1"
                         prefetch={false}
                       >
                         <ExternalLink className="size-4" />
                         <span>View Bookmark</span>
-                      </Link>
+                      </PreviewLink>
                     ) : (
                       <span className="text-muted-foreground">No bookmark</span>
                     )}

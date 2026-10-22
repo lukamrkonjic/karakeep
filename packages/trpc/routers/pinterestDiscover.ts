@@ -10,6 +10,7 @@ import {
   requestDiscover,
 } from "@karakeep/shared-server";
 import { zDiscoverItemSchema } from "@karakeep/shared/types/pictures";
+import { pinterestPinUrl } from "@karakeep/shared/utils/pinterest";
 
 import type { AuthedContext } from "../index";
 import { createScopedAuthedProcedure, router } from "../index";
@@ -56,6 +57,7 @@ export const pinterestDiscoverAppRouter = router({
           width: discoverItemsTable.width,
           height: discoverItemsTable.height,
           pinId: discoverItemsTable.pinId,
+          pageUrl: discoverItemsTable.pageUrl,
           status: discoverItemsTable.status,
           error: discoverItemsTable.error,
           listId: bookmarkLists.id,
@@ -75,14 +77,17 @@ export const pinterestDiscoverAppRouter = router({
         )
         .orderBy(desc(discoverItemsTable.score), asc(discoverItemsTable.id));
       return {
-        items: rows.map(({ pinId, listId, listName, listIcon, ...row }) => ({
-          ...row,
-          pinUrl: `https://www.pinterest.com/pin/${pinId}/`,
-          suggestedList:
-            listId && listName !== null
-              ? { id: listId, name: listName, icon: listIcon ?? "" }
-              : null,
-        })),
+        items: rows.map(
+          ({ pinId, pageUrl, listId, listName, listIcon, ...row }) => ({
+            ...row,
+            // An opaque pin id's page is blank: its website instead, or none.
+            pinUrl: pageUrl ?? pinterestPinUrl(pinId),
+            suggestedList:
+              listId && listName !== null
+                ? { id: listId, name: listName, icon: listIcon ?? "" }
+                : null,
+          }),
+        ),
       };
     }),
 

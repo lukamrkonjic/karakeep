@@ -1,5 +1,6 @@
 "use client";
 
+import { openPreviewInPlace } from "@/lib/previewNavigation";
 import {
   useCallback,
   useDeferredValue,
@@ -582,8 +583,12 @@ function Board({ projectId, data }: { projectId: string; data: BoardData }) {
 
   const actions = useMemo<BoardActions>(
     () => ({
-      openBookmark: (bookmarkId) =>
-        router.push(`/dashboard/preview/${bookmarkId}`, { scroll: false }),
+      openBookmark: (bookmarkId) => {
+        const href = `/dashboard/preview/${bookmarkId}`;
+        if (!openPreviewInPlace(href)) {
+          router.push(href, { scroll: false });
+        }
+      },
       addNoteAt,
       startPlacing: (kind) => {
         setSelection(new Set());

@@ -106,6 +106,34 @@ const slotImages = (n: number) => ({
   "600x315": { url: sized("600x315", n), width: 600 },
 });
 
+describe("Pinterest pin links", () => {
+  const picture = {
+    images: {
+      orig: {
+        url: "https://i.pinimg.com/originals/ab/cd/ef/abcdef0123456789abcdef0123456789.png",
+      },
+    },
+  };
+
+  test("an all-digits id links to its pin page", () => {
+    expect(
+      itemsOf({ id: "473300242112716423", type: "pin", ...picture })[0]
+        ?.sourceUrl,
+    ).toBe("https://www.pinterest.com/pin/473300242112716423/");
+  });
+
+  test("an opaque id stays the pin's id but links where it's told", () => {
+    const [item] = itemsOf(
+      { id: "e1_AfqPShw-n2hu", type: "pin", ...picture },
+      "https://www.pinterest.com/pin/473300242112716423/",
+    );
+    expect(item?.externalId).toBe("e1_AfqPShw-n2hu");
+    expect(item?.sourceUrl).toBe(
+      "https://www.pinterest.com/pin/473300242112716423/",
+    );
+  });
+});
+
 describe("Pinterest carousels and idea pins", () => {
   test("a carousel pin: its cover, then the other pictures, each a part of it", () => {
     const items = itemsOf({
@@ -273,6 +301,7 @@ describe("Discover's related pins", () => {
   test("shown by its mid-size copy, kept as its original", () => {
     expect(discoverCandidateOf(pin())).toEqual({
       pinId: "1108167052088780448",
+      pageUrl: "https://www.pinterest.com/pin/1108167052088780448/",
       mediaKey: "ef5533b3b5891a16a0b60ddd9897f76c",
       title: "A cozy corner",
       thumb: {
@@ -287,6 +316,18 @@ describe("Discover's related pins", () => {
         },
       ],
     });
+  });
+
+  test("a pin with an opaque id links to its website, never its blank page", () => {
+    const opaque = "e1_AfqPShw-n2huGOKS-geqM5hiQkdo213aQe9xfPOouqcD9nJlluD7";
+    expect(
+      discoverCandidateOf(pin({ id: opaque, link: "https://example.com/a" }))
+        ?.pageUrl,
+    ).toBe("https://example.com/a");
+    expect(
+      discoverCandidateOf(pin({ id: opaque, link: "javascript:alert(1)" }))
+        ?.pageUrl,
+    ).toBeNull();
   });
 
   test("never an ad, nor a pin without a picture of its own", () => {

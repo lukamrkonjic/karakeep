@@ -139,7 +139,7 @@ function DiscoverTile({
   return (
     <div className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl bg-muted">
       <a
-        href={item.pinUrl}
+        href={item.pinUrl ?? undefined}
         target="_blank"
         rel="noreferrer"
         title={item.title ?? undefined}

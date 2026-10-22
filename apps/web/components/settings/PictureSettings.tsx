@@ -344,7 +344,7 @@ export default function PictureSettings() {
                 <JobState job={suggestions} />
               ) : (
                 <Link
-                  href="/dashboard/cleanups"
+                  href="/settings/cleanups#list-suggestions"
                   className="underline underline-offset-2 hover:text-foreground"
                 >
                   {suggestions.open.toLocaleString()} to review
@@ -390,7 +390,7 @@ export default function PictureSettings() {
           title="Duplicates"
           hint={
             <Link
-              href="/dashboard/cleanups"
+              href="/settings/cleanups#duplicate-pictures"
               className="underline underline-offset-2 hover:text-foreground"
             >
               Review in Cleanups

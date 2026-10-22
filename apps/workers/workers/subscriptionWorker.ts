@@ -4,11 +4,12 @@ import * as os from "os";
 import * as path from "path";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
-import { and, eq, isNotNull, isNull, lt, max, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, like, lt, max, or } from "drizzle-orm";
 import {
   ACCEPTED_IMAGE_TYPES,
   CONVERTIBLE_IMAGE_TYPES,
   convertForStorage,
+  identifyFile,
 } from "imageFormats";
 import { workerStatsCounter } from "metrics";
 import { fetchWithProxy } from "network";
@@ -29,6 +30,7 @@ import type { InstagramCookies } from "@karakeep/shared/utils/instagram";
 import {
   assets,
   AssetTypes,
+  bookmarkAssets,
   bookmarks,
   bookmarksInLists,
   instagramSessionsTable,
@@ -64,6 +66,10 @@ import {
   isSubscriptionDue,
   SUBSCRIPTION_SCHEDULE_SLACK_MS,
 } from "@karakeep/shared/utils/listSubscriptions";
+import {
+  isOpaquePinUrl,
+  parsePinterestBoardUrl,
+} from "@karakeep/shared/utils/pinterest";
 import { List } from "@karakeep/trpc/models/lists";
 
 import { fetchInstagramCollection } from "./connectors/instagram";
@@ -95,6 +101,8 @@ import { normalizeContentType } from "./crawler/utils";
 
 type SubscriptionRunResult = "success" | "failure" | "skipped";
 
+/** Skipped items tried again per run, after the new ones. */
+const MAX_RETRIES_PER_RUN = 50;
 /** A source bigger than this finishes over several runs, queued back to back. */
 const MAX_NEW_PER_RUN: Record<Subscription["kind"], number> = {
   pinterest: 300,
@@ -210,7 +218,12 @@ export class SubscriptionWorker {
   }
 }
 
-/** This item will never import (gone, not a picture, too big): remember it. */
+/**
+ * This item can't be had now (gone, not a picture, too big, the CDN said
+ * no). It is remembered with the reason and tried again on later syncs,
+ * after the new items: a 4xx on a picture pinned minutes ago is often only
+ * the CDN not having it yet.
+ */
 class PermanentSkip extends Error {}
 /** Nothing else in this run can succeed either (quota, lost the list). */
 class StopRun extends Error {}
@@ -274,17 +287,12 @@ async function downloadOne(
   if (!resp.ok || !resp.body) {
     discard(resp);
     const message = `HTTP ${resp.status}`;
-    // A 4xx won't fix itself; a 5xx might.
+    // A 5xx is a hiccup: the item is tried again whole. A 4xx may be one
+    // too (a picture pinned a minute ago that the CDN doesn't have yet), so
+    // the next file is tried, and later syncs try the item again.
     throw resp.status >= 400 && resp.status < 500
       ? new PermanentSkip(message)
       : new Error(message);
-  }
-  const contentType = normalizeContentType(resp.headers.get("content-type"));
-  const allowed =
-    media.kind === "video" ? VIDEO_ASSET_TYPES : ACCEPTED_IMAGE_TYPES;
-  if (!contentType || !allowed.has(contentType)) {
-    discard(resp);
-    throw new PermanentSkip(`unsupported type ${contentType ?? "(none)"}`);
   }
   const declared = Number(resp.headers.get("content-length"));
   if (declared > maxBytes) {
@@ -292,6 +300,12 @@ async function downloadOne(
     throw new PermanentSkip(
       `bigger than ${serverConfig.maxAssetSizeMb} MB (MAX_ASSET_SIZE_MB)`,
     );
+  }
+  const declaredType = normalizeContentType(resp.headers.get("content-type"));
+  // A type that is plainly neither (an error page): not worth downloading.
+  if (declaredType && /^(text|application\/(json|xml))/.test(declaredType)) {
+    discard(resp);
+    throw new PermanentSkip(`unsupported type ${declaredType}`);
   }
 
   // Streamed to disk, never held in memory: a video can be large.
@@ -321,12 +335,34 @@ async function downloadOne(
     await tryCatch(fs.unlink(tempPath));
     throw new PermanentSkip("empty response");
   }
-  const fileName = fileNameOf(media.url, fallbackName);
-  if (!CONVERTIBLE_IMAGE_TYPES.has(contentType)) {
+
+  // Whatever the file is called and whatever the server says it is: a
+  // Content-Type we keep is taken at its word, anything else (none,
+  // octet-stream, image/jpg, …) is read off the file's own bytes.
+  const allowed =
+    media.kind === "video" ? VIDEO_ASSET_TYPES : ACCEPTED_IMAGE_TYPES;
+  let contentType = declaredType;
+  let fileName = fileNameOf(media.url, fallbackName);
+  let convert =
+    contentType !== null && CONVERTIBLE_IMAGE_TYPES.has(contentType);
+  if (!contentType || !allowed.has(contentType)) {
+    const { data: found } = await tryCatch(identifyFile(tempPath, media.kind));
+    if (!found) {
+      await tryCatch(fs.unlink(tempPath));
+      throw new PermanentSkip(`unsupported type ${declaredType ?? "(none)"}`);
+    }
+    contentType = found.contentType;
+    convert = found.convert;
+    const extension = contentType.split("/")[1]?.replace("x-matroska", "mkv");
+    if (!convert && extension) {
+      fileName = `${fileName.replace(/\.[^.]*$/, "")}.${extension === "jpeg" ? "jpg" : extension}`;
+    }
+  }
+  if (!convert) {
     return { path: tempPath, kind: media.kind, contentType, size, fileName };
   }
 
-  // A format no browser shows (TIFF): kept as a PNG of it.
+  // A format no browser shows (TIFF, SVG, HEIF): kept as a PNG of it.
   const pngPath = `${tempPath}.png`;
   try {
     const pngSize = await convertForStorage(tempPath, pngPath);
@@ -447,10 +483,15 @@ async function existingBookmarkFor(
   return row?.bookmarkId ?? null;
 }
 
+/**
+ * The item is handled: filed as `bookmarkId`, or skipped for `skipReason`
+ * (tried again on later syncs). A retried item's row is brought up to date.
+ */
 async function remember(
   subscription: Subscription,
   item: SubscriptionItem,
   bookmarkId: string | null,
+  skipReason: string | null = null,
 ) {
   await db
     .insert(listSubscriptionImportsTable)
@@ -460,8 +501,69 @@ async function remember(
       externalId: item.externalId,
       mediaKey: item.mediaKey,
       bookmarkId,
+      skipReason,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [
+        listSubscriptionImportsTable.subscriptionId,
+        listSubscriptionImportsTable.externalId,
+      ],
+      set: { mediaKey: item.mediaKey, bookmarkId, skipReason },
+    });
+}
+
+/**
+ * Pinterest bookmarks this subscription filed that link to a pin page that
+ * never opens (an opaque visitor id, "e1_..."): pointed at the pin's real
+ * page now known, or the board. Bookmarks of pins no longer on the board
+ * get the board too.
+ */
+async function repairPinLinks(
+  subscription: Subscription,
+  items: SubscriptionItem[],
+) {
+  const pageOf = new Map(
+    items.map((item) => [item.externalId, item.sourceUrl]),
+  );
+  const board = parsePinterestBoardUrl(subscription.url);
+  const fallback = board ? `https://www.pinterest.com${board.path}` : null;
+  const rows = await db
+    .select({
+      bookmarkId: bookmarkAssets.id,
+      externalId: listSubscriptionImportsTable.externalId,
+      sourceUrl: bookmarkAssets.sourceUrl,
+    })
+    .from(listSubscriptionImportsTable)
+    .innerJoin(
+      bookmarkAssets,
+      eq(bookmarkAssets.id, listSubscriptionImportsTable.bookmarkId),
+    )
+    .where(
+      and(
+        eq(listSubscriptionImportsTable.subscriptionId, subscription.id),
+        like(bookmarkAssets.sourceUrl, "%/pin/e1%"),
+      ),
+    );
+  let repaired = 0;
+  for (const row of rows) {
+    if (!isOpaquePinUrl(row.sourceUrl)) {
+      continue;
+    }
+    // A carousel's other pictures ("<pin>_<n>") link to the pin.
+    const page =
+      pageOf.get(row.externalId) ??
+      pageOf.get(row.externalId.replace(/_\d+$/, "")) ??
+      fallback;
+    if (!page || isOpaquePinUrl(page)) {
+      continue;
+    }
+    await db
+      .update(bookmarkAssets)
+      .set({ sourceUrl: page })
+      .where(eq(bookmarkAssets.id, row.bookmarkId));
+    repaired++;
+  }
+  return repaired;
 }
 
 /** Files a bookmark in the list; false when it was in it already. */
@@ -739,16 +841,24 @@ async function run(
   logger.info(
     `[subscription][${jobId}] Syncing ${subscription.kind} "${subscription.name ?? subscription.url}" into list ${subscription.listId} ...`,
   );
+  const ledger = await db
+    .select({
+      externalId: listSubscriptionImportsTable.externalId,
+      createdAt: listSubscriptionImportsTable.createdAt,
+      skipReason: listSubscriptionImportsTable.skipReason,
+    })
+    .from(listSubscriptionImportsTable)
+    .where(eq(listSubscriptionImportsTable.subscriptionId, subscription.id));
+  // Skipped ones aren't handled: they're tried again, after the new ones.
   const handled = new Map(
-    (
-      await db
-        .select({
-          externalId: listSubscriptionImportsTable.externalId,
-          createdAt: listSubscriptionImportsTable.createdAt,
-        })
-        .from(listSubscriptionImportsTable)
-        .where(eq(listSubscriptionImportsTable.subscriptionId, subscription.id))
-    ).map((row) => [row.externalId, row.createdAt]),
+    ledger
+      .filter((row) => row.skipReason === null)
+      .map((row) => [row.externalId, row.createdAt]),
+  );
+  const retrying = new Set(
+    ledger
+      .filter((row) => row.skipReason !== null)
+      .map((row) => row.externalId),
   );
   const wanted = wantedBy(handled, subscription.wholeCarouselSince);
 
@@ -786,14 +896,32 @@ async function run(
       .where(eq(instagramSessionsTable.userId, subscription.userId));
   }
 
-  const fresh = fetched.items.filter(wanted);
+  if (subscription.kind === "pinterest") {
+    const { data: repaired } = await tryCatch(
+      repairPinLinks(subscription, fetched.items),
+    );
+    if (repaired) {
+      logger.info(
+        `[subscription][${jobId}] Repaired ${repaired} links to pins that don't open.`,
+      );
+    }
+  }
+
+  const wantedItems = fetched.items.filter(wanted);
+  const fresh = wantedItems.filter((item) => !retrying.has(item.externalId));
+  const retries = wantedItems.filter((item) => retrying.has(item.externalId));
   // The board lists its newest pin first and so does the list, by when each
   // bookmark was made. Filing bottom-up keeps the board's order; taking the
   // oldest first means a board too big for one run fills in from the bottom,
-  // each later run's pins landing above the earlier ones.
-  const batch = fresh.slice(-MAX_NEW_PER_RUN[subscription.kind]).reverse();
+  // each later run's pins landing above the earlier ones. Pins skipped
+  // before are older than the new ones, so they go first, and only a few:
+  // one that never downloads mustn't hold the new ones up.
+  const batch = [
+    ...retries.slice(-MAX_RETRIES_PER_RUN).reverse(),
+    ...fresh.slice(-MAX_NEW_PER_RUN[subscription.kind]).reverse(),
+  ];
   logger.info(
-    `[subscription][${jobId}] ${fetched.items.length} items at the source${fetched.complete ? "" : " (paging stopped early)"}, ${fresh.length} new; taking ${batch.length}.`,
+    `[subscription][${jobId}] ${fetched.items.length} items at the source${fetched.complete ? "" : " (paging stopped early)"}, ${fresh.length} new${retries.length ? `, ${retries.length} skipped before` : ""}; taking ${batch.length}.`,
   );
 
   // Bookmarks sort by a timestamp kept to the second, and ties fall back to
@@ -830,6 +958,7 @@ async function run(
   let skipped = 0;
   let failed = 0;
   let failedInARow = 0;
+  let lastSkipReason: string | null = null;
   let stoppedBecause: string | null = null;
 
   for (const [index, item] of batch.entries()) {
@@ -862,10 +991,16 @@ async function run(
         break;
       }
       if (error instanceof PermanentSkip) {
-        await remember(subscription, item, null);
+        await remember(
+          subscription,
+          item,
+          null,
+          error.message.slice(0, 500) || "couldn't be downloaded",
+        );
         skipped++;
+        lastSkipReason = error.message;
         logger.info(
-          `[subscription][${jobId}] Skipping ${item.sourceUrl} for good: ${error.message}`,
+          `[subscription][${jobId}] Couldn't download ${item.externalId} (${item.sourceUrl}), trying again next sync: ${error.message}`,
         );
         continue;
       }
@@ -885,9 +1020,11 @@ async function run(
   const added = downloaded + linked + alike;
   const lastError =
     stoppedBecause ??
-    (failed > 0 && added === 0
-      ? `${failed} couldn't be downloaded; the next sync tries again.`
-      : null);
+    (skipped > 0
+      ? `${skipped} couldn't be downloaded yet (${lastSkipReason}); the next sync tries again.`
+      : failed > 0 && added === 0
+        ? `${failed} couldn't be downloaded; the next sync tries again.`
+        : null);
   await finish({
     name: fetched.name ?? subscription.name,
     lastStatus: lastError ? "failure" : "success",
@@ -905,7 +1042,11 @@ async function run(
 
   // More than one run's worth: carry straight on rather than waiting for the
   // schedule. Only while it is getting somewhere.
-  if (!stoppedBecause && added + kept > 0 && fresh.length > batch.length) {
+  if (
+    !stoppedBecause &&
+    added + kept > 0 &&
+    fresh.length > MAX_NEW_PER_RUN[subscription.kind]
+  ) {
     await SubscriptionQueue.enqueue(
       { subscriptionId: subscription.id },
       { groupId: subscription.userId },

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useBulkActionsStore from "@/lib/bulkActions";
 import { useBookmarkDrag } from "@/lib/hooks/useBookmarkDragStart";
+import { useBookmarkDisplaySettings } from "@/lib/userLocalSettings/bookmarksLayout";
 import { cn } from "@/lib/utils";
 
 import type { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -41,6 +42,8 @@ export function MasonryMediaCard({
   className?: string;
   bookmarkIndex?: number;
 }) {
+  // View options → Show title: the hover title.
+  const { showTitle } = useBookmarkDisplaySettings();
   // Fork: a note carrying a video is named by the video's file, like a
   // picture by its own.
   const title =
@@ -110,7 +113,7 @@ export function MasonryMediaCard({
           isBulkEditEnabled && "hidden",
         )}
       >
-        {title && (
+        {showTitle && title && (
           <PreviewLink
             href={`/dashboard/preview/${bookmark.id}`}
             title={title}

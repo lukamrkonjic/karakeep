@@ -1,43 +1,6 @@
-import { DuplicatePictures } from "@/components/dashboard/cleanups/DuplicatePictures";
-import { ListSuggestions } from "@/components/dashboard/cleanups/ListSuggestions";
-import { TagDuplicationDetection } from "@/components/dashboard/cleanups/TagDuplicationDetention";
-import { Separator } from "@/components/ui/separator";
-import { useTranslation } from "@/lib/i18n/server";
-import { FolderInput, Images, Paintbrush, Tags } from "lucide-react";
+import { redirect } from "next/navigation";
 
-export default async function Cleanups() {
-  // oxlint-disable-next-line rules-of-hooks
-  const { t } = await useTranslation();
-
-  return (
-    <div className="flex flex-col gap-y-4 rounded-md border bg-background p-4">
-      <span className="flex items-center gap-1 text-2xl">
-        <Paintbrush />
-        {t("cleanups.cleanups")}
-      </span>
-      <Separator />
-      {/* Fork: lists suggested for new pictures (ListSuggestions.tsx). */}
-      <span className="flex items-center gap-1 text-xl">
-        <FolderInput />
-        List suggestions
-      </span>
-      <Separator />
-      <ListSuggestions />
-      <Separator />
-      {/* Fork: duplicate pictures, found nightly (DuplicatePictures.tsx). */}
-      <span className="flex items-center gap-1 text-xl">
-        <Images />
-        Duplicate pictures
-      </span>
-      <Separator />
-      <DuplicatePictures />
-      <Separator />
-      <span className="flex items-center gap-1 text-xl">
-        <Tags />
-        {t("cleanups.duplicate_tags.title")}
-      </span>
-      <Separator />
-      <TagDuplicationDetection />
-    </div>
-  );
+// Fork: Cleanups moved to Settings → Cleanups.
+export default function Cleanups() {
+  redirect("/settings/cleanups");
 }

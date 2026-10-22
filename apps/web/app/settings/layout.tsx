@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { PreviewHost } from "@/components/dashboard/preview/PreviewHost";
 import SettingsPhoneNav from "@/components/settings/SettingsPhoneNav";
 import MobileTabBar from "@/components/shared/mobile/MobileTabBar";
 import Sidebar from "@/components/shared/sidebar/Sidebar";
@@ -21,6 +22,7 @@ import {
   Images,
   KeyRound,
   Link,
+  Paintbrush,
   RefreshCw,
   Rss,
   Sparkles,
@@ -89,6 +91,13 @@ const settingsSidebarItems = (
       name: "Pictures",
       icon: <Images size={18} />,
       path: "/settings/pictures",
+    },
+    {
+      // Fork: list suggestions, duplicate pictures, duplicate tags (moved
+      // here from the profile menu).
+      name: t("cleanups.cleanups"),
+      icon: <Paintbrush size={18} />,
+      path: "/settings/cleanups",
     },
     {
       name: t("settings.backups.backups"),
@@ -172,6 +181,8 @@ export default async function SettingsLayout({
           />
           {children}
         </SidebarLayout>
+        {/* Fork: a preview (Cleanups, Manage assets) opens over the page. */}
+        <PreviewHost />
       </ReaderSettingsProvider>
     </UserSettingsContextProvider>
   );

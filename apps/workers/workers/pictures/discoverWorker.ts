@@ -12,6 +12,7 @@ import type {
 } from "@karakeep/shared-server";
 import { db } from "@karakeep/db";
 import {
+  bookmarkAssets,
   bookmarks,
   discoverItemsTable,
   listSubscriptionImportsTable,
@@ -34,6 +35,11 @@ import {
   BookmarkTypes,
   MAX_BOOKMARK_TITLE_LENGTH,
 } from "@karakeep/shared/types/bookmarks";
+
+import {
+  pinIdFromUrl,
+  pinterestPinUrl,
+} from "@karakeep/shared/utils/pinterest";
 
 import type { DiscoverCandidate } from "../connectors/pinterest";
 import {
@@ -168,22 +174,32 @@ function shuffled<T>(items: T[]): T[] {
 async function savedPins(userId: string) {
   const rows = await db
     .select({
-      pinId: listSubscriptionImportsTable.externalId,
+      externalId: listSubscriptionImportsTable.externalId,
       bookmarkId: listSubscriptionImportsTable.bookmarkId,
+      sourceUrl: bookmarkAssets.sourceUrl,
     })
     .from(listSubscriptionImportsTable)
     .innerJoin(
       bookmarks,
       eq(bookmarks.id, listSubscriptionImportsTable.bookmarkId),
     )
+    .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, bookmarks.id))
     .where(eq(listSubscriptionImportsTable.userId, userId))
     .orderBy(desc(bookmarks.createdAt));
   const seen = new Set<string>();
   // A pin's id is all digits (an Instagram post's code isn't; a carousel's
-  // other pictures are "<pin>_<n>").
-  return rows.filter(
-    (r) => /^\d{6,}$/.test(r.pinId) && !seen.has(r.pinId) && seen.add(r.pinId),
-  );
+  // other pictures are "<pin>_<n>"). A pin a board handed out under an
+  // opaque id ("e1_...") has its real one in its bookmark's link, if known.
+  return rows.flatMap(({ externalId, bookmarkId, sourceUrl }) => {
+    const pinId = /^\d{6,}$/.test(externalId)
+      ? externalId
+      : pinIdFromUrl(sourceUrl);
+    if (!pinId || !/^\d{6,}$/.test(pinId) || seen.has(pinId)) {
+      return [];
+    }
+    seen.add(pinId);
+    return [{ pinId, bookmarkId }];
+  });
 }
 
 /** Pins and pictures the user has, or was offered before. */
@@ -384,6 +400,7 @@ async function run(job: DequeuedJob<ZPictureJobRequest>): Promise<string> {
       .values({
         userId,
         pinId: candidate.pinId,
+        pageUrl: candidate.pageUrl,
         mediaKey: candidate.mediaKey,
         title: candidate.title,
         thumbUrl: candidate.thumb.url,
@@ -434,7 +451,8 @@ async function keep(job: DequeuedJob<ZDiscoverKeepRequest>): Promise<string> {
     return "Nothing to keep";
   }
   const { userId } = item;
-  const pinUrl = `${ORIGIN}/pin/${item.pinId}/`;
+  // Never a pin page that doesn't open (an opaque id): its website, or none.
+  const pinUrl = item.pageUrl ?? pinterestPinUrl(item.pinId) ?? undefined;
   try {
     const client = await buildImpersonatingTRPCClient(userId);
     // One the user has meanwhile (from a board, say): filed, not copied.
@@ -461,7 +479,7 @@ async function keep(job: DequeuedJob<ZDiscoverKeepRequest>): Promise<string> {
           externalId: item.pinId,
           mediaKey: item.mediaKey,
           title: item.title,
-          sourceUrl: pinUrl,
+          sourceUrl: pinUrl ?? `${ORIGIN}/`,
           media: item.media,
         },
         `${ORIGIN}/`,

@@ -60,6 +60,9 @@ export default function ViewOptions() {
   const updatePreferences = useUpdatePreferences();
 
   const showColumnSlider = layout === "grid" || layout === "masonry";
+  // Fork: only the switches that change something in this layout. Masonry's
+  // pictures show no notes or tags; compact cards only a title.
+  const showNoteAndTagSwitches = layout === "grid" || layout === "list";
 
   const handleLayoutChange = (newLayout: LayoutType) => {
     void updatePreferences({ bookmarkGridLayout: newLayout });
@@ -157,35 +160,39 @@ export default function ViewOptions() {
         </div>
 
         <div className="space-y-3 px-2 py-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="show-notes"
-              className="flex cursor-pointer items-center gap-2 text-sm"
-            >
-              <NotepadText size={16} />
-              <span>{t("view_options.show_note_previews")}</span>
-            </Label>
-            <Switch
-              id="show-notes"
-              checked={displaySettings.showNotes}
-              onCheckedChange={handleShowNotesChange}
-            />
-          </div>
+          {showNoteAndTagSwitches && (
+            <div className="flex items-center justify-between">
+              <Label
+                htmlFor="show-notes"
+                className="flex cursor-pointer items-center gap-2 text-sm"
+              >
+                <NotepadText size={16} />
+                <span>{t("view_options.show_note_previews")}</span>
+              </Label>
+              <Switch
+                id="show-notes"
+                checked={displaySettings.showNotes}
+                onCheckedChange={handleShowNotesChange}
+              />
+            </div>
+          )}
 
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="show-tags"
-              className="flex cursor-pointer items-center gap-2 text-sm"
-            >
-              <Tag size={16} />
-              <span>{t("view_options.show_tags")}</span>
-            </Label>
-            <Switch
-              id="show-tags"
-              checked={displaySettings.showTags}
-              onCheckedChange={handleShowTagsChange}
-            />
-          </div>
+          {showNoteAndTagSwitches && (
+            <div className="flex items-center justify-between">
+              <Label
+                htmlFor="show-tags"
+                className="flex cursor-pointer items-center gap-2 text-sm"
+              >
+                <Tag size={16} />
+                <span>{t("view_options.show_tags")}</span>
+              </Label>
+              <Switch
+                id="show-tags"
+                checked={displaySettings.showTags}
+                onCheckedChange={handleShowTagsChange}
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <Label

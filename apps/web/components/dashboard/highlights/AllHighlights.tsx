@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import useRelativeTime from "@/lib/hooks/relative-time";
@@ -32,13 +32,13 @@ function Highlight({ highlight }: { highlight: ZHighlight }) {
       <span className="flex items-center gap-0.5 text-xs italic text-gray-400">
         <span title={localCreatedAt}>{fromNow}</span>
         <Dot />
-        <Link
+        <PreviewLink
           href={`/dashboard/preview/${highlight.bookmarkId}`}
           className="flex items-center gap-0.5"
         >
           <LinkIcon className="size-3 italic" />
           {t("common.source")}
-        </Link>
+        </PreviewLink>
       </span>
     </div>
   );

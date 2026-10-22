@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { PreviewLink } from "@/components/dashboard/preview/PreviewLink";
 import BookmarksGrid from "@/components/dashboard/bookmarks/BookmarksGrid";
 import BookmarksGridSkeleton from "@/components/dashboard/bookmarks/BookmarksGridSkeleton";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -45,7 +45,7 @@ export default function SimilarPicturesPage({
     <div className="flex flex-col gap-4">
       <div className="flex min-w-0 items-center gap-4">
         {picture && (
-          <Link
+          <PreviewLink
             href={`/dashboard/preview/${bookmarkId}`}
             className="shrink-0 overflow-hidden rounded-xl bg-muted"
           >
@@ -55,7 +55,7 @@ export default function SimilarPicturesPage({
               alt={name ?? ""}
               className="size-16 object-cover"
             />
-          </Link>
+          </PreviewLink>
         )}
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold leading-tight">
