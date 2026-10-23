@@ -10,10 +10,12 @@ import {
   CollapsibleTriggerChevron,
 } from "@/components/ui/collapsible";
 import { isEmojiIcon } from "@/lib/emoji";
+import { usePinnedLists } from "@/lib/hooks/usePinnedLists";
 import { useTranslation } from "@/lib/i18n/client";
 import { usePreference, useUpdatePreferences } from "@/lib/uiPreferences";
 import { useListDrop } from "@/lib/hooks/useListDrop";
 import { cn } from "@/lib/utils";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   ChevronRight,
   ChevronsDownUp,
@@ -28,6 +30,7 @@ import {
   augmentBookmarkListsWithInitialData,
   useBookmarkLists,
 } from "@karakeep/shared-react/hooks/lists";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 import {
   listsToTree,
   ZBookmarkListTreeNode,
@@ -52,6 +55,7 @@ function DroppableListSidebarItem({
   numBookmarks,
   selectedListId,
   setSelectedListId,
+  menuKey = node.item.id,
 }: {
   node: ZBookmarkListTreeNode;
   level: number;
@@ -60,6 +64,8 @@ function DroppableListSidebarItem({
   numBookmarks?: number;
   selectedListId: string | null;
   setSelectedListId: (id: string | null) => void;
+  /** Fork: whose "…" is open — a pinned row's isn't its tree row's. */
+  menuKey?: string;
 }) {
   const canDrop =
     node.item.type === "manual" &&
@@ -99,7 +105,7 @@ function DroppableListSidebarItem({
         <ListOptions
           onOpenChange={(isOpen) => {
             if (isOpen) {
-              setSelectedListId(node.item.id);
+              setSelectedListId(menuKey);
             } else {
               setSelectedListId(null);
             }
@@ -112,13 +118,13 @@ function DroppableListSidebarItem({
             <MoreHorizontal
               className={cn(
                 "absolute inset-y-0 right-2.5 my-auto size-4 opacity-0 transition-opacity duration-100 group-hover:opacity-100",
-                selectedListId == node.item.id ? "opacity-100" : "opacity-0",
+                selectedListId == menuKey ? "opacity-100" : "opacity-0",
               )}
             />
             <span
               className={cn(
                 "px-2.5 text-xs font-light text-muted-foreground opacity-100 transition-opacity duration-100 group-hover:opacity-0",
-                selectedListId == node.item.id || numBookmarks === undefined
+                selectedListId == menuKey || numBookmarks === undefined
                   ? "opacity-0"
                   : "opacity-100",
               )}
@@ -180,6 +186,24 @@ export default function AllLists({
     return [treeOf("smart"), treeOf("manual")];
   }, [lists.data]);
   const smartFolded = !!usePreference("smartListsFolded");
+
+  // Fork: lists pinned to the top (their "…" → Pin to the top), each a row
+  // of its own — a sub-list without its parent — in the order pinned.
+  const pinnedIds = usePinnedLists();
+  const pinned = useMemo(() => {
+    const byId = new Map(lists.data.map((l) => [l.id, l]));
+    return pinnedIds.flatMap((id) => {
+      const list = byId.get(id);
+      return list ? [list] : [];
+    });
+  }, [pinnedIds, lists.data]);
+  const pinnedFolded = !!usePreference("pinnedListsFolded");
+  const api = useTRPC();
+  const { data: listStats } = useQuery(
+    api.lists.stats.queryOptions(undefined, {
+      placeholderData: keepPreviousData,
+    }),
+  );
 
   // Check if any shared list is currently being viewed
   const isViewingSharedList = useMemo(() => {
@@ -351,11 +375,56 @@ export default function AllLists({
         />
       </ul>
 
-      {/* Fork: the pages above; your projects, smart lists, then lists,
-          below — scrolling together, each section's heading staying in view
-          while its rows scroll (and pushed up by the next section's). */}
+      {/* Fork: the pages above; your pinned lists, projects, smart lists,
+          then lists, below — scrolling together, each section's heading
+          staying in view while its rows scroll (and pushed up by the next
+          section's). */}
       <div className="sidebar-scrollbar min-h-0 flex-1 overflow-y-scroll">
-        <ProjectsSidebarSection spaceAbove={pages} />
+        {pinned.length > 0 && (
+          <section aria-label="Pinned">
+            {pages && <div aria-hidden className="h-4" />}
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-background py-2">
+              <button
+                type="button"
+                onClick={() =>
+                  void updatePreferences({ pinnedListsFolded: !pinnedFolded })
+                }
+                aria-expanded={!pinnedFolded}
+                title={pinnedFolded ? "Show pinned lists" : "Hide pinned lists"}
+                className="group/heading flex items-center gap-1 rounded-md pl-2 pr-1 text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Pinned
+                <ChevronRight
+                  className={cn(
+                    "size-3 transition-transform",
+                    !pinnedFolded && "rotate-90",
+                    pinnedFolded
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/heading:opacity-100",
+                  )}
+                />
+              </button>
+            </div>
+            {!pinnedFolded && (
+              <ul>
+                {pinned.map((list) => (
+                  <DroppableListSidebarItem
+                    key={list.id}
+                    node={{ item: list, children: [] }}
+                    level={0}
+                    open={false}
+                    onOpenChange={() => undefined}
+                    numBookmarks={listStats?.stats.get(list.id)}
+                    selectedListId={selectedListId}
+                    setSelectedListId={setSelectedListId}
+                    menuKey={`pinned:${list.id}`}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+        <ProjectsSidebarSection spaceAbove={pages || pinned.length > 0} />
         <section aria-label="Smart lists">
           <div aria-hidden className="h-4" />
           <div className="sticky top-0 z-10 flex items-center justify-between bg-background py-2">

@@ -48,6 +48,10 @@ export const zUiPreferencesSchema = z.object({
   sidebarCollapsed: z.boolean().optional(),
   // The sidebar's lists that are unfolded (Collapse all / Expand all).
   sidebarOpenLists: z.array(z.string()).max(5000).optional(),
+  // Lists pinned to the top of the sidebar, in the order they were pinned
+  // (any list, sub-lists too), and whether that section is folded away.
+  pinnedLists: z.array(z.string().max(100)).max(200).optional(),
+  pinnedListsFolded: z.boolean().optional(),
   // The sidebar's Smart lists section is folded away.
   smartListsFolded: z.boolean().optional(),
   // The sidebar's Projects section is folded away.

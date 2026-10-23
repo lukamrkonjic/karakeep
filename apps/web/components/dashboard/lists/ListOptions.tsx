@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useShowArchived } from "@/components/utils/useShowArchived";
 import { useShowSublists } from "@/components/utils/useShowSublists";
+import { usePinnedLists, useSetPinned } from "@/lib/hooks/usePinnedLists";
 import { useTranslation } from "@/lib/i18n/client";
 import { useGuestShareStore } from "@/lib/store/useGuestShareStore";
 import {
@@ -15,6 +16,8 @@ import {
   FolderInput,
   ListChecks,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   Rss,
   Share,
@@ -85,6 +88,9 @@ export function ListOptions({
   const shareWithGuest = useGuestShareStore((state) => state.show);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [subscriptionsModalOpen, setSubscriptionsModalOpen] = useState(false);
+  // Fork: pinned to the top of the sidebar (any list, a sub-list too).
+  const pinned = usePinnedLists().includes(list.id);
+  const setPinned = useSetPinned();
 
   // Only owners can manage the list (edit, delete, manage collaborators, etc.)
   const isOwner = list.userRole === "owner";
@@ -94,6 +100,14 @@ export function ListOptions({
 
   // Define action items array
   const actionItems = [
+    {
+      id: "pin",
+      title: pinned ? "Unpin" : "Pin to the top",
+      icon: pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
+      visible: true,
+      disabled: false,
+      onClick: () => setPinned(list.id, !pinned),
+    },
     {
       id: "edit",
       title: t("actions.edit"),
